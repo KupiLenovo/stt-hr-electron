@@ -1,0 +1,303 @@
+================================================================
+  STT HR MENADŽMENT SISTEM — KOMPLETNO UPUTSTVO ZA UPOTREBU
+================================================================
+  Verzija: 1.0 | STT d.o.o. Sarajevo
+================================================================
+
+SADRZAJ:
+  1. Prijava u sistem
+  2. Radno mjesto — Evidencija rada
+  3. Maloprodaja
+  4. Veleprodaja
+  5. Logistika — Vozila
+  6. Servis
+  7. HR — Ljudski resursi
+  8. Komunikacija — Chat
+  9. Notifikacije
+  10. Admin funkcije
+  11. Debugging — Rjesavanje problema
+
+================================================================
+  1. PRIJAVA U SISTEM
+================================================================
+
+Pri pokretanju aplikacije:
+- Odaberi svoju lokaciju
+- Klikni na svoje ime
+- Unesi 4-cifreni PIN
+
+PRVA PRIJAVA:
+- Privremeni PIN je: 0000
+- System ce zatraziti postavljanje novog PIN-a
+- Unesi novi PIN dva puta i potvrdi
+
+ZABORAVLJEN PIN:
+- Kontaktiraj admina (Eldin ili Samir)
+- Admin resetuje PIN na 0000 u Radnici stranici
+
+PROMJENA PIN-A:
+- Sidebar (lijevi meni) → dno → "Promijeni PIN"
+
+================================================================
+  2. RADNO MJESTO — EVIDENCIJA RADA
+================================================================
+
+DOLAZAK NA POSAO:
+1. Prijavi se u sistem
+2. Idi na "Evidencija rada"
+3. Klikni "Dolazak" — sistem evidentira tacno vrijeme
+
+PAUZA:
+- Klikni "Pauza" pri odlasku na pauzu
+- Klikni "Povratak" kada se vratis
+
+ODLAZAK:
+- Klikni "Odlazak" pri kraju radnog dana
+
+VAZNO: Evidencija se snima na server — svi admini vide u realnom
+vremenu ko je prisutan na poslu.
+
+PREGLED EVIDENCIJE (admin/voditelj):
+- Idi na "Pregled evidencije"
+- Filtriraj po lokaciji, radniku, datumu
+- Export u Excel ili PDF
+
+================================================================
+  3. MALOPRODAJA
+================================================================
+
+POLOG PAZARA:
+1. Idi na "Polog pazara"
+2. Klikni "Novi polog"
+3. Unesi iznose: Gotovina, Kartice, Virman
+4. Klikni "Spremi"
+Admin u STUP-u dobija notifikaciju i vidi polog.
+
+Status pologa:
+- Pripremljen = radnik predao
+- Predat = fizicki predat
+- Potvrdjen = admin potvrdio
+- Problem = neslaganje u iznosu
+
+DOPUNA MALOPRODAJE:
+1. Idi na "Dopuna maloprodaje"
+2. Klikni "Novi zahtjev"
+3. Dodaj artikle i kolicine
+4. Odaberi prioritet (nizak/srednji/visok/hitan)
+5. Klikni "Posalji zahtjev"
+STUP prima notifikaciju i priprema robu.
+
+SALES LEADOVI:
+- Evidentiras sto kupci traze a nemamo
+- Kategorije: kafa/kapsule, aparati, IT oprema, elektronika
+- Tip: Nemamo u ponudi / Privremeno nema
+- Admin vidi statistike i odlucuje o narudzbi
+
+POSLOVNI ZADACI:
+- Predefinisani ponavljajuci zadaci po lokaciji
+- Oznaci kao zavrseno kada obavljeno
+- Admin potvrdjuje zavrsene zadatke
+
+================================================================
+  4. VELEPRODAJA
+================================================================
+
+DOPUNA VP — UVOZ:
+- Lista artikala koje treba naruciti od dobavljaca
+- Dodaj artikal, kolicinu, dobavljaca, prioritet
+- Status: Na cekanju → Naruceno → Primljeno
+
+DOSTAVA ROBE:
+1. Idi na "Dostava robe"
+2. Klikni "Nova dostava"
+3. Odaberi vozaca i odrediste
+4. Dodaj stavke (artikal + kolicina)
+5. Prati status: Kreirana → U pripremi → Utovaren → U transportu → Isporucena
+
+================================================================
+  5. LOGISTIKA — VOZILA
+================================================================
+
+PREGLED VOZILA:
+- Vidi sva vozila: automobili i skuteri
+- Status: Aktivno, U kvaru, Na servisu
+
+EVIDENCIJA KORISCENJA:
+1. Idi na "Vozila" → tab "Evidencija"
+2. Klikni "Nova evidencija"
+3. Odaberi vozilo, vozaca, upiši relaciju i km
+
+SERVISNI NALOZI:
+- Evidentiras servise i popravke
+- Prati troskove po vozilu
+- Statusi: Zakazan, U toku, Zavrsen
+
+================================================================
+  6. SERVISNI PRIJEM
+================================================================
+
+PRIJEM UREDJAJA:
+1. Idi na "Servisni prijem"
+2. Tab "Novi nalog"
+3. Unesi podatke kupca (ime, telefon)
+4. Unesi podatke uredjaja (marka, model, kvar)
+5. Opisi fizicko stanje uredjaja
+6. Klikni "Spremi nalog"
+7. Automatski se generise servisni nalog sa brojem SN-XXXX
+
+PRINTANJE NALOGA:
+- Nakon spasavanja, klikni "Print" za PDF nalog
+- Daj kupcu kopiju naloga
+
+PROMJENA STATUSA:
+U listi naloga odaberi novi status:
+- Zaprimljen → Dijagnostika → Ceka dijelove →
+  U popravci → Zavrsen → Preuzet
+
+================================================================
+  7. HR — LJUDSKI RESURSI
+================================================================
+
+GODISNJI ODMORI:
+- Radnik podnosi zahtjev (datum od/do, tip, razlog)
+- Admin odobrava ili odbija
+- Sistem automatski racuna broj radnih dana
+- Bolovanje se evidentira posebno
+
+KASNJENJA / IZJAVE:
+- Evidentiras kasnjenje radnika
+- Generises pisanu izjavu za potpis
+- Mozés printati izjavu
+
+PRAVILA I INSTRUKCIJE:
+- Dokumenti i upustva za radnike
+- Interni pravilnik
+
+IZVJESTAJI (admin/voditelj):
+- Radni sati po radniku/lokaciji/periodu
+- Polog pazara pregled
+- Godisnji odmori statistika
+- Export u PDF ili Excel
+
+================================================================
+  8. KOMUNIKACIJA — CHAT
+================================================================
+
+GRUPE:
+- Na poslu — trenutno prijavljeni radnici
+- Kafa/Pauza — neformalni razgovor
+- IT Podrska — tehnicka pitanja
+- Tutto Capsule SHOP — SCC + Merkator lokacije
+- KupiLenovo & STUP — KupiLenovo + STUP sjediste
+- Kompletna ekipa — svi radnici
+
+SLANJE PORUKE:
+1. Odaberi grupu
+2. Ukucaj poruku u polje na dnu
+3. Enter ili klikni dugme posalji
+
+NAPOMENA: Chat se osvjezava automatski svakih 15 sekundi.
+
+================================================================
+  9. NOTIFIKACIJE
+================================================================
+
+Zvono u gornjem desnom uglu pokazuje broj novih obavijesti.
+
+DOBIJAS NOTIFIKACIJU ZA:
+- Novi polog pazara
+- Nova dopuna maloprodaje
+- Novi zahtjev za odmor
+- Novi sales lead
+- Nova chat poruka
+- Novi servisni prijem
+- Novo kasnjenje
+
+AKCIJE:
+- Klikni zvono → otvara se lista notifikacija
+- Klikni na notifikaciju → otvara relevantnu stranicu
+- "Oznaci sve procitanim" → brise badge
+- Notifikacije su individualne — svaki radnik vidi svoje
+
+WINDOWS TOAST NOTIFIKACIJE:
+- Pojavljuju se u donjem desnom uglu ekrana
+- Rade cak i kada je app minimiziran
+- Klik na toast → otvara app i navigira na stranicu
+
+================================================================
+  10. ADMIN FUNKCIJE
+================================================================
+
+UPRAVLJANJE RADNICIMA (Radnici stranica):
+- Dodaj novog radnika
+- Uredi podatke radnika
+- Premjesti radnika na drugu lokaciju:
+  → Klikni dropdown u koloni "Lokacija"
+  → Odaberi novu lokaciju
+  → Potvrdi premjestanje
+- Resetuj PIN radniku (zuto dugme sa kljucem)
+
+CENTRALA — STUP NADZORNI PANEL:
+- Pregled svih lokacija u realnom vremenu
+- Ko je na poslu, ko kasni
+- Statistike prodaje i aktivnosti
+
+DASHBOARD:
+- Brzi pregled svih kljucnih podataka
+- Grafikoni aktivnosti
+
+================================================================
+  11. DEBUGGING — RJESAVANJE PROBLEMA
+================================================================
+
+AKO NESTO NE RADI:
+
+1. PROVJERI KONEKCIJU:
+   - Gornji desni ugao → status (zeleno = aktivan, crveno = offline)
+   - Ako je offline: STUP PC mora biti upaljen i STT HR pokrenut
+
+2. DEBUG KONZOLA:
+   Pritisni Ctrl+Shift+D da otvoriš debug konzolu
+   - Zeleno = uspjesni API pozivi
+   - Crveno = greske
+   - Vidis tacno koji endpoint ne radi
+
+3. PROMJENA SERVER IP:
+   Sidebar → dno → "Promijeni server"
+   - Ista mreza (npr. u STUP-u): 192.168.1.11
+   - Razlicita mreza (izvana): 109.237.47.62
+
+4. CESTE GRESKE:
+
+   "Ne mogu se spojiti":
+   → STUP PC nije upaljen ili STT HR nije pokrenut
+   → Pogresna IP adresa
+   → Firewall blokira port 3737
+
+   "Bijeli ekran pri pokretanju":
+   → Restart aplikacije
+   → Ako ne pomaze, deinstaliraj i reinstaliraj
+
+   "Podaci se ne osvjezavaju":
+   → Provjeri konekciju (gore desno)
+   → Osvjezi stranicu (F5 na Windowsu, Cmd+R na Macu)
+
+   "PIN ne radi":
+   → Kontaktiraj admina za reset na 0000
+
+5. KONTAKT ZA TEHNICKU PODRSKU:
+   IT / Razvoj: Eldin Hota
+   Tel: 062 574 436
+   Email: maloprodaja@stt.ba
+
+================================================================
+  BRZI PREGLED TASTERA
+================================================================
+
+Ctrl+Shift+D  →  Debug konzola (prikaz gresaka)
+F5            →  Osvjezi (Windows)
+Cmd+R         →  Osvjezi (Mac)
+
+================================================================
+  STT d.o.o. Sarajevo | Hifzi Bjelavca 34 | www.stt.ba
+================================================================

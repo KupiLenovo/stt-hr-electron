@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.backup
+.env
+.env.*
+{build,app}/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Editor
+.vscode/
+*.swp
+*.swo
