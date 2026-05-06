@@ -1,6 +1,6 @@
 {
   "name": "stt-hr",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "STT.BA HR Menadzment Sistem",
   "main": "main.js",
   "author": "STT d.o.o. Sarajevo",
@@ -30,7 +30,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "requestedExecutionLevel": "requireAdministrator"
@@ -49,10 +51,22 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "public.app-category.business"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "KupiLenovo",
+      "repo": "stt-hr-electron",
+      "private": true
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
   }
 }

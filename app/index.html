@@ -5817,6 +5817,25 @@ function App() {
         return () => { window._askConfirm = null; window._addToast = null; };
     }, [addToast]);
 
+    // Auto-update listener (Electron only)
+    const [updateDownloaded, setUpdateDownloaded] = useState(false);
+    const [updateVersion, setUpdateVersion] = useState('');
+    useEffect(() => {
+        if (!window.electronAPI) return;
+        window.electronAPI.onUpdateAvailable((info) => {
+            addToast(`Novo azuriranje ${info.version} — preuzimanje u toku...`, 'info');
+        });
+        window.electronAPI.onUpdateProgress((p) => {
+            if (Math.round(p.percent) % 20 === 0) {
+                addToast(`Preuzimanje azuriranja: ${Math.round(p.percent)}%`, 'info');
+            }
+        });
+        window.electronAPI.onUpdateDownloaded((info) => {
+            setUpdateVersion(info.version);
+            setUpdateDownloaded(true);
+        });
+    }, []);
+
     // Mute notifikacija
     const [isMuted, setIsMuted] = useState(() => localStorage.getItem('stt_muted') === '1');
     const toggleMute = () => {
@@ -6596,6 +6615,24 @@ function App() {
                     </div>
                 ))}
             </div>
+
+            {/* Update downloaded banner */}
+            {updateDownloaded && (
+                <div style={{position:'fixed',bottom:0,left:0,right:0,background:'var(--primary)',color:'white',padding:'14px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',zIndex:10000,boxShadow:'0 -4px 16px rgba(0,0,0,0.15)'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:12}}>
+                        <i className="fas fa-download" style={{fontSize:18}}></i>
+                        <span style={{fontWeight:600}}>Azuriranje {updateVersion} je preuzeto i spremno za instalaciju.</span>
+                    </div>
+                    <div style={{display:'flex',gap:10}}>
+                        <button onClick={()=>setUpdateDownloaded(false)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'white',padding:'8px 16px',borderRadius:8,cursor:'pointer',fontSize:13}}>
+                            Kasnije
+                        </button>
+                        <button onClick={()=>window.electronAPI && window.electronAPI.installUpdate()} style={{background:'white',border:'none',color:'var(--primary)',padding:'8px 20px',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700}}>
+                            <i className="fas fa-redo" style={{marginRight:6}}></i>Restart i instaliraj
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* PIN promjena modal */}
             {showPinModal && (
