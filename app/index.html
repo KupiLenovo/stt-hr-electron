@@ -3853,7 +3853,7 @@ function ServisniPrijemPage({ radnici, currentUser, sendNotif }) {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-        } catch(e) { alert('Greška pri preuzimanju PDF-a. Provjeri konekciju sa serverom.'); }
+        } catch(e) { showAlert('Greska pri preuzimanju PDF-a. Provjeri konekciju sa serverom.', 'error'); }
     };
 
     const handleExportExcel = async () => {
@@ -3866,7 +3866,7 @@ function ServisniPrijemPage({ radnici, currentUser, sendNotif }) {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-        } catch(e) { alert('Greška pri exportu. Provjeri konekciju sa serverom.'); }
+        } catch(e) { showAlert('Greska pri exportu. Provjeri konekciju sa serverom.', 'error'); }
     };
 
     const renderLista = React.useCallback(() => (
@@ -4681,7 +4681,7 @@ function ZadaciPage({ radnici, currentUser, tip }) {
                         {/* Oko za pregled + Check za završetak */}
                         <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
                             <div title="Pregled zadatka" style={{width:32,height:32,borderRadius:8,border:'1px solid var(--gray-200)',background:'var(--gray-50)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}
-                                onClick={()=>setSelectedZadatak(z.id)}>
+                                onClick={()=>setShowDetalji(z)}>
                                 <i className="fas fa-eye" style={{color:'var(--gray-400)',fontSize:14}}></i>
                             </div>
                             {z.status === 'ceka' && (
@@ -7527,7 +7527,7 @@ function StaffLoyaltyPortal({ currentUser }) {
                         <button className="btn btn-outline" onClick={() => {
                             const lista = clanovi.filter(c => c.newsletter && (program==='svi'||c.program===program) && c.email);
                             const emails = lista.map(c => c.email).join(', ');
-                            navigator.clipboard.writeText(emails).then(() => alert(`Kopirano ${lista.length} email adresa!`)).catch(() => alert(emails));
+                            navigator.clipboard.writeText(emails).then(() => showAlert(`Kopirano ${lista.length} email adresa!`, 'success')).catch(() => showAlert(emails, 'info'));
                         }}>
                             <i className="fas fa-copy"></i> Kopiraj email adrese
                         </button>
@@ -8263,7 +8263,7 @@ function StaffLoyaltyPortal({ currentUser }) {
             const todayServices = serviciMembers.filter(m => m.sledeciServis === selectedDate);
 
             const handleCompleteService = (memberId) => {
-                alert(`Servis za člana ${memberId} je označen kao obavljeno!`);
+                showAlert(`Servis za clana ${memberId} je oznacen kao obavljeno!`, 'success');
                 setShowServiceForm(false);
                 setSelectedMember(null);
             };
@@ -8438,7 +8438,7 @@ function StaffLoyaltyPortal({ currentUser }) {
 
             const handlePointsSubmit = () => {
                 if (memberSelect && points) {
-                    alert(`${pointsAction === 'add' ? 'Dodano' : 'Oduzeto'} ${points} bodova!`);
+                    showAlert(`${pointsAction === 'add' ? 'Dodano' : 'Oduzeto'} ${points} bodova!`, 'success');
                     setPoints('');
                 }
             };
@@ -8955,7 +8955,7 @@ function StaffLoyaltyPortal({ currentUser }) {
 
             const handleRegistration = () => {
                 if (newMember.ime.trim() && newMember.telefon.trim()) {
-                    alert(`Nova registracija: ${newMember.ime} kao ${getTierName(newMember.tier)}`);
+                    showAlert(`Nova registracija: ${newMember.ime} kao ${getTierName(newMember.tier)}`, 'success');
                     setNewMember({ ime: '', telefon: '', tier: 'connoisseur' });
                 }
             };
