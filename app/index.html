@@ -1852,7 +1852,7 @@ function DopunaVPPage({ radnici, currentUser }) {
                                     const stat = statusi.find(st=>st.id===s.status);
                                     const r = radnici.find(r=>r.id===s.radnik_id);
                                     return (
-                                        <tr key={s.id}>
+                                        <tr key={s.id} onClick={()=>setSelectedZahtjev(s)} style={{cursor:'pointer'}} title="Klikni za detalje">
                                             <td>
                                                 <div style={{fontWeight:500}}>{s.artikal}</div>
                                                 {s.napomena && <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>{s.napomena}</div>}
@@ -1862,7 +1862,7 @@ function DopunaVPPage({ radnici, currentUser }) {
                                             <td><span style={{padding:'2px 8px',borderRadius:12,fontSize:11,fontWeight:600,background:prio?.color+'20',color:prio?.color}}>{prio?.label}</span></td>
                                             <td><span style={{padding:'2px 8px',borderRadius:12,fontSize:11,fontWeight:600,background:stat?.color+'20',color:stat?.color}}>{stat?.label}</span></td>
                                             <td style={{fontSize:12,color:'var(--gray-500)'}}>{formatDate(s.datum)}</td>
-                                            <td>
+                                            <td onClick={e=>e.stopPropagation()}>
                                                 <div style={{display:'flex',gap:4}}>
                                                     {s.status==='na_cekanju' && <button onClick={()=>handleStatusChange(s.id,'naručeno')} className="btn btn-sm" style={{background:'#dbeafe',color:'#2563eb',border:'none',padding:'4px 8px',borderRadius:5,fontSize:11,cursor:'pointer'}}>Naručeno</button>}
                                                     {s.status==='naručeno' && <button onClick={()=>handleStatusChange(s.id,'primljeno')} className="btn btn-sm" style={{background:'#d1fae5',color:'#059669',border:'none',padding:'4px 8px',borderRadius:5,fontSize:11,cursor:'pointer'}}>Primljeno</button>}
@@ -1880,29 +1880,23 @@ function DopunaVPPage({ radnici, currentUser }) {
                 </div>
             </div>
             {selectedZahtjev && (
-                <Modal isOpen={true} onClose={() => setSelectedZahtjev(null)} title={`Zahtjev za dopunu — ${selectedZahtjev.lokacija_naziv || getLokacija(selectedZahtjev.mp_id)?.naziv || 'Lokacija'}`} footer={
+                <Modal isOpen={true} onClose={() => setSelectedZahtjev(null)} title={`Detalji — ${selectedZahtjev.artikal}`} footer={
                     <button className="btn btn-outline" onClick={() => setSelectedZahtjev(null)}>Zatvori</button>
                 }>
-                    <div style={{marginBottom:12,display:'flex',gap:8,flexWrap:'wrap'}}>
-                        {prioritetBadge(selectedZahtjev.prioritet)}
-                        {statusBadge(selectedZahtjev.status)}
-                        <span style={{fontSize:12,color:'var(--gray-500)'}}>{formatDate(selectedZahtjev.datum)}</span>
+                    <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                            {(() => { const prio = prioriteti.find(p=>p.id===selectedZahtjev.prioritet); return prio ? <span style={{padding:'3px 10px',borderRadius:12,fontSize:12,fontWeight:600,background:prio.color+'20',color:prio.color}}>{prio.label}</span> : null; })()}
+                            {(() => { const stat = statusi.find(st=>st.id===selectedZahtjev.status); return stat ? <span style={{padding:'3px 10px',borderRadius:12,fontSize:12,fontWeight:600,background:stat.color+'20',color:stat.color}}>{stat.label}</span> : null; })()}
+                            <span style={{fontSize:12,color:'var(--gray-500)'}}>{formatDate(selectedZahtjev.datum)}</span>
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                            <div><span style={{fontSize:12,color:'var(--gray-500)'}}>Artikal</span><div style={{fontWeight:600}}>{selectedZahtjev.artikal}</div></div>
+                            <div><span style={{fontSize:12,color:'var(--gray-500)'}}>Količina</span><div style={{fontWeight:600}}>{selectedZahtjev.kolicina||'-'}</div></div>
+                            <div><span style={{fontSize:12,color:'var(--gray-500)'}}>Dobavljač</span><div>{selectedZahtjev.dobavljac||'-'}</div></div>
+                            <div><span style={{fontSize:12,color:'var(--gray-500)'}}>Kreirao</span><div>{radnici.find(r=>r.id===selectedZahtjev.radnik_id)?.ime || '-'}</div></div>
+                        </div>
+                        {selectedZahtjev.napomena && <div style={{padding:'10px 14px',background:'#fef9c3',borderRadius:8,fontSize:13}}><i className="fas fa-sticky-note" style={{marginRight:6,color:'#ca8a04'}}></i>{selectedZahtjev.napomena}</div>}
                     </div>
-                    {selectedZahtjev.napomena && <div style={{padding:'8px 12px',background:'#fef9c3',borderRadius:8,marginBottom:12,fontSize:13}}><i className="fas fa-sticky-note" style={{marginRight:6,color:'#ca8a04'}}></i>{selectedZahtjev.napomena}</div>}
-                    <table style={{width:'100%',borderCollapse:'collapse'}}>
-                        <thead><tr><th style={{textAlign:'left',padding:'8px',borderBottom:'2px solid var(--gray-200)'}}>Artikal</th><th style={{textAlign:'left',padding:'8px',borderBottom:'2px solid var(--gray-200)'}}>Količina</th></tr></thead>
-                        <tbody>
-                            {(selectedZahtjev.stavke || []).map((s, i) => (
-                                <tr key={i} style={{borderBottom:'1px solid var(--gray-100)'}}>
-                                    <td style={{padding:'8px'}}>{s.artikal || s.naziv || '-'}</td>
-                                    <td style={{padding:'8px',fontWeight:600}}>{s.kolicina}</td>
-                                </tr>
-                            ))}
-                            {(!selectedZahtjev.stavke || selectedZahtjev.stavke.length === 0) && (
-                                <tr><td colSpan={2} style={{textAlign:'center',color:'var(--gray-400)',padding:20}}>Nema stavki</td></tr>
-                            )}
-                        </tbody>
-                    </table>
                 </Modal>
             )}
         </div>
@@ -3994,6 +3988,7 @@ function LeadoviPage({ radnici, currentUser, sendNotif, tip }) {
     const [filterStatus, setFilterStatus] = React.useState('');
     const [editLead, setEditLead] = React.useState(null);
     const [showForm, setShowForm] = React.useState(false);
+    const [selectedLead, setSelectedLead] = React.useState(null);
 
     const aktivneLokacije = LOKACIJE.filter(l => l.aktivan !== false && l.tip === 'maloprodaja');
     const isAdmin = currentUser?.uloga === 'admin' || currentUser?.uloga === 'voditelj';
@@ -4207,7 +4202,7 @@ function LeadoviPage({ radnici, currentUser, sendNotif, tip }) {
                 const r = getRadnik(lead.radnik_id);
                 const lok = getLokacija(lead.lokacija_id);
                 return (
-                    <div key={lead.id} style={{background:'var(--card-bg)',borderRadius:12,padding:16,border:'1px solid var(--gray-700)',marginBottom:12,borderLeft:`4px solid ${tip.color}`}}>
+                    <div key={lead.id} onClick={()=>setSelectedLead(lead)} style={{background:'var(--card-bg)',borderRadius:12,padding:16,border:'1px solid var(--gray-700)',marginBottom:12,borderLeft:`4px solid ${tip.color}`,cursor:'pointer'}} title="Klikni za detalje">
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:8}}>
                             <div style={{flex:1}}>
                                 <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:6}}>
@@ -4235,7 +4230,7 @@ function LeadoviPage({ radnici, currentUser, sendNotif, tip }) {
                                 {lead.rjesenje && <div style={{fontSize:12,color:'#10b981',marginTop:4,background:'#10b98115',padding:'4px 8px',borderRadius:6}}><i className="fas fa-check-circle" style={{marginRight:4}}></i> {lead.rjesenje}</div>}
                                 {lead.ocekivani_datum && lead.status === 'naruceno' && <div style={{fontSize:12,color:'#f59e0b',marginTop:4}}><i className="fas fa-shipping-fast" style={{marginRight:4}}></i> Očekivana isporuka: {lead.ocekivani_datum}</div>}
                             </div>
-                            <div style={{display:'flex',gap:6,flexShrink:0}}>
+                            <div style={{display:'flex',gap:6,flexShrink:0}} onClick={e=>e.stopPropagation()}>
                                 <button onClick={() => incrementPonovljeno(lead.id)} title="Kupac ponovo tražio" style={{padding:'6px 10px',borderRadius:6,border:'1px solid var(--gray-600)',background:'transparent',color:'#f59e0b',cursor:'pointer',fontSize:12}}>
                                     <i className="fas fa-plus"></i> Ponovljeno
                                 </button>
@@ -4367,6 +4362,45 @@ function LeadoviPage({ radnici, currentUser, sendNotif, tip }) {
             {activeTab === 'pregled' && renderPregled()}
             {activeTab === 'statistike' && renderStatistike()}
             {activeTab === 'top_zahtjevi' && renderTopZahtjevi()}
+
+            {/* Modal: Detalji leada */}
+            {selectedLead && (() => {
+                const tip = tipovi.find(t=>t.id===selectedLead.tip) || tipovi[0];
+                const stat = statusi.find(s=>s.id===selectedLead.status) || statusi[0];
+                const r = radnici.find(r=>r.id===selectedLead.radnik_id);
+                const lok = LOKACIJE.find(l=>l.id===selectedLead.lokacija_id);
+                return (
+                    <Modal isOpen={true} onClose={()=>setSelectedLead(null)} title={selectedLead.artikal}
+                        footer={
+                            <div style={{display:'flex',gap:8}}>
+                                <button className="btn btn-outline" onClick={()=>setSelectedLead(null)}>Zatvori</button>
+                                <button className="btn btn-primary" onClick={()=>{setEditLead(selectedLead);setFormData({...selectedLead});setActiveTab('unos');setSelectedLead(null);}}>
+                                    <i className="fas fa-pen" style={{marginRight:6}}></i>Uredi
+                                </button>
+                            </div>
+                        }>
+                        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                            <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                                <span style={{padding:'3px 10px',borderRadius:12,fontSize:12,fontWeight:600,background:tip.color+'20',color:tip.color}}><i className={tip.icon} style={{marginRight:4}}></i>{tip.naziv}</span>
+                                <span style={{padding:'3px 10px',borderRadius:12,fontSize:12,fontWeight:600,background:stat.color+'25',color:stat.color}}>{stat.naziv}</span>
+                                {(() => { const m={hitan:{bg:'#fef2f2',c:'#dc2626',t:'HITNO'},visok:{bg:'#fef3c7',c:'#d97706',t:'Visok'},srednji:{bg:'#eff6ff',c:'#2563eb',t:'Srednji'},nizak:{bg:'#f0fdf4',c:'#16a34a',t:'Nizak'}}; const s=m[selectedLead.prioritet]||m.srednji; return <span style={{background:s.bg,color:s.c,padding:'3px 10px',borderRadius:12,fontSize:12,fontWeight:600}}>{s.t}</span>; })()}
+                                {selectedLead.ponovljeno > 1 && <span style={{background:'#fef3c7',color:'#92400e',padding:'3px 10px',borderRadius:12,fontSize:12,fontWeight:600}}><i className="fas fa-redo" style={{marginRight:4,fontSize:10}}></i>{selectedLead.ponovljeno}x traženo</span>}
+                            </div>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,fontSize:13}}>
+                                <div><div style={{color:'var(--gray-500)',fontSize:11,marginBottom:2}}>Lokacija</div><div style={{fontWeight:500}}>{lok?.naziv||'-'}</div></div>
+                                <div><div style={{color:'var(--gray-500)',fontSize:11,marginBottom:2}}>Datum</div><div>{selectedLead.datum}</div></div>
+                                <div><div style={{color:'var(--gray-500)',fontSize:11,marginBottom:2}}>Zabilježio</div><div>{r ? r.ime+' '+r.prezime : '-'}</div></div>
+                                <div><div style={{color:'var(--gray-500)',fontSize:11,marginBottom:2}}>Kategorija</div><div>{kategorije.find(k=>k.id===selectedLead.kategorija)?.naziv||'-'}</div></div>
+                                {selectedLead.kupac_ime && <div><div style={{color:'var(--gray-500)',fontSize:11,marginBottom:2}}>Kupac</div><div>{selectedLead.kupac_ime}</div></div>}
+                                {selectedLead.kupac_kontakt && <div><div style={{color:'var(--gray-500)',fontSize:11,marginBottom:2}}>Kontakt</div><div>{selectedLead.kupac_kontakt}</div></div>}
+                            </div>
+                            {selectedLead.opis && <div style={{padding:'10px 14px',background:'var(--gray-800)',borderRadius:8,fontSize:13,lineHeight:1.5}}><i className="fas fa-comment-alt" style={{marginRight:6,color:'var(--gray-400)'}}></i>{selectedLead.opis}</div>}
+                            {selectedLead.rjesenje && <div style={{padding:'10px 14px',background:'#10b98115',borderRadius:8,fontSize:13,color:'#10b981'}}><i className="fas fa-check-circle" style={{marginRight:6}}></i><strong>Rješenje:</strong> {selectedLead.rjesenje}</div>}
+                            {selectedLead.ocekivani_datum && selectedLead.status==='naruceno' && <div style={{padding:'10px 14px',background:'#f59e0b15',borderRadius:8,fontSize:13,color:'#f59e0b'}}><i className="fas fa-shipping-fast" style={{marginRight:6}}></i>Očekivana isporuka: <strong>{selectedLead.ocekivani_datum}</strong></div>}
+                        </div>
+                    </Modal>
+                );
+            })()}
         </div>
     );
 }
