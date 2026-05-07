@@ -1081,7 +1081,17 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
     const todayEv = todayEvAll.length > 0 ? todayEvAll[todayEvAll.length - 1] : null;
 
     const handleAction = async (action) => {
+        // Potvrda prije odlaska — pokazuje koliko je radnik radio
+        if (action === 'odlazak' && todayEv?.dolazak) {
+            const pausaMs = (todayEv.pocetak_pauze && todayEv.kraj_pauze)
+                ? (new Date(todayEv.kraj_pauze) - new Date(todayEv.pocetak_pauze)) : 0;
+            const radnoMs = Date.now() - new Date(todayEv.dolazak).getTime() - pausaMs;
+            const sati = Math.floor(radnoMs / 3600000);
+            const min = Math.floor((radnoMs % 3600000) / 60000);
+            if (!await askConfirm(`Potvrdi odlazak\n\nUkupno na poslu: ${sati}h ${min}min\n\nJesi li siguran?`)) return;
+        }
         setLoading(true);
+        const poruke = { dolazak: 'Dolazak evidentiran!', pauza_start: 'Pauza zapoceta', pauza_end: 'Pauza zavrsena, nastavljas rad', odlazak: 'Odlazak evidentiran. Dobar odmor!' };
         try {
             if (action === 'dolazak') {
                 await api('/api/evidencija/dolazak', 'POST', { radnik_id: currentUser.id, lokacija_id: currentUser.lokacija_id });
@@ -1094,8 +1104,9 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
                 await api('/api/evidencija/odlazak', 'POST', { radnik_id: currentUser.id });
             }
             refreshEvidencija();
+            showAlert(poruke[action] || 'Evidentirano!', 'success');
         } catch(e) {
-            // Fallback na lokalni state ako server nije dostupan
+            showAlert('Server nedostupan — akcija spasena lokalno i bice sinhronizovana', 'warning');
             const now = new Date().toISOString();
             if (action === 'dolazak' && !todayEv) {
                 setEvidencije(prev => [...prev, { id: Date.now(), radnik_id: currentUser.id, lokacija_id: currentUser.lokacija_id, datum: today(), dolazak: now, pocetak_pauze: null, kraj_pauze: null, odlazak: null }]);
@@ -1191,7 +1202,10 @@ function PrimopredajaPage({ radnici, currentUser }) {
     }, []);
 
     const handleSubmit = async () => {
-        if (!form.predaje_id || !form.preuzima_id || !form.stanje_kase) return;
+        if (!form.predaje_id) return showAlert('Izaberi radnika koji predaje smjenu!', 'warning');
+        if (!form.preuzima_id) return showAlert('Izaberi radnika koji preuzima smjenu!', 'warning');
+        if (form.predaje_id === form.preuzima_id) return showAlert('Radnik ne može sam sebi predati smjenu!', 'warning');
+        if (!form.stanje_kase) return showAlert('Unesi stanje kase!', 'warning');
         try {
             await api('/api/primopredaje', 'POST', {
                 lokacija_id: form.lokacija_id, predaje_id: Number(form.predaje_id),
@@ -1244,13 +1258,13 @@ function PrimopredajaPage({ radnici, currentUser }) {
                         </select>
                     </div>
                     <div className="form-group">
-                        <label>Stanje kase (KM)</label>
+                        <label>Stanje kase (KM) <span style={{color:'#dc2626'}}>*</span></label>
                         <input className="form-control" type="number" step="0.01" value={form.stanje_kase} onChange={e => setForm({...form, stanje_kase: e.target.value})} placeholder="0.00" />
                     </div>
                 </div>
                 <div className="form-row">
                     <div className="form-group">
-                        <label>Predaje (radnik)</label>
+                        <label>Predaje (radnik) <span style={{color:'#dc2626'}}>*</span></label>
                         <select className="form-control" value={form.predaje_id} onChange={e => setForm({...form, predaje_id: e.target.value})}>
                             <option value="">-- Izaberi --</option>
                             {radnici.filter(r=>r.aktivan).map(r => <option key={r.id} value={r.id}>{getRadnikName(r)}</option>)}
@@ -1265,7 +1279,7 @@ function PrimopredajaPage({ radnici, currentUser }) {
                 </div>
                 <div className="form-row">
                     <div className="form-group">
-                        <label>Preuzima (radnik)</label>
+                        <label>Preuzima (radnik) <span style={{color:'#dc2626'}}>*</span></label>
                         <select className="form-control" value={form.preuzima_id} onChange={e => setForm({...form, preuzima_id: e.target.value})}>
                             <option value="">-- Izaberi --</option>
                             {radnici.filter(r=>r.aktivan).map(r => <option key={r.id} value={r.id}>{getRadnikName(r)}</option>)}
@@ -1429,11 +1443,28 @@ function PazarPage({ radnici, polozi, setPolozi, currentUser, sendNotif }) {
                     <label>Napomena</label>
                     <textarea className="form-control" value={form.napomena} onChange={e => setForm({...form, napomena: e.target.value})} placeholder="Dodatne informacije..."></textarea>
                 </div>
-                {form.gotovina && form.ocekivani && (
-                    <div style={{padding:12,background: Math.abs((Number(form.gotovina)+Number(form.kartice||0)+Number(form.virman||0)) - Number(form.ocekivani)) < 1 ? '#d1fae5' : '#fee2e2', borderRadius:8,textAlign:'center',fontWeight:600}}>
-                        Razlika: {formatCurrency((Number(form.gotovina)+Number(form.kartice||0)+Number(form.virman||0)) - Number(form.ocekivani))}
-                    </div>
-                )}
+                {/* Ukupni zbir — uvijek vidljiv */}
+                {(form.gotovina || form.kartice || form.virman) && (() => {
+                    const ukupno = Number(form.gotovina||0) + Number(form.kartice||0) + Number(form.virman||0);
+                    const razlika = form.ocekivani ? ukupno - Number(form.ocekivani) : null;
+                    return (
+                        <div style={{padding:12,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8,marginBottom:8}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <span style={{color:'var(--gray-500)',fontSize:13}}>Ukupni polog:</span>
+                                <strong style={{fontSize:18}}>{formatCurrency(ukupno)}</strong>
+                            </div>
+                            {razlika !== null && (
+                                <div style={{marginTop:6,display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid var(--gray-200)',paddingTop:6}}>
+                                    <span style={{fontSize:12,color:'var(--gray-500)'}}>Razlika od očekivanog:</span>
+                                    <strong style={{color: Math.abs(razlika) < 1 ? '#059669' : '#dc2626', fontSize:14}}>
+                                        {razlika > 0 ? '+' : ''}{formatCurrency(razlika)}
+                                        {Math.abs(razlika) < 1 ? ' ✓' : ' ⚠️'}
+                                    </strong>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
             </Modal>
         </div>
     );
@@ -1578,7 +1609,9 @@ function DopunaPage({ radnici, currentUser, sendNotif }) {
     const [selectedZahtjev, setSelectedZahtjev] = useState(null);
     useEffect(() => { api('/api/dopune').then(setZahtjeviDopune).catch(()=>{}); }, []);
     const [showModal, setShowModal] = useState(false);
-    const [form, setForm] = useState({ mp_id: 2, prioritet: 'srednji', napomena: '', stavke: [{ artikal: '' }] });
+    const [form, setForm] = useState(() => ({ mp_id: currentUser?.lokacija_id || 2, prioritet: 'srednji', napomena: '', stavke: [{ artikal: '', kolicina: '' }] }));
+    // Autocomplete — pamti ranije koriscene artikle
+    const [artSuggestions, setArtSuggestions] = useState(() => { try { return JSON.parse(localStorage.getItem('stt_dopuna_artikli')||'[]'); } catch { return []; } });
 
     const addStavka = () => setForm({...form, stavke: [...form.stavke, { artikal: '', kolicina: '' }]});
     const updateStavka = (i, field, val) => {
@@ -1587,13 +1620,21 @@ function DopunaPage({ radnici, currentUser, sendNotif }) {
     };
 
     const handleSubmit = async () => {
+        const filteredStavke = form.stavke.filter(s=>s.artikal);
+        if (filteredStavke.length === 0) return showAlert('Dodaj bar jednu stavku!', 'warning');
         try {
-            const result = await api('/api/dopune', 'POST', { mp_id: form.mp_id, radnik_id: currentUser?.id||1, prioritet: form.prioritet, napomena: form.napomena, stavke: form.stavke.filter(s=>s.artikal&&s.kolicina) });
+            const result = await api('/api/dopune', 'POST', { mp_id: form.mp_id, radnik_id: currentUser?.id||1, prioritet: form.prioritet, napomena: form.napomena, stavke: filteredStavke });
             if (sendNotif) sendNotif('dopuna', { zahtjev_id: result.id, radnik_id: currentUser?.id, mp_id: form.mp_id });
+            // Spremi artikle u autocomplete listu
+            const noviArtikal = filteredStavke.map(s=>s.artikal).filter(Boolean);
+            const merged = [...new Set([...noviArtikal, ...artSuggestions])].slice(0, 60);
+            setArtSuggestions(merged);
+            localStorage.setItem('stt_dopuna_artikli', JSON.stringify(merged));
             const data = await api('/api/dopune');
             setZahtjeviDopune(data);
             setShowModal(false);
-            setForm({ mp_id: currentUser?.lokacija_id||2, prioritet: 'srednji', napomena: '', stavke: [{ artikal: '' }] });
+            showAlert('Zahtjev za dopunu je poslan!', 'success');
+            setForm({ mp_id: currentUser?.lokacija_id||2, prioritet: 'srednji', napomena: '', stavke: [{ artikal: '', kolicina: '' }] });
         } catch(e) { showAlert('Greška pri slanju zahtjeva.', 'error'); }
     };
 
@@ -1670,9 +1711,14 @@ function DopunaPage({ radnici, currentUser, sendNotif }) {
                 </div>
                 <div className="form-group">
                     <label>Stavke</label>
+                    <datalist id="dopuna-artikli-list">
+                        {artSuggestions.map((a,i) => <option key={i} value={a} />)}
+                    </datalist>
                     {form.stavke.map((s, i) => (
                         <div key={i} style={{display:'flex',gap:8,marginBottom:8}}>
-                            <input className="form-control" placeholder="Naziv artikla" value={s.artikal} onChange={e => updateStavka(i, 'artikal', e.target.value)} style={{flex:1}} autoFocus={i===0} />
+                            <input list="dopuna-artikli-list" className="form-control" placeholder="Naziv artikla" value={s.artikal} onChange={e => updateStavka(i, 'artikal', e.target.value)} style={{flex:2}} autoFocus={i===0} />
+                            <input className="form-control" placeholder="Kol. (opcionalno)" value={s.kolicina||''} onChange={e => updateStavka(i, 'kolicina', e.target.value)} style={{flex:1}} />
+                            {form.stavke.length > 1 && <button className="btn btn-sm btn-danger" onClick={()=>setForm({...form, stavke: form.stavke.filter((_,idx)=>idx!==i)})} style={{flexShrink:0}}>✕</button>}
                         </div>
                     ))}
                     <button className="btn btn-sm btn-outline" onClick={addStavka}><i className="fas fa-plus"></i> Dodaj stavku</button>
@@ -2340,6 +2386,10 @@ function OdmoriPage({ radnici, currentUser, sendNotif }) {
             <Modal isOpen={showBolovanjeModal} onClose={() => setShowBolovanjeModal(false)} title="Prijava bolovanja" footer={
                 <><button className="btn btn-outline" onClick={() => setShowBolovanjeModal(false)}>Otkaži</button><button className="btn btn-danger" onClick={handleSubmitBolovanje}><i className="fas fa-briefcase-medical"></i> Evidentiraj bolovanje</button></>
             }>
+                <div style={{padding:'8px 12px',background:'#ecfdf5',border:'1px solid #a7f3d0',borderRadius:8,marginBottom:16,fontSize:12,color:'#065f46',display:'flex',alignItems:'center',gap:8}}>
+                    <i className="fas fa-lock"></i>
+                    Medicinski podaci su strogo povjerljivi — vidljivi samo HR-u i adminu, ne drugim radnicima.
+                </div>
                 <div className="form-group">
                     <label>Radnik</label>
                     <select className="form-control" value={bolovanjeForm.radnik_id} onChange={e => setBolovanjeForm({...bolovanjeForm, radnik_id: e.target.value})}>
@@ -4562,6 +4612,25 @@ function ZadaciPage({ radnici, currentUser, tip }) {
         }
     };
 
+    const [problemModal, setProblemModal] = useState(null); // { zadatakId, naziv }
+    const [problemTekst, setProblemTekst] = useState('');
+    const prijaviProblem = async () => {
+        if (!problemTekst.trim()) return showAlert('Opisi problem!', 'warning');
+        const poruka = `[PROBLEM] ${currentUser.ime} ${currentUser.prezime}: ${problemTekst}`;
+        try {
+            if (typeof problemModal.zadatakId === 'number') {
+                await api(`/api/zadaci/${problemModal.zadatakId}/napomena`, 'POST', { napomena: poruka }).catch(()=>{});
+            }
+            // Spremi u audit log lokalno
+            if (window._addAudit) window._addAudit('zadatak-problem', `${problemModal.naziv}: ${problemTekst}`, currentUser.ime);
+            showAlert('Problem prijavljen adminu!', 'success');
+        } catch(e) {
+            showAlert('Problem zabilježen lokalno', 'info');
+        }
+        setProblemModal(null);
+        setProblemTekst('');
+    };
+
     const toggleKorak = (zadatakId, korakIdx) => {
         setZadaci(prev => prev.map(z => {
             if (z.id !== zadatakId) return z;
@@ -4655,6 +4724,22 @@ function ZadaciPage({ radnici, currentUser, tip }) {
                 filteredZadaci.map(z => renderZadatak(z))
             )}
 
+            {/* Modal: Prijavi problem sa zadatkom */}
+            {problemModal && (
+                <Modal isOpen={true} onClose={()=>{setProblemModal(null);setProblemTekst('');}} title={`Prijavi problem — ${problemModal.naziv}`} footer={
+                    <><button className="btn btn-outline" onClick={()=>{setProblemModal(null);setProblemTekst('');}}>Otkaži</button><button className="btn btn-danger" onClick={prijaviProblem}><i className="fas fa-exclamation-triangle"></i> Prijavi problem</button></>
+                }>
+                    <div style={{marginBottom:12,padding:'8px 12px',background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:8,fontSize:13,color:'#92400e'}}>
+                        <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                        Problem ce biti vidljiv adminu/voditelju.
+                    </div>
+                    <div className="form-group">
+                        <label>Opis problema</label>
+                        <textarea className="form-control" rows={3} value={problemTekst} onChange={e=>setProblemTekst(e.target.value)} placeholder="npr. Ne mogu pristupiti skladistu, nedostaje oprema, zadatak nije izvediv danas..." autoFocus />
+                    </div>
+                </Modal>
+            )}
+
             {/* Modal: Novi zadatak */}
             <Modal isOpen={showNoviZadatak} onClose={()=>setShowNoviZadatak(false)} title="Novi poslovni zadatak" footer={<><button className="btn btn-outline" onClick={()=>setShowNoviZadatak(false)}>Otkaži</button><button className="btn btn-primary" onClick={handleNoviZadatak}><i className="fas fa-plus"></i> Kreiraj</button></>}>
                 <div className="form-group"><label>Lokacija</label><select className="form-control" value={noviForm.lokacija_id} onChange={e=>setNoviForm({...noviForm,lokacija_id:e.target.value})}><option value="">-- Odaberi --</option>{LOKACIJE.filter(l=>l.aktivan!==false).map(l=><option key={l.id} value={l.id}>{l.naziv}</option>)}</select></div>
@@ -4727,12 +4812,18 @@ function ZadaciPage({ radnici, currentUser, tip }) {
                     <div style={{width:4,background:katColor,flexShrink:0}}></div>
 
                     <div style={{flex:1,padding:'12px 16px',display:'flex',alignItems:'center',gap:14}}>
-                        {/* Oko za pregled + Check za završetak */}
+                        {/* Oko za pregled + Check za završetak + Prijavi problem */}
                         <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
                             <div title="Pregled zadatka" style={{width:32,height:32,borderRadius:8,border:'1px solid var(--gray-200)',background:'var(--gray-50)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}
                                 onClick={()=>setShowDetalji(z)}>
                                 <i className="fas fa-eye" style={{color:'var(--gray-400)',fontSize:14}}></i>
                             </div>
+                            {z.status === 'ceka' && (
+                                <div title="Prijavi problem" onClick={()=>{setProblemModal({zadatakId:z.id,naziv:z.naziv});setProblemTekst('');}}
+                                    style={{width:32,height:32,borderRadius:8,border:'2px solid #fed7aa',background:'#fff7ed',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                                    <i className="fas fa-exclamation-triangle" style={{color:'#d97706',fontSize:12}}></i>
+                                </div>
+                            )}
                             {z.status === 'ceka' && (
                                 <div title="Označi kao završeno" onClick={async()=>{ if(await askConfirm('Jeste li sigurni da je zadatak obavljen?')) zavrsiZadatak(z.id); }}
                                     style={{width:32,height:32,borderRadius:8,border:'2px solid #d1fae5',background:'#ecfdf5',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
@@ -5838,6 +5929,17 @@ function DateInput({ value, onChange, className, style, placeholder }) {
 function App() {
     const [page, setPage] = useState('centrala');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    // "Last seen" timestamps za badge notifikacije
+    const [seenTs, setSeenTs] = useState(() => { try { return JSON.parse(localStorage.getItem('stt_seen_ts')||'{}'); } catch { return {}; } });
+    const markSeen = useCallback((key) => {
+        const upd = {...seenTs, [key]: Date.now()};
+        setSeenTs(upd);
+        localStorage.setItem('stt_seen_ts', JSON.stringify(upd));
+    }, [seenTs]);
+    useEffect(() => {
+        const badgePages = ['dopuna','pazar','dopuna_vp','leadovi','leadovi_vp'];
+        if (badgePages.includes(page)) markSeen(page);
+    }, [page]);
     const [radnici, setRadnici] = useState(initialRadnici);
     const [evidencije, setEvidencije] = useState([]);
     const [primopredaje, setPrimopredaje] = useState([]);
@@ -5847,7 +5949,8 @@ function App() {
     const [zahtjeviOdmora, setZahtjeviOdmora] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
     const [serverOnline, setServerOnline] = useState(false);
-    const [setupDone, setSetupDone] = useState(!!getSavedServerIP());
+    // U browseru (web verzija) setup se preskace automatski — app je vec na serveru
+    const [setupDone, setSetupDone] = useState(!window.electronAPI || !!getSavedServerIP());
     const [showInstallGuide, setShowInstallGuide] = useState(false);
     const [notifikacije, setNotifikacije] = useState([]);
     const [showNotifPanel, setShowNotifPanel] = useState(false);
@@ -6187,8 +6290,8 @@ function App() {
         return <ServerSetupPage onConnected={handleSetupConnected} />;
     }
 
-    // Korak 1b: Uputstvo za port forwarding (samo na STUP PC-u, samo prvi put)
-    if (showInstallGuide) {
+    // Korak 1b: Uputstvo za port forwarding (samo na STUP PC-u, samo u Electron app-u)
+    if (showInstallGuide && window.electronAPI) {
         return (
             <div style={{
                 minHeight:'100vh', background:'linear-gradient(135deg, #1e3a5f 0%, #0f2035 100%)',
@@ -6375,8 +6478,10 @@ function App() {
 
                 <div className="nav-section">
                     {(()=>{
-                        const noveNarudzbe = zahtjeviDopune ? zahtjeviDopune.filter(z=>z.status==='na_cekanju'||z.status==='novi').length : 0;
-                        const nepotvrdjeni = polozi.filter(p=>p.status==='pripremljen').length;
+                        const lastDopune = seenTs['dopuna'] || 0;
+                        const lastPazar = seenTs['pazar'] || 0;
+                        const noveNarudzbe = zahtjeviDopune ? zahtjeviDopune.filter(z=>(z.status==='na_cekanju'||z.status==='novi') && new Date((z.created_at||'').replace(' ','T')).getTime() > lastDopune).length : 0;
+                        const nepotvrdjeni = polozi.filter(p=>p.status==='pripremljen' && new Date((p.created_at||p.datum||'').replace(' ','T')).getTime() > lastPazar).length;
                         const mpBadge = noveNarudzbe + nepotvrdjeni;
                         return (<>
                         <div className="nav-section-title" style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingRight:16}}>
@@ -6631,7 +6736,14 @@ function App() {
                     </div>
                 </div>
 
-                
+                {/* Offline banner — vidljiv radniku kada server nije dostupan */}
+                {!serverOnline && currentUser && (
+                    <div style={{background:'#dc2626',color:'white',padding:'8px 20px',display:'flex',alignItems:'center',gap:10,fontSize:13,fontWeight:600,zIndex:100}}>
+                        <i className="fas fa-wifi" style={{opacity:0.8}}></i>
+                        Server nije dostupan — radis u offline modu. Akcije se cuvaju lokalno i bice sinhronizovane cim se veza uspostavi.
+                    </div>
+                )}
+
                 {/* DEBUG PANEL — Ctrl+Shift+D */}
                 {showDebug && (
                     <div style={{position:'fixed',bottom:0,left:0,right:0,height:280,background:'#0a0a0a',color:'#00ff88',fontFamily:'monospace',fontSize:11,zIndex:99999,display:'flex',flexDirection:'column',borderTop:'2px solid #00ff88'}}>
