@@ -64,8 +64,52 @@
             --radius: 8px;
             --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
             --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+            --bg-app: #f9fafb;
+            --bg-card: #ffffff;
+            --bg-input: #ffffff;
+            --border-color: #e5e7eb;
+            --text-primary: #1f2937;
+            --text-secondary: #4b5563;
         }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-800); }
+        /* DARK MODE — invertuj nijanse */
+        [data-theme="dark"] {
+            --gray-50: #1f2937;
+            --gray-100: #374151;
+            --gray-200: #4b5563;
+            --gray-300: #6b7280;
+            --gray-400: #9ca3af;
+            --gray-500: #d1d5db;
+            --gray-600: #e5e7eb;
+            --gray-700: #f3f4f6;
+            --gray-800: #f9fafb;
+            --gray-900: #ffffff;
+            --bg-app: #0f172a;
+            --bg-card: #1e293b;
+            --bg-input: #273449;
+            --border-color: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --primary-light: #1e3a8a;
+        }
+        [data-theme="dark"] .sidebar { background: #0f172a; border-right: 1px solid #1e293b; }
+        [data-theme="dark"] .topbar { background: var(--bg-card); border-bottom-color: var(--border-color); }
+        [data-theme="dark"] .card { background: var(--bg-card); border-color: var(--border-color); }
+        [data-theme="dark"] .card-header { border-bottom-color: var(--border-color); }
+        [data-theme="dark"] .form-control, [data-theme="dark"] input, [data-theme="dark"] textarea, [data-theme="dark"] select { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-color); }
+        [data-theme="dark"] .stat-card { background: var(--bg-card); }
+        [data-theme="dark"] table thead th { background: var(--bg-input); color: var(--text-primary); }
+        [data-theme="dark"] table tbody tr { border-color: var(--border-color); }
+        [data-theme="dark"] table tbody td { color: var(--text-secondary); border-color: var(--border-color); }
+        [data-theme="dark"] tr.hover-row:hover { background: var(--bg-input) !important; }
+        [data-theme="dark"] .modal { background: var(--bg-card); color: var(--text-primary); }
+        [data-theme="dark"] .modal-header { border-bottom-color: var(--border-color); }
+        [data-theme="dark"] .modal-footer { border-top-color: var(--border-color); }
+        [data-theme="dark"] .btn-outline { background: transparent; color: var(--text-primary); border-color: var(--border-color); }
+        [data-theme="dark"] .btn-outline:hover { background: var(--bg-input); }
+        [data-theme="dark"] body { background: var(--bg-app); color: var(--text-primary); }
+        [data-theme="dark"] kbd { background: var(--bg-input) !important; border-color: var(--border-color) !important; color: var(--text-primary) !important; }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-app); color: var(--text-primary); transition: background 0.2s, color 0.2s; }
 
         /* Layout */
         .app-layout { display: flex; min-height: 100vh; }
@@ -780,6 +824,13 @@ function Modal({ isOpen, onClose, title, children, footer }) {
 function DashboardPage({ radnici, evidencije, polozi, dostave, zahtjeviOdmora, currentUser }) {
     const [dashData, setDashData] = useState(null);
     useEffect(() => { api('/api/dashboard').then(setDashData).catch(()=>{}); }, []);
+    // "Šta sam danas uradio" + Rođendani widget — na vrhu dashboarda
+    const widgets = (
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:16,marginBottom:16}}>
+            <DanasUradioWidget currentUser={currentUser} evidencije={evidencije} polozi={polozi} />
+            <BirthdayJubileWidget radnici={radnici} currentUser={currentUser} />
+        </div>
+    );
 
     const prisutni = dashData ? dashData.na_poslu : evidencije.filter(e => e.datum === today() && e.dolazak && !e.odlazak).length;
     const ukupnoRadnika = dashData ? dashData.ukupno_radnika : radnici.filter(r=>r.aktivan).length;
@@ -791,6 +842,7 @@ function DashboardPage({ radnici, evidencije, polozi, dostave, zahtjeviOdmora, c
 
     return (
         <div className="fade-in">
+            {widgets}
             <div className="stats-grid">
                 <div className="stat-card">
                     <div className="stat-icon" style={{background:'#dbeafe',color:'#2563eb'}}><i className="fas fa-users"></i></div>
@@ -3088,11 +3140,11 @@ function IzvjestajiPage({ radnici, currentUser }) {
 function RadniciPage({ radnici, setRadnici, currentUser }) {
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [form, setForm] = useState({ ime: '', prezime: '', pozicija_id: 3, lokacija_id: 2, datum_zaposlenja: '', minuli_staz: 0, uloga: 'radnik', telefon: '' });
+    const [form, setForm] = useState({ ime: '', prezime: '', pozicija_id: 3, lokacija_id: 2, datum_zaposlenja: '', minuli_staz: 0, uloga: 'radnik', telefon: '', datum_rodjenja: '', telegram_username: '' });
     const [lokacijaLoading, setLokacijaLoading] = useState(null);
 
-    const openNew = () => { setEditingId(null); setForm({ ime:'',prezime:'',pozicija_id:3,lokacija_id:2,datum_zaposlenja:'',minuli_staz:0,uloga:'radnik',telefon:'' }); setShowModal(true); };
-    const openEdit = (r) => { setEditingId(r.id); setForm({ime:r.ime,prezime:r.prezime||'',pozicija_id:r.pozicija_id,lokacija_id:r.lokacija_id,datum_zaposlenja:r.datum_zaposlenja,minuli_staz:r.minuli_staz,uloga:r.uloga,telefon:r.telefon||''}); setShowModal(true); };
+    const openNew = () => { setEditingId(null); setForm({ ime:'',prezime:'',pozicija_id:3,lokacija_id:2,datum_zaposlenja:'',minuli_staz:0,uloga:'radnik',telefon:'',datum_rodjenja:'',telegram_username:'' }); setShowModal(true); };
+    const openEdit = (r) => { setEditingId(r.id); setForm({ime:r.ime,prezime:r.prezime||'',pozicija_id:r.pozicija_id,lokacija_id:r.lokacija_id,datum_zaposlenja:r.datum_zaposlenja,minuli_staz:r.minuli_staz,uloga:r.uloga,telefon:r.telefon||'',datum_rodjenja:r.datum_rodjenja||'',telegram_username:r.telegram_username||''}); setShowModal(true); };
 
     const handleSubmit = async () => {
         if (!form.ime) return;
@@ -3211,6 +3263,10 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
                 <div className="form-row">
                     <div className="form-group"><label>Datum zaposlenja</label><DateInput className="form-control" value={form.datum_zaposlenja} onChange={e=>setForm({...form,datum_zaposlenja:e.target.value})} /></div>
                     <div className="form-group"><label>Minuli staž (godine)</label><input className="form-control" type="number" value={form.minuli_staz} onChange={e=>setForm({...form,minuli_staz:e.target.value})} /></div>
+                </div>
+                <div className="form-row">
+                    <div className="form-group"><label><i className="fas fa-birthday-cake" style={{color:'#ec4899',marginRight:6}}></i>Datum rođenja</label><DateInput className="form-control" value={form.datum_rodjenja} onChange={e=>setForm({...form,datum_rodjenja:e.target.value})} /></div>
+                    <div className="form-group"><label><i className="fab fa-telegram" style={{color:'#0088cc',marginRight:6}}></i>Telegram username</label><input className="form-control" value={form.telegram_username} onChange={e=>setForm({...form,telegram_username:e.target.value})} placeholder="@username" /></div>
                 </div>
                 <div className="form-group">
                     <label>Uloga u sistemu</label>
@@ -6793,6 +6849,184 @@ function LivePresence({ evidencije, radnici, setPage, currentUser }) {
     );
 }
 
+// =====================================================================
+// QUICK ACTIONS FAB — floating action button (bottom-right)
+// =====================================================================
+function QuickActionsFAB({ currentUser, setPage }) {
+    const [open, setOpen] = useState(false);
+    if (!currentUser) return null;
+    const lok = LOKACIJE.find(l => l.id === currentUser.lokacija_id);
+    const isMP = lok?.tip === 'maloprodaja';
+    const akcije = [
+        { icon:'fa-clock', label:'Evidencija', color:'#2563eb', action:()=>setPage('evidencija') },
+        ...(isMP ? [
+            { icon:'fa-cash-register', label:'Polog pazara', color:'#059669', action:()=>setPage('pazar') },
+            { icon:'fa-exchange-alt', label:'Primopredaja', color:'#0891b2', action:()=>setPage('primopredaja') },
+        ] : []),
+        { icon:'fa-tasks', label:'Zadaci', color:'#d97706', action:()=>setPage('zadaci') },
+        { icon:'fa-bullhorn', label:'Lead', color:'#dc2626', action:()=>setPage('leadovi') },
+        { icon:'fa-comments', label:'Chat', color:'#7c3aed', action:()=>setPage('chat') },
+    ];
+    return (
+        <div style={{position:'fixed',bottom:24,right:24,zIndex:90,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:10}}>
+            {open && akcije.map((a,i)=>(
+                <div key={i} onClick={()=>{a.action();setOpen(false);}} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',animation:`fabIn 0.2s ${i*0.04}s both`}}>
+                    <span style={{background:'var(--bg-card)',padding:'6px 12px',borderRadius:8,fontSize:12,fontWeight:600,boxShadow:'var(--shadow)',border:'1px solid var(--border-color)',color:'var(--text-primary)'}}>{a.label}</span>
+                    <button style={{width:48,height:48,borderRadius:'50%',border:'none',background:a.color,color:'white',cursor:'pointer',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',fontSize:18}}>
+                        <i className={`fas ${a.icon}`}></i>
+                    </button>
+                </div>
+            ))}
+            <button onClick={()=>setOpen(o=>!o)} style={{
+                width:60,height:60,borderRadius:'50%',border:'none',background:open?'#dc2626':'var(--primary)',color:'white',cursor:'pointer',
+                boxShadow:'0 6px 16px rgba(26,86,219,0.35)',fontSize:24,transition:'all 0.2s',transform:open?'rotate(45deg)':'rotate(0)'
+            }} title="Brze akcije">
+                <i className="fas fa-plus"></i>
+            </button>
+            <style>{`@keyframes fabIn{from{opacity:0;transform:translateY(10px) scale(0.8);}to{opacity:1;transform:translateY(0) scale(1);}}`}</style>
+        </div>
+    );
+}
+
+// =====================================================================
+// "ŠTA SAM URADIO DANAS" widget — dnevni summary za radnika
+// =====================================================================
+function DanasUradioWidget({ currentUser, evidencije, polozi }) {
+    const [stats, setStats] = useState({ zadaci: 0, leadovi: 0, primopredaje: 0 });
+    useEffect(() => {
+        if (!currentUser) return;
+        const danas = today();
+        Promise.all([
+            api('/api/zadaci').catch(()=>[]),
+            api('/api/leadovi').catch(()=>[]),
+            api('/api/primopredaje').catch(()=>[]),
+        ]).then(([z, l, pp]) => {
+            setStats({
+                zadaci: z.filter(x => x.radnik_id===currentUser.id && x.status==='zavrsen' && x.created_at?.slice(0,10)===danas).length,
+                leadovi: l.filter(x => x.radnik_id===currentUser.id && x.created_at?.slice(0,10)===danas).length,
+                primopredaje: pp.filter(x => (x.predaje_id===currentUser.id||x.preuzima_id===currentUser.id) && x.datum===danas).length,
+            });
+        });
+    }, [currentUser]);
+
+    if (!currentUser) return null;
+    const danas = today();
+    const myEv = evidencije.find(e => e.radnik_id===currentUser.id && e.datum===danas);
+    let satiDanas = 0;
+    if (myEv?.dolazak) {
+        const kraj = myEv.odlazak ? new Date(myEv.odlazak) : new Date();
+        let mins = (kraj - new Date(myEv.dolazak)) / 60000;
+        if (myEv.pocetak_pauze && myEv.kraj_pauze) mins -= (new Date(myEv.kraj_pauze) - new Date(myEv.pocetak_pauze)) / 60000;
+        satiDanas = mins/60;
+    }
+    const myPologDanas = polozi.filter(p => p.radnik_id===currentUser.id && p.datum===danas);
+    const ukupanPolog = myPologDanas.reduce((s,p)=>s+(Number(p.iznos_gotovina)||0)+(Number(p.iznos_kartice)||0)+(Number(p.iznos_virman)||0),0);
+    const status = !myEv?.dolazak ? 'Nisi se prijavio' : myEv.odlazak ? 'Odjavljen' : myEv.pocetak_pauze && !myEv.kraj_pauze ? 'Na pauzi' : 'Aktivan';
+    const statusColor = !myEv?.dolazak ? '#9ca3af' : myEv.odlazak ? '#6b7280' : myEv.pocetak_pauze && !myEv.kraj_pauze ? '#d97706' : '#059669';
+
+    return (
+        <div className="card" style={{marginBottom:16}}>
+            <div className="card-header">
+                <h3><i className="fas fa-calendar-day" style={{color:'var(--primary)',marginRight:8}}></i>Šta sam danas uradio</h3>
+                <span style={{fontSize:11,padding:'3px 10px',borderRadius:12,background:statusColor+'20',color:statusColor,fontWeight:600}}>{status}</span>
+            </div>
+            <div className="card-body" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',gap:12}}>
+                <div style={{padding:12,background:'var(--bg-input)',borderRadius:8,textAlign:'center'}}>
+                    <div style={{fontSize:11,color:'var(--gray-400)',marginBottom:4}}>SATI DANAS</div>
+                    <div style={{fontSize:22,fontWeight:700,color:'var(--primary)'}}>{satiDanas.toFixed(1)}h</div>
+                    <div style={{fontSize:10,color:'var(--gray-400)',marginTop:2}}>{myEv?.dolazak?`Dolazak ${formatTime(myEv.dolazak)}`:'-'}</div>
+                </div>
+                {ukupanPolog > 0 && <div style={{padding:12,background:'var(--bg-input)',borderRadius:8,textAlign:'center'}}>
+                    <div style={{fontSize:11,color:'var(--gray-400)',marginBottom:4}}>POLOG</div>
+                    <div style={{fontSize:18,fontWeight:700,color:'#059669'}}>{formatCurrency(ukupanPolog)}</div>
+                    <div style={{fontSize:10,color:'var(--gray-400)',marginTop:2}}>{myPologDanas.length} zapis(a)</div>
+                </div>}
+                <div style={{padding:12,background:'var(--bg-input)',borderRadius:8,textAlign:'center'}}>
+                    <div style={{fontSize:11,color:'var(--gray-400)',marginBottom:4}}>ZADACI</div>
+                    <div style={{fontSize:22,fontWeight:700,color:'#d97706'}}>{stats.zadaci}</div>
+                    <div style={{fontSize:10,color:'var(--gray-400)',marginTop:2}}>završeno</div>
+                </div>
+                <div style={{padding:12,background:'var(--bg-input)',borderRadius:8,textAlign:'center'}}>
+                    <div style={{fontSize:11,color:'var(--gray-400)',marginBottom:4}}>LEADOVI</div>
+                    <div style={{fontSize:22,fontWeight:700,color:'#dc2626'}}>{stats.leadovi}</div>
+                    <div style={{fontSize:10,color:'var(--gray-400)',marginTop:2}}>kreirano</div>
+                </div>
+                <div style={{padding:12,background:'var(--bg-input)',borderRadius:8,textAlign:'center'}}>
+                    <div style={{fontSize:11,color:'var(--gray-400)',marginBottom:4}}>PRIMOPREDAJE</div>
+                    <div style={{fontSize:22,fontWeight:700,color:'#0891b2'}}>{stats.primopredaje}</div>
+                    <div style={{fontSize:10,color:'var(--gray-400)',marginTop:2}}>učesnik</div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =====================================================================
+// ROĐENDANI & JUBILEJI — sljedećih 14 dana
+// =====================================================================
+function BirthdayJubileWidget({ radnici, currentUser }) {
+    const sada = new Date();
+    const za30dana = new Date(); za30dana.setDate(za30dana.getDate()+30);
+    const events = [];
+
+    radnici.filter(r => r.aktivan).forEach(r => {
+        // Rođendani
+        if (r.datum_rodjenja) {
+            const dr = new Date(r.datum_rodjenja);
+            const ovogod = new Date(sada.getFullYear(), dr.getMonth(), dr.getDate());
+            if (ovogod < sada) ovogod.setFullYear(sada.getFullYear()+1);
+            if (ovogod <= za30dana) {
+                const godine = ovogod.getFullYear() - dr.getFullYear();
+                events.push({ tip:'rodjendan', radnik:r, datum:ovogod, godine, icon:'fa-birthday-cake', color:'#ec4899' });
+            }
+        }
+        // Jubileji (X godina u STT-u)
+        if (r.datum_zaposlenja) {
+            const dz = new Date(r.datum_zaposlenja);
+            const ovogod = new Date(sada.getFullYear(), dz.getMonth(), dz.getDate());
+            if (ovogod < sada) ovogod.setFullYear(sada.getFullYear()+1);
+            if (ovogod <= za30dana) {
+                const godine = ovogod.getFullYear() - dz.getFullYear();
+                if (godine >= 1) events.push({ tip:'jubilej', radnik:r, datum:ovogod, godine, icon:'fa-award', color:'#f59e0b' });
+            }
+        }
+    });
+    events.sort((a,b) => a.datum - b.datum);
+
+    if (events.length === 0) return null;
+
+    const formatRelative = (d) => {
+        const diff = Math.ceil((d - sada) / (1000*60*60*24));
+        if (diff === 0) return 'Danas! 🎉';
+        if (diff === 1) return 'Sutra';
+        if (diff < 7) return `Za ${diff} dana`;
+        return formatDate(d.toISOString().slice(0,10));
+    };
+
+    return (
+        <div className="card" style={{marginBottom:16}}>
+            <div className="card-header"><h3><i className="fas fa-gift" style={{color:'#ec4899',marginRight:8}}></i>Rođendani i jubileji</h3><span style={{fontSize:11,color:'var(--gray-400)'}}>Sljedećih 30 dana</span></div>
+            <div className="card-body">
+                {events.map((e,i) => (
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:i<events.length-1?'1px solid var(--border-color)':'none'}}>
+                        <div style={{width:40,height:40,borderRadius:'50%',background:e.color+'20',color:e.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>
+                            <i className={`fas ${e.icon}`}></i>
+                        </div>
+                        <div style={{flex:1}}>
+                            <div style={{fontSize:14,fontWeight:600,color:'var(--text-primary)'}}>{e.radnik.ime} {e.radnik.prezime}</div>
+                            <div style={{fontSize:12,color:'var(--gray-400)'}}>{e.tip==='rodjendan'?`${e.godine}. rođendan`:`${e.godine} godina u STT-u`}</div>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                            <div style={{fontSize:13,fontWeight:600,color:e.color}}>{formatRelative(e.datum)}</div>
+                            <div style={{fontSize:11,color:'var(--gray-400)'}}>{String(e.datum.getDate()).padStart(2,'0')}.{String(e.datum.getMonth()+1).padStart(2,'0')}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function App() {
     const [page, setPage] = useState('centrala');
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -6823,6 +7057,14 @@ function App() {
     const [showNotifPanel, setShowNotifPanel] = useState(false);
     const [notifBroj, setNotifBroj] = useState(0);
     const [showSearch, setShowSearch] = useState(false);
+    const [darkMode, setDarkMode] = useState(() => localStorage.getItem('stt_theme') === 'dark');
+    const [showFab, setShowFab] = useState(false);
+
+    // Apply dark mode
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+        localStorage.setItem('stt_theme', darkMode ? 'dark' : 'light');
+    }, [darkMode]);
 
     // Ctrl+K / Cmd+K — otvori globalnu pretragu
     useEffect(() => {
@@ -7533,6 +7775,14 @@ function App() {
                         {/* Pametni podsjetnici */}
                         <SmartReminders currentUser={currentUser} evidencije={evidencije} polozi={polozi} zahtjeviOdmora={zahtjeviOdmora} primopredaje={primopredaje} setPage={setPage} />
 
+                        {/* Dark mode toggle */}
+                        <button onClick={()=>setDarkMode(d=>!d)} title={darkMode?'Svijetla tema':'Tamna tema'} style={{
+                            width:38,height:38,borderRadius:10,border:'1px solid var(--gray-200)',
+                            background:'var(--bg-card)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'
+                        }}>
+                            <i className={`fas ${darkMode?'fa-sun':'fa-moon'}`} style={{fontSize:15,color:darkMode?'#fbbf24':'#6366f1'}}></i>
+                        </button>
+
                         {/* Backdrop za zatvaranje notif panela - mora biti PRIJE panela u DOM-u */}
                         {showNotifPanel && <div style={{position:'fixed',inset:0,zIndex:9998,background:'transparent'}} onClick={() => setShowNotifPanel(false)}></div>}
 
@@ -7692,6 +7942,9 @@ function App() {
 
             {/* Globalna pretraga (Ctrl+K) */}
             <GlobalSearch isOpen={showSearch} onClose={()=>setShowSearch(false)} radnici={radnici} primopredaje={primopredaje} polozi={polozi} evidencije={evidencije} setPage={setPage} currentUser={currentUser} />
+
+            {/* Quick Actions FAB */}
+            <QuickActionsFAB currentUser={currentUser} setPage={setPage} />
 
             {/* Toast notifikacije */}
             <div className="toast-container">
