@@ -5714,25 +5714,59 @@ function ZadaciPage({ radnici, currentUser, tip }) {
 
 // --- Interni Chat / Komunikacija ---
 function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
-    // Definicija grupa
-    const grupe = [
-        { id: 'na_poslu', naziv: 'Na poslu', icon: 'fa-user-clock', opis: 'Trenutno prijavljeni na radno mjesto', tip: 'auto_prisutni', color: '#059669' },
-        { id: 'kafa', naziv: 'Kafa / Pauza', icon: 'fa-mug-hot', opis: 'Prijavljeni — neformalni razgovor', tip: 'auto_prisutni', color: '#d97706' },
-        { id: 'it_podrska', naziv: 'IT Podrška', icon: 'fa-laptop-code', opis: 'Prijavljeni — tehnička pitanja i IT', tip: 'auto_prisutni', color: '#7c3aed' },
-        { id: 'tutto_capsule', naziv: 'Tutto Capsule SHOP', icon: 'fa-store', opis: 'Merkator, SCC i Merkator Dobrinja', tip: 'stalna', color: '#dc2626', lokacije: [2, 4, 5] },
-        { id: 'kupilenovo_stup', naziv: 'KupiLenovo & STUP', icon: 'fa-building', opis: 'KupiLenovo Shop SCC + STUP Sjedište', tip: 'stalna', color: '#2563eb', lokacije: [1, 3, 7] },
-        { id: 'svi', naziv: 'Kompletna ekipa', icon: 'fa-users', opis: 'Opće informacije — svi radnici', tip: 'stalna', color: '#374151' },
+    // Sistemske grupe — pristup po lokaciji
+    const sistemskeGrupe = [
+        { id: 'cijela_ekipa', naziv: 'Cijela ekipa', icon: 'fa-users', opis: 'Svi radnici', tip: 'sistem', color: '#374151', lokacije: null /* svi */ },
+        { id: 'stup', naziv: 'STUP', icon: 'fa-building', opis: 'STUP + Skladište', tip: 'sistem', color: '#1e40af', lokacije: [1, 7] },
+        { id: 'tuttocapsule', naziv: 'TuttoCapsule', icon: 'fa-store', opis: 'Svi osim KupiLenovo', tip: 'sistem', color: '#dc2626', lokacije: [1, 2, 4, 7] },
+        { id: 'kupilenovo', naziv: 'KupiLenovo', icon: 'fa-laptop', opis: 'Svi osim TC trgovina', tip: 'sistem', color: '#7c3aed', lokacije: [1, 3, 7] },
     ];
 
-    const [activeGrupa, setActiveGrupa] = useState('svi');
-    const [poruke, setPoruke] = useState({ na_poslu:[], kafa:[], it_podrska:[], tutto_capsule:[], kupilenovo_stup:[], svi:[] });
+    const [customGrupe, setCustomGrupe] = useState([]);
+    const grupe = [...sistemskeGrupe, ...customGrupe];
+
+    const [activeGrupa, setActiveGrupa] = useState('cijela_ekipa');
+    const [poruke, setPoruke] = useState({});
     const [novaPoruka, setNovaPoruka] = useState('');
     const [showInfoPanel, setShowInfoPanel] = useState(false);
+    const [showNovi, setShowNovi] = useState(false);
+    const [noviForm, setNoviForm] = useState({ tip: 'dm', clanovi: [], naziv: '' });
     const chatEndRef = React.useRef(null);
+
+    // Ucitaj custom grupe sa servera
+    const loadGrupe = () => {
+        api(`/api/chat-grupe?radnik_id=${currentUser.id}`).then(data => {
+            const cs = (data.custom || []).map(g => ({
+                id: g.id, naziv: g.naziv, icon: g.tip === 'dm' ? 'fa-user' : 'fa-comment-dots',
+                opis: g.tip === 'dm' ? 'Privatni razgovor' : `${g.broj_clanova} članova`,
+                tip: g.tip, color: g.tip === 'dm' ? '#0891b2' : '#10b981',
+                clanovi: g.clanovi, kreirao_id: g.kreirao_id,
+            }));
+            setCustomGrupe(cs);
+        }).catch(()=>{});
+    };
+    useEffect(() => { loadGrupe(); }, [currentUser?.id]);
+
+    const handleNoviChat = async () => {
+        if (noviForm.clanovi.length === 0) return showAlert('Odaberi bar jednog kolegu.', 'warning');
+        try {
+            const r = await api('/api/chat-grupe', 'POST', {
+                tip: noviForm.tip,
+                naziv: noviForm.naziv || null,
+                clanovi: noviForm.clanovi,
+                kreirao_id: currentUser.id,
+            });
+            await loadGrupe();
+            setActiveGrupa(r.id);
+            setShowNovi(false);
+            setNoviForm({ tip: 'dm', clanovi: [], naziv: '' });
+            showAlert('Chat kreiran.', 'success');
+        } catch(e) { showAlert('Greška pri kreiranju.', 'error'); }
+    };
 
     // Učitaj poruke sa servera
     const loadPoruke = (grupa) => {
-        api(`/api/chat/${encodeURIComponent(grupa)}`).then(data => {
+        api(`/api/chat/${encodeURIComponent(grupa)}?radnik_id=${currentUser.id}`).then(data => {
             const mapped = data.map(p => ({ id: p.id, radnik_id: p.radnik_id, tekst: p.poruka, timestamp: p.created_at, tip: 'tekst', radnik_ime: p.radnik_ime }));
             setPoruke(prev => ({...prev, [grupa]: mapped}));
             // Markiraj sve poruke u ovoj grupi kao vidjene (najveci ID)
@@ -5744,7 +5778,10 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
                     localStorage.setItem('stt_chat_seen', JSON.stringify(seen));
                 } catch(e) {}
             }
-        }).catch(()=>{});
+        }).catch(()=>{
+            // 403 = nema pristup; postavi prazno
+            setPoruke(prev => ({...prev, [grupa]: []}));
+        });
     };
 
     useEffect(() => { loadPoruke(activeGrupa); }, [activeGrupa]);
@@ -5762,9 +5799,16 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
 
     // Članovi grupe
     const getClanoviGrupe = (grupa) => {
-        if (grupa.tip === 'auto_prisutni') return prijavljeni;
-        if (grupa.lokacije) return radnici.filter(r => r.aktivan && grupa.lokacije.includes(r.lokacija_id));
-        return radnici.filter(r => r.aktivan); // svi
+        if (!grupa) return [];
+        if (grupa.tip === 'sistem') {
+            if (!grupa.lokacije) return radnici.filter(r => r.aktivan); // cijela ekipa
+            return radnici.filter(r => r.aktivan && grupa.lokacije.includes(r.lokacija_id));
+        }
+        if (grupa.tip === 'dm' || grupa.tip === 'grupa') {
+            const ids = (grupa.clanovi || []).map(c => c.id);
+            return radnici.filter(r => ids.includes(r.id));
+        }
+        return radnici.filter(r => r.aktivan);
     };
 
     const aktivnaGrupa = grupe.find(g => g.id === activeGrupa);
@@ -5775,8 +5819,14 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
     const isMember = (grupaId) => {
         const g = grupe.find(x => x.id === grupaId);
         if (!g) return false;
-        if (g.tip === 'auto_prisutni') return prijavljeniIds.includes(currentUser.id);
-        if (g.lokacije) return g.lokacije.includes(currentUser.lokacija_id);
+        if (g.tip === 'sistem') {
+            if (!g.lokacije) return true; // cijela ekipa
+            return g.lokacije.includes(currentUser.lokacija_id);
+        }
+        if (g.tip === 'dm' || g.tip === 'grupa') {
+            const ids = (g.clanovi || []).map(c => c.id);
+            return ids.includes(currentUser.id);
+        }
         return true;
     };
 
@@ -5823,40 +5873,83 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
                     <div style={{fontSize:12,color:'var(--gray-500)'}}><i className="fas fa-circle" style={{color:'#059669',fontSize:8,marginRight:4}}></i> {prijavljeni.length} trenutno na poslu</div>
                 </div>
 
-                <div style={{padding:'8px 8px 4px',fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1}}>Aktivna smjena</div>
-                {grupe.filter(g=>g.tip==='auto_prisutni').map(g => {
+                {/* Novi chat dugme */}
+                <div style={{padding:'10px 12px'}}>
+                    <button onClick={()=>{setNoviForm({tip:'dm',clanovi:[],naziv:''});setShowNovi(true);}} style={{
+                        width:'100%',padding:'10px',borderRadius:8,border:'1px dashed var(--border-color)',
+                        background:'transparent',color:'var(--primary)',cursor:'pointer',display:'flex',
+                        alignItems:'center',justifyContent:'center',gap:8,fontSize:13,fontWeight:600,transition:'all 0.15s'
+                    }} onMouseEnter={e=>{e.currentTarget.style.background='var(--primary-light)';}} onMouseLeave={e=>{e.currentTarget.style.background='transparent';}}>
+                        <i className="fas fa-plus"></i> Novi chat
+                    </button>
+                </div>
+
+                <div style={{padding:'8px 8px 4px',fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1}}>Sistemske grupe</div>
+                {grupe.filter(g=>g.tip==='sistem').map(g => {
                     const unread = getUnread(g.id);
                     const members = getClanoviGrupe(g);
                     const isActive = activeGrupa === g.id;
+                    const locked = !isMember(g.id);
                     return (
-                        <div key={g.id} onClick={()=>setActiveGrupa(g.id)} style={{padding:'10px 12px',margin:'2px 8px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:isActive?'white':'transparent',boxShadow:isActive?'0 1px 3px rgba(0,0,0,0.1)':'none',border:isActive?'1px solid var(--gray-200)':'1px solid transparent'}}>
-                            <div style={{width:36,height:36,borderRadius:10,background:g.color+'20',color:g.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}><i className={`fas ${g.icon}`}></i></div>
+                        <div key={g.id} onClick={()=>!locked && setActiveGrupa(g.id)} title={locked?'Nemate pristup ovoj grupi':''} style={{
+                            padding:'10px 12px',margin:'2px 8px',borderRadius:8,
+                            cursor: locked ? 'not-allowed' : 'pointer',
+                            display:'flex',alignItems:'center',gap:10,
+                            background:isActive?'var(--bg-card)':'transparent',
+                            boxShadow:isActive?'0 1px 3px rgba(0,0,0,0.1)':'none',
+                            border:isActive?'1px solid var(--border-color)':'1px solid transparent',
+                            opacity: locked ? 0.55 : 1
+                        }}>
+                            <div style={{width:36,height:36,borderRadius:10,background:g.color+'20',color:g.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,position:'relative'}}>
+                                <i className={`fas ${g.icon}`}></i>
+                                {locked && <i className="fas fa-lock" style={{position:'absolute',bottom:-2,right:-2,fontSize:10,color:'#dc2626',background:'var(--bg-card)',borderRadius:'50%',padding:2,boxShadow:'0 1px 2px rgba(0,0,0,0.2)'}}></i>}
+                            </div>
                             <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.naziv}</div>
-                                <div style={{fontSize:11,color:'var(--gray-500)'}}>{members.length} članova</div>
+                                <div style={{fontSize:11,color:'var(--gray-500)'}}>{locked ? 'Nedostupno' : `${members.length} članova`}</div>
                             </div>
-                            {unread > 0 && <div style={{background:g.color,color:'white',fontSize:11,fontWeight:700,borderRadius:10,padding:'2px 7px',minWidth:20,textAlign:'center'}}>{unread}</div>}
-                            {!isMember(g.id) && <i className="fas fa-lock" style={{fontSize:11,color:'var(--gray-400)'}}></i>}
+                            {unread > 0 && !locked && <div style={{background:g.color,color:'white',fontSize:11,fontWeight:700,borderRadius:10,padding:'2px 7px',minWidth:20,textAlign:'center'}}>{unread}</div>}
                         </div>
                     );
                 })}
 
-                <div style={{padding:'12px 8px 4px',fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1}}>Stalne grupe</div>
-                {grupe.filter(g=>g.tip==='stalna').map(g => {
-                    const unread = getUnread(g.id);
-                    const members = getClanoviGrupe(g);
-                    const isActive = activeGrupa === g.id;
-                    return (
-                        <div key={g.id} onClick={()=>setActiveGrupa(g.id)} style={{padding:'10px 12px',margin:'2px 8px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:isActive?'white':'transparent',boxShadow:isActive?'0 1px 3px rgba(0,0,0,0.1)':'none',border:isActive?'1px solid var(--gray-200)':'1px solid transparent'}}>
-                            <div style={{width:36,height:36,borderRadius:10,background:g.color+'20',color:g.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}><i className={`fas ${g.icon}`}></i></div>
-                            <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.naziv}</div>
-                                <div style={{fontSize:11,color:'var(--gray-500)'}}>{members.length} članova</div>
+                {/* Privatni razgovori (DM) */}
+                {grupe.filter(g=>g.tip==='dm').length > 0 && (<>
+                    <div style={{padding:'12px 8px 4px',fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1}}>Privatni razgovori</div>
+                    {grupe.filter(g=>g.tip==='dm').map(g => {
+                        const unread = getUnread(g.id);
+                        const isActive = activeGrupa === g.id;
+                        return (
+                            <div key={g.id} onClick={()=>setActiveGrupa(g.id)} style={{padding:'10px 12px',margin:'2px 8px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:isActive?'var(--bg-card)':'transparent',boxShadow:isActive?'0 1px 3px rgba(0,0,0,0.1)':'none',border:isActive?'1px solid var(--border-color)':'1px solid transparent'}}>
+                                <div style={{width:36,height:36,borderRadius:'50%',background:g.color+'20',color:g.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}><i className={`fas ${g.icon}`}></i></div>
+                                <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.naziv}</div>
+                                    <div style={{fontSize:11,color:'var(--gray-500)'}}>{g.opis}</div>
+                                </div>
+                                {unread > 0 && <div style={{background:'#dc2626',color:'white',fontSize:11,fontWeight:700,borderRadius:10,padding:'2px 7px',minWidth:20,textAlign:'center'}}>{unread}</div>}
                             </div>
-                            {unread > 0 && <div style={{background:g.color,color:'white',fontSize:11,fontWeight:700,borderRadius:10,padding:'2px 7px',minWidth:20,textAlign:'center'}}>{unread}</div>}
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </>)}
+
+                {/* Custom grupe */}
+                {grupe.filter(g=>g.tip==='grupa').length > 0 && (<>
+                    <div style={{padding:'12px 8px 4px',fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1}}>Grupe</div>
+                    {grupe.filter(g=>g.tip==='grupa').map(g => {
+                        const unread = getUnread(g.id);
+                        const isActive = activeGrupa === g.id;
+                        return (
+                            <div key={g.id} onClick={()=>setActiveGrupa(g.id)} style={{padding:'10px 12px',margin:'2px 8px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:isActive?'var(--bg-card)':'transparent',boxShadow:isActive?'0 1px 3px rgba(0,0,0,0.1)':'none',border:isActive?'1px solid var(--border-color)':'1px solid transparent'}}>
+                                <div style={{width:36,height:36,borderRadius:10,background:g.color+'20',color:g.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}><i className={`fas ${g.icon}`}></i></div>
+                                <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.naziv}</div>
+                                    <div style={{fontSize:11,color:'var(--gray-500)'}}>{g.opis}</div>
+                                </div>
+                                {unread > 0 && <div style={{background:g.color,color:'white',fontSize:11,fontWeight:700,borderRadius:10,padding:'2px 7px',minWidth:20,textAlign:'center'}}>{unread}</div>}
+                            </div>
+                        );
+                    })}
+                </>)}
 
                 {/* Online korisnici */}
                 <div style={{marginTop:'auto',borderTop:'1px solid var(--gray-200)',padding:12}}>
@@ -6008,6 +6101,66 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Novi chat modal */}
+            {showNovi && (
+                <Modal isOpen={true} onClose={()=>setShowNovi(false)} title="Novi chat" footer={
+                    <><button className="btn btn-outline" onClick={()=>setShowNovi(false)}>Otkaži</button>
+                    <button className="btn btn-primary" onClick={handleNoviChat}><i className="fas fa-paper-plane"></i> Kreiraj chat</button></>
+                }>
+                    <div className="form-group">
+                        <label>Tip chata</label>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                            <div onClick={()=>setNoviForm({...noviForm,tip:'dm',clanovi:noviForm.clanovi.slice(0,1)})} style={{padding:14,border:`2px solid ${noviForm.tip==='dm'?'var(--primary)':'var(--border-color)'}`,borderRadius:10,cursor:'pointer',textAlign:'center',background:noviForm.tip==='dm'?'var(--primary-light)':'transparent'}}>
+                                <i className="fas fa-user" style={{fontSize:20,color:'#0891b2',marginBottom:6,display:'block'}}></i>
+                                <div style={{fontSize:13,fontWeight:600}}>Privatni razgovor</div>
+                                <div style={{fontSize:11,color:'var(--gray-500)'}}>1-na-1</div>
+                            </div>
+                            <div onClick={()=>setNoviForm({...noviForm,tip:'grupa'})} style={{padding:14,border:`2px solid ${noviForm.tip==='grupa'?'var(--primary)':'var(--border-color)'}`,borderRadius:10,cursor:'pointer',textAlign:'center',background:noviForm.tip==='grupa'?'var(--primary-light)':'transparent'}}>
+                                <i className="fas fa-users" style={{fontSize:20,color:'#10b981',marginBottom:6,display:'block'}}></i>
+                                <div style={{fontSize:13,fontWeight:600}}>Grupa</div>
+                                <div style={{fontSize:11,color:'var(--gray-500)'}}>2+ ljudi</div>
+                            </div>
+                        </div>
+                    </div>
+                    {noviForm.tip === 'grupa' && (
+                        <div className="form-group">
+                            <label>Naziv grupe</label>
+                            <input className="form-control" value={noviForm.naziv} onChange={e=>setNoviForm({...noviForm,naziv:e.target.value})} placeholder="npr. Projekat dostave" />
+                        </div>
+                    )}
+                    <div className="form-group">
+                        <label>{noviForm.tip==='dm'?'Sa kim?':'Članovi grupe (osim tebe)'}</label>
+                        <div style={{maxHeight:300,overflow:'auto',border:'1px solid var(--border-color)',borderRadius:8,padding:6}}>
+                            {radnici.filter(r => r.aktivan && r.id !== currentUser.id).map(r => {
+                                const lok = LOKACIJE.find(l => l.id === r.lokacija_id);
+                                const sel = noviForm.clanovi.includes(r.id);
+                                const moze = noviForm.tip === 'grupa' || noviForm.clanovi.length === 0 || sel;
+                                return (
+                                    <div key={r.id} onClick={()=>{
+                                        if (!moze) return;
+                                        if (noviForm.tip === 'dm') {
+                                            setNoviForm({...noviForm, clanovi: sel ? [] : [r.id]});
+                                        } else {
+                                            setNoviForm({...noviForm, clanovi: sel ? noviForm.clanovi.filter(id => id !== r.id) : [...noviForm.clanovi, r.id]});
+                                        }
+                                    }} style={{padding:'8px 10px',display:'flex',alignItems:'center',gap:10,cursor:moze?'pointer':'not-allowed',borderRadius:6,background:sel?'#d1fae5':'transparent',opacity:moze?1:0.4}}>
+                                        <div style={{width:32,height:32,borderRadius:'50%',background:'var(--bg-input)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600}}>{r.ime[0]}{r.prezime?.[0]||''}</div>
+                                        <div style={{flex:1}}>
+                                            <div style={{fontSize:13,fontWeight:500}}>{r.ime} {r.prezime}</div>
+                                            <div style={{fontSize:11,color:'var(--gray-500)'}}>{lok?.naziv||''}</div>
+                                        </div>
+                                        {sel && <i className="fas fa-check-circle" style={{color:'#059669'}}></i>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div style={{fontSize:11,color:'var(--gray-400)',marginTop:6}}>
+                            {noviForm.tip === 'dm' ? 'Klikni jednu osobu' : `Odabrano: ${noviForm.clanovi.length}`}
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );
@@ -8112,8 +8265,8 @@ function EvidencijaBlocker({ currentUser, evidencije, setPage, page, onLogout })
 function ChatBubble({ currentUser, page, setPage }) {
     const [unreadByGroup, setUnreadByGroup] = useState({});
     const [recentMessage, setRecentMessage] = useState(null);
+    const [grupaNazivi, setGrupaNazivi] = useState({});
     const lastTotalRef = React.useRef(0);
-    const grupe = ['svi', 'tutto_capsule', 'kupilenovo_stup', 'na_poslu', 'kafa', 'it_podrska'];
 
     useEffect(() => {
         if (!currentUser || page === 'chat') {
@@ -8124,12 +8277,23 @@ function ChatBubble({ currentUser, page, setPage }) {
         const check = async () => {
             let seen = {};
             try { seen = JSON.parse(localStorage.getItem('stt_chat_seen')||'{}'); } catch {}
+            // Dohvati grupe gdje korisnik ima pristup
+            let grupe = [];
+            const nazivi = {};
+            try {
+                const data = await api(`/api/chat-grupe?radnik_id=${currentUser.id}`);
+                (data.sistem||[]).filter(g => g.acc).forEach(g => { grupe.push(g.id); nazivi[g.id] = g.naziv; });
+                (data.custom||[]).forEach(g => { grupe.push(g.id); nazivi[g.id] = g.naziv; });
+            } catch(e) { return; }
+            if (cancelled) return;
+            setGrupaNazivi(nazivi);
+
             const result = {};
             let najnovijaPoruka = null;
             let total = 0;
             for (const g of grupe) {
                 try {
-                    const data = await api(`/api/chat/${g}`);
+                    const data = await api(`/api/chat/${g}?radnik_id=${currentUser.id}`);
                     const lastSeenId = seen[g] || 0;
                     const novi = data.filter(p => p.id > lastSeenId && p.radnik_id !== currentUser.id);
                     result[g] = novi.length;
@@ -8144,7 +8308,6 @@ function ChatBubble({ currentUser, page, setPage }) {
             }
             if (cancelled) return;
             setUnreadByGroup(result);
-            // Pokazi preview ako broj porasao
             if (najnovijaPoruka && total > lastTotalRef.current) {
                 setRecentMessage(najnovijaPoruka);
                 setTimeout(() => setRecentMessage(prev => prev && prev.id === najnovijaPoruka.id ? null : prev), 6000);
@@ -8159,14 +8322,6 @@ function ChatBubble({ currentUser, page, setPage }) {
     if (!currentUser || page === 'chat') return null;
 
     const totalUnread = Object.values(unreadByGroup).reduce((s,n) => s+n, 0);
-    const grupaNazivi = {
-        svi: 'Kompletna ekipa',
-        tutto_capsule: 'Tutto Capsule SHOP',
-        kupilenovo_stup: 'KupiLenovo & STUP',
-        na_poslu: 'Na poslu',
-        kafa: 'Kafa / Pauza',
-        it_podrska: 'IT Podrška',
-    };
 
     return (
         <>
