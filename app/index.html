@@ -2437,10 +2437,18 @@ function DopunaPage({ radnici, currentUser, sendNotif }) {
     };
 
     const updateZahtjev = async (id, newStatus) => {
+        const originalState = zahtjeviDopune;
         setZahtjeviDopune(prev => prev.map(z => z.id === id ? {...z, status: newStatus} : z));
-        try { await api('/api/dopune/' + id + '/status', 'PUT', { status: newStatus }); } catch(e) {}
-        // Refresh to get latest data including stavke
-        api('/api/dopune').then(setZahtjeviDopune).catch(()=>{});
+        try {
+            await api('/api/dopune/' + id + '/status', 'PUT', { status: newStatus });
+            const data = await api('/api/dopune');
+            setZahtjeviDopune(data);
+            showAlert('Status ažuriran.', 'success');
+        } catch(e) {
+            // Vrati lokalni state nazad
+            setZahtjeviDopune(originalState);
+            showAlert('Greška pri ažuriranju statusa: ' + (e.message || 'Server nedostupan ili nije ažuriran'), 'error');
+        }
     };
 
     const prioritetBadge = (p) => {
@@ -2448,7 +2456,7 @@ function DopunaPage({ radnici, currentUser, sendNotif }) {
         return <span className={`badge ${map[p]}`}>{p.charAt(0).toUpperCase() + p.slice(1)}</span>;
     };
     const statusBadge = (s) => {
-        const map = { novi: ['Novi','badge-info'], odobren: ['Odobren','badge-success'], u_pripremi: ['U pripremi','badge-warning'], poslan: ['Poslan','badge-info'], primljen: ['Primljen','badge-success'], odbijen: ['Odbijen','badge-danger'] };
+        const map = { novi: ['Novi','badge-info'], odobren: ['Odobren','badge-success'], u_pripremi: ['U pripremi','badge-warning'], poslan: ['Poslan','badge-info'], primljen: ['Primljen','badge-success'], zavrsen: ['Završeno','badge-gray'], odbijen: ['Odbijen','badge-danger'] };
         const [t,c] = map[s] || ['?','badge-gray'];
         return <span className={`badge ${c}`}>{t}</span>;
     };
@@ -2572,6 +2580,8 @@ function DopunaPage({ radnici, currentUser, sendNotif }) {
                         {selectedZahtjev.status === 'odobren' && <button className="btn btn-warning" onClick={async()=>{ await updateZahtjev(selectedZahtjev.id,'u_pripremi'); setSelectedZahtjev(null); }}>Stavi u pripremu</button>}
                         {selectedZahtjev.status === 'u_pripremi' && <button className="btn btn-primary" onClick={async()=>{ await updateZahtjev(selectedZahtjev.id,'poslan'); setSelectedZahtjev(null); }}>Označi kao poslano</button>}
                         {selectedZahtjev.status === 'poslan' && <button className="btn btn-success" onClick={async()=>{ await updateZahtjev(selectedZahtjev.id,'primljen'); setSelectedZahtjev(null); }}>Potvrdi prijem</button>}
+                        {selectedZahtjev.status === 'primljen' && <button className="btn" style={{background:'#059669',color:'white',border:'none'}} onClick={async()=>{ if(await askConfirm('Označi zahtjev kao završen i arhiviraj?')){ await updateZahtjev(selectedZahtjev.id,'zavrsen'); setSelectedZahtjev(null); } }}><i className="fas fa-check-circle"></i> Završi i arhiviraj</button>}
+                        {selectedZahtjev.status === 'zavrsen' && <div style={{padding:10,background:'#d1fae5',borderRadius:8,fontSize:13,color:'#065f46',fontWeight:600}}><i className="fas fa-check-double" style={{marginRight:6}}></i>Završeno i arhivirano</div>}
                     </div>
                 </Modal>
             )}
@@ -2616,8 +2626,13 @@ function DopunaVPPage({ radnici, currentUser }) {
 
     const handleStatusChange = async (id, newStatus) => {
         if (!await askConfirm(`Promijeniti status u "${newStatus}"?`)) return;
-        await api(`/api/dopuna-vp/${id}/status`, 'PUT', { status: newStatus }).catch(()=>{});
-        await refreshStavke();
+        try {
+            await api(`/api/dopuna-vp/${id}/status`, 'PUT', { status: newStatus });
+            await refreshStavke();
+            showAlert('Status ažuriran.', 'success');
+        } catch(e) {
+            showAlert('Greška: ' + (e.message || 'Server nedostupan'), 'error');
+        }
     };
 
     const handleDelete = async (id) => {
@@ -2759,6 +2774,7 @@ function DopunaVPPage({ radnici, currentUser }) {
                                                 <div style={{display:'flex',gap:4}}>
                                                     {s.status==='na_cekanju' && <button onClick={()=>handleStatusChange(s.id,'naručeno')} className="btn btn-sm" style={{background:'#dbeafe',color:'#2563eb',border:'none',padding:'4px 8px',borderRadius:5,fontSize:11,cursor:'pointer'}}>Naručeno</button>}
                                                     {s.status==='naručeno' && <button onClick={()=>handleStatusChange(s.id,'primljeno')} className="btn btn-sm" style={{background:'#d1fae5',color:'#059669',border:'none',padding:'4px 8px',borderRadius:5,fontSize:11,cursor:'pointer'}}>Primljeno</button>}
+                                                    {s.status==='primljeno' && <button onClick={()=>handleStatusChange(s.id,'zavrseno')} className="btn btn-sm" style={{background:'#059669',color:'white',border:'none',padding:'4px 8px',borderRadius:5,fontSize:11,cursor:'pointer'}}>Završi</button>}
                                                     <button onClick={()=>handleDelete(s.id)} style={{background:'transparent',border:'none',color:'var(--gray-400)',cursor:'pointer',padding:'4px 6px',fontSize:13}}>
                                                         <i className="fas fa-trash-alt"></i>
                                                     </button>
