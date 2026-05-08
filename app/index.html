@@ -605,13 +605,13 @@ function ServerSetupPage({ onConnected }) {
 // DATA STORE (Simulacija baze podataka)
 // ==========================================
 const LOKACIJE = [
-    { id: 1, naziv: 'STUP - Sjedište', tip: 'sjediste', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:30', radni_dani: [1,2,3,4,5], telefon_fixni: ['033 448 504', '033 864 519'], pocetak_min: 510 },
-    { id: 2, naziv: 'Tutto Capsule SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon_fixni: ['033 869 049'], pocetak_min: 600 },
-    { id: 3, naziv: 'Kupilenovo Shop SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon: '061 197 290', telefon_fixni: ['033 869 083'], pocetak_min: 600 },
-    { id: 4, naziv: 'Tutto Capsule Merkator Ložionička', tip: 'maloprodaja', adresa: 'Merkator, Ložionička, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], pocetak_min: 600 },
-    { id: 5, naziv: 'TC Shop Merkator Dobrinja (U PRIPREMI)', tip: 'maloprodaja', adresa: 'Merkator, Dobrinja, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], aktivan: false, pocetak_min: 600 },
+    { id: 1, naziv: 'STUP - Sjedište', tip: 'sjediste', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:00', radni_dani: [1,2,3,4,5], telefon_fixni: ['033 448 504', '033 864 519'], pocetak_min: 510, kraj_min: 960 },
+    { id: 2, naziv: 'Tutto Capsule SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon_fixni: ['033 869 049'], pocetak_min: 600, kraj_min: 1320 },
+    { id: 3, naziv: 'Kupilenovo Shop SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon: '061 197 290', telefon_fixni: ['033 869 083'], pocetak_min: 600, kraj_min: 1320 },
+    { id: 4, naziv: 'Tutto Capsule Merkator Ložionička', tip: 'maloprodaja', adresa: 'Merkator, Ložionička, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], pocetak_min: 600, kraj_min: 1320 },
+    { id: 5, naziv: 'TC Shop Merkator Dobrinja (U PRIPREMI)', tip: 'maloprodaja', adresa: 'Merkator, Dobrinja, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], aktivan: false, pocetak_min: 600, kraj_min: 1320 },
     { id: 6, naziv: 'TC La Caffetteria (U PRIPREMI)', tip: 'maloprodaja', adresa: 'Sarajevo', radno_vrijeme: 'TBD', radni_dani: [], aktivan: false },
-    { id: 7, naziv: 'VP Skladište STUP', tip: 'veleprodaja', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:30', radni_dani: [1,2,3,4,5], pocetak_min: 510 },
+    { id: 7, naziv: 'VP Skladište STUP', tip: 'veleprodaja', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:00', radni_dani: [1,2,3,4,5], pocetak_min: 510, kraj_min: 960 },
 ];
 
 const POZICIJE = [
@@ -624,7 +624,7 @@ const POZICIJE = [
 ];
 
 const SMJENE = [
-    { id: 1, naziv: 'STUP (08:30-16:30)', pocetak: '08:30', kraj: '16:30', tip: 'stup' },
+    { id: 1, naziv: 'STUP (08:30-16:00)', pocetak: '08:30', kraj: '16:00', tip: 'stup' },
     { id: 2, naziv: 'I smjena (10-16)', pocetak: '10:00', kraj: '16:00', tip: 'mp' },
     { id: 3, naziv: 'II smjena (16-22)', pocetak: '16:00', kraj: '22:00', tip: 'mp' },
     { id: 4, naziv: 'Cijeli dan MP (10-22)', pocetak: '10:00', kraj: '22:00', tip: 'mp' },
