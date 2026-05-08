@@ -1397,11 +1397,20 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
             const min = Math.floor((radnoMs % 3600000) / 60000);
             if (!await askConfirm(`Potvrdi odlazak\n\nUkupno na poslu: ${sati}h ${min}min\n\nJesi li siguran?`)) return;
         }
-        // GPS verifikacija pri dolasku/odlasku — samo za radnike (ne voditelje/admine)
+        // GPS verifikacija pri dolasku/odlasku — samo:
+        //  • mobilni uredjaj (NE desktop, NE Electron, NE PC web)
+        //  • lokacija je maloprodaja (ne sjediste/skladiste)
+        //  • uloga je radnik (ne admin/voditelj)
         let gpsData = null;
-        const skipGPS = currentUser?.uloga === 'admin' || currentUser?.uloga === 'voditelj';
+        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isElectron = !!window.electronAPI;
+        const lok = LOKACIJE.find(l=>l.id===currentUser.lokacija_id);
+        const isRetail = lok?.tip === 'maloprodaja';
+        const skipGPS = !isMobile || isElectron
+            || currentUser?.uloga === 'admin'
+            || currentUser?.uloga === 'voditelj'
+            || !isRetail;
         if ((action === 'dolazak' || action === 'odlazak') && !skipGPS) {
-            const lok = LOKACIJE.find(l=>l.id===currentUser.lokacija_id);
             if (lok?.gps && navigator.geolocation) {
                 setLoading(true);
                 showAlert('Provjeravam GPS lokaciju...', 'info');
