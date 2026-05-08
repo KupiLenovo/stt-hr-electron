@@ -8880,19 +8880,27 @@ function App() {
         return () => clearInterval(interval);
     }, [currentUser, serverOnline]);
 
-    const markRead = (id) => {
+    const markRead = async (id) => {
         if (!currentUser) return;
         // Optimistički update odmah
-        setNotifikacije(prev => prev.map(n => n.id === id ? {...n, procitano: 1} : n));
+        setNotifikacije(prev => prev.filter(n => n.id !== id));
         setNotifBroj(prev => Math.max(0, prev - 1));
-        // Snimi na server u pozadini
-        api(`/api/notifikacije/${id}/procitano`, 'POST', { radnik_id: currentUser.id }).catch(() => {});
+        try {
+            await api(`/api/notifikacije/${id}/procitano`, 'POST', { radnik_id: currentUser.id });
+            // Forsiraj refetch da se osvježi state
+            const data = await api(`/api/notifikacije?radnik_id=${currentUser.id}`);
+            setNotifikacije(data);
+            setNotifBroj(data.filter(n => !n.procitano).length);
+        } catch(e) {}
     };
 
-    const markAllRead = () => {
-        setNotifikacije(prev => prev.map(n => ({...n, procitano: 1})));
+    const markAllRead = async () => {
+        if (!currentUser) return;
+        setNotifikacije([]);
         setNotifBroj(0);
-        api('/api/notifikacije/sve-procitano', 'POST', { radnik_id: currentUser.id }).catch(() => {});
+        try {
+            await api('/api/notifikacije/sve-procitano', 'POST', { radnik_id: currentUser.id });
+        } catch(e) {}
     };
 
     const sendNotif = (tip, data) => {
@@ -9388,10 +9396,13 @@ function App() {
                                                 }
                                             }} style={{
                                                 padding:'12px 16px', display:'flex', gap:12, cursor:'pointer',
-                                                background: n.procitano ? 'white' : '#f0f4ff',
-                                                borderBottom:'1px solid var(--gray-50)',
+                                                background: n.procitano ? 'transparent' : 'var(--primary-light)',
+                                                borderBottom:'1px solid var(--border-color)',
+                                                color:'var(--text-primary)',
                                                 transition:'background 0.15s'
-                                            }}>
+                                            }}
+                                            onMouseEnter={e=>e.currentTarget.style.background='var(--bg-input)'}
+                                            onMouseLeave={e=>e.currentTarget.style.background = n.procitano ? 'transparent' : 'var(--primary-light)'}>
                                                 {/* Ikona */}
                                                 <div style={{
                                                     width:38, height:38, borderRadius:10, flexShrink:0,
