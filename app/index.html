@@ -89,7 +89,9 @@
             --border-color: #334155;
             --text-primary: #f1f5f9;
             --text-secondary: #cbd5e1;
-            --primary-light: #1e3a8a;
+            --primary-light: rgba(59, 130, 246, 0.18);
+            --primary: #60a5fa;
+            --primary-dark: #3b82f6;
         }
         [data-theme="dark"] .sidebar { background: #0f172a; border-right: 1px solid #1e293b; }
         [data-theme="dark"] .topbar { background: var(--bg-card); border-bottom-color: var(--border-color); }
@@ -1085,7 +1087,8 @@ function AdminEvidencijaPage({ radnici }) {
         let rows = '';
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${god}-${mjes}-${String(d).padStart(2,'0')}`;
-            const dayOfWeek = new Date(dateStr).getDay();
+            // Koristi noon vrijeme da izbjegnemo timezone shift kod parsiranja YYYY-MM-DD kao UTC
+            const dayOfWeek = new Date(`${dateStr}T12:00:00`).getDay();
             const danNaziv = DANI[dayOfWeek];
             const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
             const ev = evMap[dateStr];
@@ -6589,6 +6592,16 @@ function ProfilPage({ currentUser, radnici }) {
         datum_rodjenja: me?.datum_rodjenja || '',
         telegram_username: me?.telegram_username || '',
     });
+    // Sync sa radnici prop kad se osvjezi
+    useEffect(() => {
+        if (me) {
+            setLicniForm({
+                telefon: me.telefon || '',
+                datum_rodjenja: me.datum_rodjenja || '',
+                telegram_username: me.telegram_username || '',
+            });
+        }
+    }, [me?.telefon, me?.datum_rodjenja, me?.telegram_username]);
     const [licniSaving, setLicniSaving] = useState(false);
     const handleSaveLicni = async () => {
         setLicniSaving(true);
@@ -7067,7 +7080,11 @@ function LivePresence({ evidencije, radnici, setPage, currentUser }) {
     if (!isAdmin) return null;
 
     const byLok = {};
-    naPoslu.forEach(e => { if (!byLok[e.lokacija_id]) byLok[e.lokacija_id] = []; byLok[e.lokacija_id].push(e); });
+    naPoslu.forEach(e => {
+        const k = e.lokacija_id ?? 'nepoznato';
+        if (!byLok[k]) byLok[k] = [];
+        byLok[k].push(e);
+    });
 
     return (
         <div style={{position:'relative'}}>
@@ -7565,9 +7582,12 @@ function VodiciPage({ currentUser }) {
         try { await api(`/api/vodici/${id}`, 'DELETE'); await load(); setAktVodic(null); showAlert('Obrisano.', 'success'); }
         catch(e) { showAlert('Greška.', 'error'); }
     };
-    const otvoriVodic = (v) => {
+    const otvoriVodic = async (v) => {
         setAktVodic(v);
-        api(`/api/vodici/${v.id}`).catch(()=>{}); // increment views
+        try {
+            const fresh = await api(`/api/vodici/${v.id}`);
+            if (fresh) setAktVodic(fresh);
+        } catch(e) {}
     };
 
     return (
