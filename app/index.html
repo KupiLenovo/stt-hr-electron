@@ -399,6 +399,90 @@
         tr.hover-row { transition: background 0.15s; }
         tr.hover-row:hover { background: var(--gray-50) !important; }
 
+        /* ============== MOBILE-FIRST RESPONSIVE ============== */
+        .mobile-only { display: none; }
+        .mobile-bottom-nav { display: none; }
+        .mobile-menu-btn { display: none; }
+
+        @media (max-width: 900px) {
+            .hide-mobile { display: none !important; }
+            .mobile-only { display: block; }
+            .mobile-menu-btn { display: flex !important; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--gray-200); background: var(--bg-card); cursor: pointer; font-size: 16px; color: var(--text-primary); }
+
+            /* Sidebar na mobile — overlay */
+            .sidebar { transform: translateX(-100%); transition: transform 0.3s; box-shadow: 4px 0 15px rgba(0,0,0,0.15); }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0 !important; padding-bottom: 80px; }
+
+            /* Topbar — kompaktan */
+            .topbar { padding: 10px 12px !important; gap: 8px; }
+            .topbar h2 { font-size: 16px !important; }
+            .topbar-right { gap: 6px !important; }
+            .topbar-right > button, .topbar-right > div > button { width: 36px !important; height: 36px !important; }
+
+            /* Page content padding manji */
+            .page-content { padding: 12px !important; }
+
+            /* Stats grid 2 kolone na mobile */
+            .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+            .stat-card { padding: 12px !important; }
+            .stat-value { font-size: 20px !important; }
+
+            /* Grid-2 jedna kolona */
+            .grid-2 { grid-template-columns: 1fr !important; }
+
+            /* Tabele scroll */
+            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            table { font-size: 12px; }
+            table th, table td { padding: 8px 6px !important; }
+
+            /* Modali fullscreen na mobile */
+            .modal { width: 95% !important; max-height: 90vh !important; }
+            .modal-body { padding: 14px !important; }
+
+            /* Forme stack */
+            .form-row { flex-direction: column !important; gap: 0 !important; }
+            .form-row .form-group { margin-bottom: 12px; }
+
+            /* Buttons veći za touch */
+            .btn { min-height: 40px; padding: 8px 14px !important; }
+            .btn-sm { min-height: 32px; }
+
+            /* Vodici layout — single column */
+            .vodici-layout { grid-template-columns: 1fr !important; }
+
+            /* Kartice — manji padding */
+            .card-header { padding: 12px 14px !important; }
+            .card-body { padding: 14px !important; }
+            .card-header h3 { font-size: 14px !important; }
+
+            /* FAB na mobile — pomijeren iznad bottom nav-a */
+            .fab-wrapper { bottom: 84px !important; right: 16px !important; }
+
+            /* Bottom navigation */
+            .mobile-bottom-nav {
+                display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
+                background: var(--bg-card); border-top: 1px solid var(--border-color);
+                z-index: 80; padding: 6px 0 calc(env(safe-area-inset-bottom) + 6px);
+                box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+            }
+            .mobile-bottom-nav-item {
+                flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                gap: 3px; padding: 6px 4px; cursor: pointer; color: var(--gray-500); transition: color 0.15s;
+                border: none; background: transparent; min-height: 50px;
+            }
+            .mobile-bottom-nav-item.active { color: var(--primary); }
+            .mobile-bottom-nav-item i { font-size: 18px; }
+            .mobile-bottom-nav-item span { font-size: 10px; font-weight: 500; }
+            .mobile-bottom-nav-item.active span { font-weight: 600; }
+        }
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr 1fr !important; }
+            .stat-card { padding: 10px !important; }
+            .stat-value { font-size: 18px !important; }
+            .stat-label { font-size: 11px !important; }
+        }
+
         /* Print */
         @media print {
             .sidebar, .topbar, .mobile-bottom-nav, .mobile-menu-btn { display: none !important; }
@@ -653,13 +737,13 @@ function ServerSetupPage({ onConnected }) {
 // DATA STORE (Simulacija baze podataka)
 // ==========================================
 const LOKACIJE = [
-    { id: 1, naziv: 'STUP - Sjedište', tip: 'sjediste', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:00', radni_dani: [1,2,3,4,5], telefon_fixni: ['033 448 504', '033 864 519'], pocetak_min: 510, kraj_min: 960 },
-    { id: 2, naziv: 'Tutto Capsule SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon_fixni: ['033 869 049'], pocetak_min: 600, kraj_min: 1320 },
-    { id: 3, naziv: 'Kupilenovo Shop SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon: '061 197 290', telefon_fixni: ['033 869 083'], pocetak_min: 600, kraj_min: 1320 },
-    { id: 4, naziv: 'Tutto Capsule Merkator Ložionička', tip: 'maloprodaja', adresa: 'Merkator, Ložionička, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], pocetak_min: 600, kraj_min: 1320 },
+    { id: 1, naziv: 'STUP - Sjedište', tip: 'sjediste', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:00', radni_dani: [1,2,3,4,5], telefon_fixni: ['033 448 504', '033 864 519'], pocetak_min: 510, kraj_min: 960, gps: {lat: 43.8358, lng: 18.3340, radius: 80} },
+    { id: 2, naziv: 'Tutto Capsule SCC', tip: 'maloprodaja', adresa: 'Vrbanja 1, Sarajevo (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon_fixni: ['033 869 049'], pocetak_min: 600, kraj_min: 1320, gps: {lat: 43.8569, lng: 18.4154, radius: 80} },
+    { id: 3, naziv: 'Kupilenovo Shop SCC', tip: 'maloprodaja', adresa: 'Vrbanja 1, Sarajevo (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon: '061 197 290', telefon_fixni: ['033 869 083'], pocetak_min: 600, kraj_min: 1320, gps: {lat: 43.8569, lng: 18.4154, radius: 80} },
+    { id: 4, naziv: 'Tutto Capsule Merkator Ložionička', tip: 'maloprodaja', adresa: 'Ložionička 16, Sarajevo (Merkator)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], pocetak_min: 600, kraj_min: 1320, gps: {lat: 43.8585, lng: 18.4054, radius: 80} },
     { id: 5, naziv: 'TC Shop Merkator Dobrinja (U PRIPREMI)', tip: 'maloprodaja', adresa: 'Merkator, Dobrinja, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], aktivan: false, pocetak_min: 600, kraj_min: 1320 },
     { id: 6, naziv: 'TC La Caffetteria (U PRIPREMI)', tip: 'maloprodaja', adresa: 'Sarajevo', radno_vrijeme: 'TBD', radni_dani: [], aktivan: false },
-    { id: 7, naziv: 'VP Skladište STUP', tip: 'veleprodaja', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:00', radni_dani: [1,2,3,4,5], pocetak_min: 510, kraj_min: 960 },
+    { id: 7, naziv: 'VP Skladište STUP', tip: 'veleprodaja', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:00', radni_dani: [1,2,3,4,5], pocetak_min: 510, kraj_min: 960, gps: {lat: 43.8358, lng: 18.3340, radius: 80} },
 ];
 
 const POZICIJE = [
@@ -763,6 +847,37 @@ function formatCurrency(n) {
 }
 function getRadnikName(r) { return `${r.ime} ${r.prezime}`; }
 function getLokacija(id) { return LOKACIJE.find(l => l.id === id); }
+
+// GPS HELPERS
+function haversineDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371000; // meters
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+function getCurrentPosition(timeoutMs = 8000) {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+            pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 30000 }
+        );
+    });
+}
+async function verifyLocationGPS(lokacijaId) {
+    const lok = getLokacija(lokacijaId);
+    if (!lok?.gps) return { ok: true, skipped: true };
+    const pos = await getCurrentPosition();
+    if (!pos) return { ok: true, skipped: true, reason: 'GPS nije dostupan' };
+    const distance = haversineDistance(lok.gps.lat, lok.gps.lng, pos.lat, pos.lng);
+    return {
+        ok: distance <= (lok.gps.radius + pos.accuracy),
+        distance, accuracy: pos.accuracy, position: pos, lokacija: lok
+    };
+}
 function getPozicija(id) { return POZICIJE.find(p => p.id === id); }
 function getSmjena(id) { return SMJENE.find(s => s.id === id); }
 function calculateOdmor(radnik) {
@@ -1261,18 +1376,37 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
             const min = Math.floor((radnoMs % 3600000) / 60000);
             if (!await askConfirm(`Potvrdi odlazak\n\nUkupno na poslu: ${sati}h ${min}min\n\nJesi li siguran?`)) return;
         }
+        // GPS verifikacija pri dolasku/odlasku
+        let gpsData = null;
+        if (action === 'dolazak' || action === 'odlazak') {
+            const lok = LOKACIJE.find(l=>l.id===currentUser.lokacija_id);
+            if (lok?.gps && navigator.geolocation) {
+                showAlert('Provjeravam GPS...', 'info');
+                const result = await verifyLocationGPS(currentUser.lokacija_id);
+                if (result.position) {
+                    gpsData = JSON.stringify({ lat: result.position.lat, lng: result.position.lng, accuracy: result.accuracy, distance: result.distance, ok: result.ok });
+                    if (!result.ok) {
+                        const dalj = result.distance > 1000 ? `${(result.distance/1000).toFixed(1)} km` : `${result.distance} m`;
+                        const proceed = await askConfirm(`⚠ GPS UPOZORENJE\n\nNisi u radius-u lokacije "${lok.naziv}".\nUdaljenost: ${dalj}\nTačnost GPS-a: ±${result.accuracy} m\n\nNastaviti svejedno? (Voditelj će vidjeti upozorenje)`);
+                        if (!proceed) { setLoading(false); return; }
+                    } else {
+                        showAlert(`✓ GPS verifikovan (${result.distance}m od lokacije)`, 'success');
+                    }
+                }
+            }
+        }
         setLoading(true);
         const poruke = { dolazak: 'Dolazak evidentiran!', pauza_start: 'Pauza zapoceta', pauza_end: 'Pauza zavrsena, nastavljas rad', odlazak: 'Odlazak evidentiran. Dobar odmor!' };
         try {
             if (action === 'dolazak') {
-                await api('/api/evidencija/dolazak', 'POST', { radnik_id: currentUser.id, lokacija_id: currentUser.lokacija_id });
+                await api('/api/evidencija/dolazak', 'POST', { radnik_id: currentUser.id, lokacija_id: currentUser.lokacija_id, gps: gpsData });
                 await refreshEvidencija();
             } else if (action === 'pauza_start') {
                 await api('/api/evidencija/pauza-start', 'POST', { radnik_id: currentUser.id });
             } else if (action === 'pauza_end') {
                 await api('/api/evidencija/pauza-end', 'POST', { radnik_id: currentUser.id });
             } else if (action === 'odlazak') {
-                await api('/api/evidencija/odlazak', 'POST', { radnik_id: currentUser.id });
+                await api('/api/evidencija/odlazak', 'POST', { radnik_id: currentUser.id, gps: gpsData });
             }
             refreshEvidencija();
             showAlert(poruke[action] || 'Evidentirano!', 'success');
@@ -6850,6 +6984,188 @@ function LivePresence({ evidencije, radnici, setPage, currentUser }) {
 }
 
 // =====================================================================
+// MOBILE BOTTOM NAVIGATION
+// =====================================================================
+function MobileBottomNav({ page, setPage, currentUser, setSidebarOpen }) {
+    if (!currentUser) return null;
+    const lok = LOKACIJE.find(l => l.id === currentUser.lokacija_id);
+    const isMP = lok?.tip === 'maloprodaja';
+    const items = [
+        { key: 'centrala', icon: 'fa-home', label: 'Početna' },
+        { key: 'evidencija', icon: 'fa-clock', label: 'Sat' },
+        ...(isMP ? [{ key: 'pazar', icon: 'fa-cash-register', label: 'Polog' }] : [{ key: 'zadaci', icon: 'fa-tasks', label: 'Zadaci' }]),
+        { key: 'profil', icon: 'fa-user-circle', label: 'Profil' },
+        { key: '__menu__', icon: 'fa-bars', label: 'Meni' },
+    ];
+    return (
+        <div className="mobile-bottom-nav">
+            {items.map(it => (
+                <button key={it.key} className={`mobile-bottom-nav-item ${page===it.key?'active':''}`}
+                    onClick={() => { if (it.key === '__menu__') setSidebarOpen(true); else setPage(it.key); }}>
+                    <i className={`fas ${it.icon}`}></i>
+                    <span>{it.label}</span>
+                </button>
+            ))}
+        </div>
+    );
+}
+
+// =====================================================================
+// VODICI / KNOWLEDGE BASE
+// =====================================================================
+function VodiciPage({ currentUser }) {
+    const [vodici, setVodici] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [aktKategorija, setAktKategorija] = useState(null);
+    const [aktVodic, setAktVodic] = useState(null);
+    const [edit, setEdit] = useState(null); // null | {id?, kategorija, naslov, sadrzaj, pinned}
+    const isAdmin = currentUser?.uloga === 'admin' || currentUser?.uloga === 'voditelj';
+
+    const load = () => api('/api/vodici').then(d => { setVodici(d); setLoading(false); }).catch(()=>setLoading(false));
+    useEffect(() => { load(); }, []);
+
+    const filtered = useMemo(() => {
+        if (!search.trim()) return vodici;
+        const s = search.toLowerCase();
+        return vodici.filter(v => v.naslov.toLowerCase().includes(s) || (v.sadrzaj||'').toLowerCase().includes(s) || v.kategorija.toLowerCase().includes(s));
+    }, [vodici, search]);
+
+    const kategorije = useMemo(() => {
+        const map = {};
+        filtered.forEach(v => { if (!map[v.kategorija]) map[v.kategorija] = []; map[v.kategorija].push(v); });
+        return map;
+    }, [filtered]);
+
+    const handleSave = async () => {
+        if (!edit.kategorija?.trim() || !edit.naslov?.trim()) return showAlert('Kategorija i naslov su obavezni.', 'warning');
+        try {
+            if (edit.id) {
+                await api(`/api/vodici/${edit.id}`, 'PUT', edit);
+            } else {
+                await api('/api/vodici', 'POST', { ...edit, autor_id: currentUser?.id });
+            }
+            await load();
+            setEdit(null);
+            showAlert('Spremljeno.', 'success');
+        } catch(e) { showAlert('Greška pri spremanju.', 'error'); }
+    };
+    const handleDelete = async (id) => {
+        if (!await askConfirm('Sigurno obrisati ovaj vodič?')) return;
+        try { await api(`/api/vodici/${id}`, 'DELETE'); await load(); setAktVodic(null); showAlert('Obrisano.', 'success'); }
+        catch(e) { showAlert('Greška.', 'error'); }
+    };
+    const otvoriVodic = (v) => {
+        setAktVodic(v);
+        api(`/api/vodici/${v.id}`).catch(()=>{}); // increment views
+    };
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{flex:1,minWidth:200,position:'relative'}}>
+                    <i className="fas fa-search" style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--gray-400)'}}></i>
+                    <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pretraži vodiče..." style={{width:'100%',padding:'10px 12px 10px 36px',borderRadius:8,border:'1px solid var(--gray-200)',fontSize:14}} />
+                </div>
+                {isAdmin && <button className="btn btn-primary" onClick={()=>setEdit({kategorija:'',naslov:'',sadrzaj:'',pinned:0})}><i className="fas fa-plus"></i> Novi vodič</button>}
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'minmax(0, 320px) 1fr',gap:16}} className="vodici-layout">
+                {/* Lijevo: lista */}
+                <div className="card" style={{maxHeight:'calc(100vh - 200px)',overflow:'auto'}}>
+                    <div className="card-body" style={{padding:8}}>
+                        {loading ? <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i></div> :
+                         filtered.length === 0 ? <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>{search?'Nema rezultata':'Još nema vodiča'}</div> :
+                         Object.entries(kategorije).map(([kat, items]) => (
+                            <div key={kat} style={{marginBottom:12}}>
+                                <div style={{padding:'6px 10px',fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:0.5}}>{kat}</div>
+                                {items.map(v => (
+                                    <div key={v.id} onClick={()=>otvoriVodic(v)} style={{padding:'10px 12px',borderRadius:8,cursor:'pointer',background:aktVodic?.id===v.id?'var(--primary-light)':'transparent',color:aktVodic?.id===v.id?'var(--primary)':'var(--text-primary)',fontSize:13,display:'flex',alignItems:'center',gap:8}}>
+                                        {v.pinned ? <i className="fas fa-thumbtack" style={{fontSize:10,color:'#dc2626'}}></i> : <i className="far fa-file-alt" style={{fontSize:11,color:'var(--gray-400)'}}></i>}
+                                        <span style={{flex:1,fontWeight:aktVodic?.id===v.id?600:400}}>{v.naslov}</span>
+                                        {v.views > 0 && <span style={{fontSize:10,color:'var(--gray-400)'}}>{v.views}</span>}
+                                    </div>
+                                ))}
+                            </div>
+                         ))}
+                    </div>
+                </div>
+
+                {/* Desno: sadržaj */}
+                <div className="card">
+                    {aktVodic ? (
+                        <div>
+                            <div className="card-header" style={{flexWrap:'wrap',gap:8}}>
+                                <div>
+                                    <div style={{fontSize:11,color:'var(--gray-400)',textTransform:'uppercase',marginBottom:4}}>{aktVodic.kategorija}</div>
+                                    <h3 style={{fontSize:18}}>{aktVodic.pinned?'📌 ':''}{aktVodic.naslov}</h3>
+                                </div>
+                                {isAdmin && <div style={{display:'flex',gap:8}}>
+                                    <button className="btn btn-sm btn-outline" onClick={()=>setEdit({...aktVodic})}><i className="fas fa-edit"></i></button>
+                                    <button className="btn btn-sm" style={{background:'#dc2626',color:'white',border:'none'}} onClick={()=>handleDelete(aktVodic.id)}><i className="fas fa-trash"></i></button>
+                                </div>}
+                            </div>
+                            <div className="card-body">
+                                <div style={{whiteSpace:'pre-wrap',fontSize:14,lineHeight:1.7,color:'var(--text-primary)'}}>{aktVodic.sadrzaj || <span style={{color:'var(--gray-400)'}}>Nema sadržaja.</span>}</div>
+                                <div style={{marginTop:24,paddingTop:16,borderTop:'1px solid var(--border-color)',fontSize:11,color:'var(--gray-400)',display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+                                    <span>{aktVodic.autor_ime ? `Autor: ${aktVodic.autor_ime}` : ''}</span>
+                                    <span>Pregleda: {aktVodic.views||0} • Kreiran: {formatDate(aktVodic.created_at?.slice(0,10))}{aktVodic.updated_at && aktVodic.updated_at !== aktVodic.created_at ? ` • Ažuriran: ${formatDate(aktVodic.updated_at?.slice(0,10))}`:''}</span>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="card-body" style={{textAlign:'center',padding:60,color:'var(--gray-400)'}}>
+                            <i className="fas fa-book" style={{fontSize:48,marginBottom:12,opacity:0.5}}></i>
+                            <div style={{fontSize:14}}>Odaberi vodič iz liste</div>
+                            {isAdmin && vodici.length === 0 && <button className="btn btn-primary" style={{marginTop:16}} onClick={()=>setEdit({kategorija:'Eline ERP',naslov:'',sadrzaj:'',pinned:0})}><i className="fas fa-plus"></i> Kreiraj prvi vodič</button>}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {edit && (
+                <Modal isOpen={true} onClose={()=>setEdit(null)} title={edit.id?'Uredi vodič':'Novi vodič'} footer={
+                    <><button className="btn btn-outline" onClick={()=>setEdit(null)}>Otkaži</button>
+                    <button className="btn btn-primary" onClick={handleSave}><i className="fas fa-save"></i> Spremi</button></>
+                }>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Kategorija <span style={{color:'#dc2626'}}>*</span></label>
+                            <input className="form-control" list="kat-list" value={edit.kategorija} onChange={e=>setEdit({...edit,kategorija:e.target.value})} placeholder="npr. Eline ERP — kasa" />
+                            <datalist id="kat-list">
+                                <option value="Eline ERP — kasa" />
+                                <option value="Eline ERP — magacin" />
+                                <option value="Eline ERP — fakture" />
+                                <option value="Eline ERP — nabavka" />
+                                <option value="STT procedure" />
+                                <option value="STT pravila" />
+                                <option value="POS terminal" />
+                                <option value="Loyalty program" />
+                            </datalist>
+                        </div>
+                        <div className="form-group" style={{flex:'0 0 auto'}}>
+                            <label>&nbsp;</label>
+                            <label style={{display:'flex',alignItems:'center',gap:6,padding:'10px 12px',background:'var(--bg-input)',borderRadius:8,cursor:'pointer',border:'1px solid var(--border-color)'}}>
+                                <input type="checkbox" checked={!!edit.pinned} onChange={e=>setEdit({...edit,pinned:e.target.checked?1:0})} />
+                                <i className="fas fa-thumbtack" style={{fontSize:11,color:'#dc2626'}}></i> Zakači
+                            </label>
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label>Naslov <span style={{color:'#dc2626'}}>*</span></label>
+                        <input className="form-control" value={edit.naslov} onChange={e=>setEdit({...edit,naslov:e.target.value})} placeholder="npr. Kako uneti novi artikal u Eline" />
+                    </div>
+                    <div className="form-group">
+                        <label>Sadržaj (može biti više redova, lista koraka)</label>
+                        <textarea className="form-control" rows={12} value={edit.sadrzaj} onChange={e=>setEdit({...edit,sadrzaj:e.target.value})} placeholder={`Primjer:\n\n1. Otvori Eline\n2. Idi na Artikli > Novi\n3. Unesi šifru i naziv\n4. Spremi`} style={{fontFamily:'monospace',fontSize:13}}></textarea>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+// =====================================================================
 // QUICK ACTIONS FAB — floating action button (bottom-right)
 // =====================================================================
 function QuickActionsFAB({ currentUser, setPage }) {
@@ -6868,7 +7184,7 @@ function QuickActionsFAB({ currentUser, setPage }) {
         { icon:'fa-comments', label:'Chat', color:'#7c3aed', action:()=>setPage('chat') },
     ];
     return (
-        <div style={{position:'fixed',bottom:24,right:24,zIndex:90,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:10}}>
+        <div className="fab-wrapper" style={{position:'fixed',bottom:24,right:24,zIndex:90,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:10}}>
             {open && akcije.map((a,i)=>(
                 <div key={i} onClick={()=>{a.action();setOpen(false);}} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',animation:`fabIn 0.2s ${i*0.04}s both`}}>
                     <span style={{background:'var(--bg-card)',padding:'6px 12px',borderRadius:8,fontSize:12,fontWeight:600,boxShadow:'var(--shadow)',border:'1px solid var(--border-color)',color:'var(--text-primary)'}}>{a.label}</span>
@@ -7534,6 +7850,7 @@ function App() {
         radnici: { title: 'Radnici', icon: 'fas fa-users-cog' },
         audit: { title: 'Audit log', icon: 'fas fa-history' },
         profil: { title: 'Moj profil', icon: 'fas fa-user-circle' },
+        vodici: { title: 'Vodici i tutorijali', icon: 'fas fa-book' },
     };
 
     const renderPage = () => {
@@ -7562,6 +7879,7 @@ function App() {
             case 'radnici': return <RadniciPage radnici={radnici} setRadnici={setRadnici} currentUser={currentUser} />;
             case 'audit': return <AuditLogPage currentUser={currentUser} />;
             case 'profil': return <ProfilPage currentUser={currentUser} radnici={radnici} />;
+            case 'vodici': return <VodiciPage currentUser={currentUser} />;
             case 'loyalty_kupilenovo': return <LoyaltyPage program="kupilenovo" currentUser={currentUser} />;
             case 'loyalty_tuttocapsule': return <LoyaltyPage program="tuttocapsule" currentUser={currentUser} />;
             case 'loyalty_staff': return <LoyaltyPage program="staff" currentUser={currentUser} />;
@@ -7571,6 +7889,8 @@ function App() {
 
     return (
         <div className="app-layout">
+            {/* Sidebar backdrop na mobile */}
+            {sidebarOpen && <div onClick={()=>setSidebarOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:49}} className="mobile-only"></div>}
             <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
                 <div className="sidebar-header">
                     <h1>STT.BA</h1>
@@ -7681,7 +8001,7 @@ function App() {
                             <span>HR</span>
                             {odmoriBadge>0&&<span style={{background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{odmoriBadge}</span>}
                         </div>
-                        {['kasnjenja','odmori','chat','pravila'].map(key => (
+                        {['kasnjenja','odmori','chat','pravila','vodici'].map(key => (
                             <div key={key} className={`nav-item ${page===key?'active':''}`} onClick={()=>{setPage(key);setSidebarOpen(false);}}>
                                 <i className={pages[key].icon}></i>{pages[key].title}
                                 {key==='odmori'&&odmoriBadge>0&&<span style={{marginLeft:'auto',background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{odmoriBadge}</span>}
@@ -7945,6 +8265,9 @@ function App() {
 
             {/* Quick Actions FAB */}
             <QuickActionsFAB currentUser={currentUser} setPage={setPage} />
+
+            {/* Mobile bottom navigation */}
+            <MobileBottomNav page={page} setPage={setPage} currentUser={currentUser} setSidebarOpen={setSidebarOpen} />
 
             {/* Toast notifikacije */}
             <div className="toast-container">
