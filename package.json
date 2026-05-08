@@ -1,6 +1,6 @@
 {
   "name": "stt-hr",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "STT.BA HR Menadzment Sistem",
   "main": "main.js",
   "author": "STT d.o.o. Sarajevo",
@@ -63,7 +63,8 @@
       "provider": "github",
       "owner": "KupiLenovo",
       "repo": "stt-hr-electron",
-      "private": true
+      "private": true,
+      "releaseType": "release"
     }
   },
   "dependencies": {
