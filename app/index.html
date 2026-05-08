@@ -3302,15 +3302,15 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
     const [resetText, setResetText] = useState('');
     const [resetting, setResetting] = useState(false);
 
-    const handleResetBaze = async () => {
+    const handleResetLicnih = async () => {
         if (resetText !== 'OBRISI') return showAlert('Moraš upisati "OBRISI" da potvrdiš.', 'warning');
         setResetting(true);
         try {
-            const result = await api('/api/admin/radnici/reset', 'POST', { confirm_text: 'OBRISI', current_user_id: currentUser.id });
+            const result = await api('/api/admin/radnici/reset-licni-podaci', 'POST', { confirm_text: 'OBRISI', current_user_id: currentUser.id });
             const novi = await api('/api/radnici');
             setRadnici(novi);
             setShowResetModal(false); setResetText(''); setResetting(false);
-            showAlert(`Obrisano ${result.deleted_radnici} radnika i svi njihovi vezani podaci. Ostao si samo ti.`, 'success');
+            showAlert(`Obrisani lični podaci za ${result.affected} radnika. Svako će popuniti svoje kroz Moj profil.`, 'success');
         } catch(e) {
             setResetting(false);
             showAlert('Greška: ' + (e.message || 'nepoznato'), 'error');
@@ -3365,8 +3365,8 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
                         exportCSV(['Ime i prezime','Telefon','Pozicija','Lokacija','Datum zaposlenja','Minuli staz','Uloga','GO dana'], rows, 'radnici');
                     }}><i className="fas fa-download" style={{marginRight:4}}></i>CSV</button>
                     {currentUser?.uloga === 'admin' && (
-                        <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={()=>setShowResetModal(true)} title="Obriši sve radnike osim sebe">
-                            <i className="fas fa-trash-alt"></i> Reset baze
+                        <button className="btn" style={{background:'#d97706',color:'white',border:'none'}} onClick={()=>setShowResetModal(true)} title="Obriši lične podatke svih radnika (tel, datum rođenja, telegram)">
+                            <i className="fas fa-eraser"></i> Reset ličnih podataka
                         </button>
                     )}
                     <button className="btn btn-primary" onClick={openNew}><i className="fas fa-user-plus"></i> Novi radnik</button>
@@ -3457,32 +3457,37 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
                 </div>
             </Modal>
 
-            {/* Reset baze radnika modal */}
+            {/* Reset ličnih podataka modal */}
             {showResetModal && (
-                <Modal isOpen={true} onClose={()=>!resetting && (setShowResetModal(false), setResetText(''))} title="⚠ Reset baze radnika" footer={
+                <Modal isOpen={true} onClose={()=>!resetting && (setShowResetModal(false), setResetText(''))} title="Reset ličnih podataka radnika" footer={
                     <><button className="btn btn-outline" onClick={()=>{setShowResetModal(false); setResetText('');}} disabled={resetting}>Otkaži</button>
-                    <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={handleResetBaze} disabled={resetting||resetText!=='OBRISI'}>
-                        {resetting ? <><i className="fas fa-spinner fa-spin"></i> Brišem...</> : <><i className="fas fa-trash-alt"></i> OBRIŠI SVE</>}
+                    <button className="btn" style={{background:'#d97706',color:'white',border:'none'}} onClick={handleResetLicnih} disabled={resetting||resetText!=='OBRISI'}>
+                        {resetting ? <><i className="fas fa-spinner fa-spin"></i> Brišem...</> : <><i className="fas fa-eraser"></i> Resetuj lične podatke</>}
                     </button></>
                 }>
-                    <div style={{padding:14,background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:8,marginBottom:14,color:'#991b1b'}}>
-                        <strong style={{fontSize:14}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>OPASNA AKCIJA</strong>
-                        <div style={{fontSize:13,marginTop:6,lineHeight:1.6}}>
-                            Ovo će <strong>nepovratno obrisati</strong>:
-                            <ul style={{margin:'6px 0 6px 20px'}}>
-                                <li>Sve radnike osim tebe ({currentUser?.ime} {currentUser?.prezime})</li>
-                                <li>Sve njihove evidencije rada</li>
-                                <li>Sve njihove polozi pazara, primopredaje, leadovi, zadatke, kašnjenja, zahtjeve</li>
-                            </ul>
-                            <strong>LOKACIJE, POZICIJE, vodiče, VP dugovanja, loyalty članove ostaju netaknuti.</strong>
-                        </div>
+                    <div style={{padding:14,background:'#fef3c7',border:'1px solid #fcd34d',borderRadius:8,marginBottom:14,color:'#92400e'}}>
+                        <strong style={{fontSize:14}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>Ova akcija će obrisati:</strong>
+                        <ul style={{margin:'6px 0 6px 20px',fontSize:13,lineHeight:1.7}}>
+                            <li>📞 Telefonske brojeve svih radnika</li>
+                            <li>🎂 Datume rođenja</li>
+                            <li>📱 Telegram username-ove</li>
+                            <li>📝 Napomene</li>
+                        </ul>
                     </div>
-                    <div style={{padding:14,background:'#fef3c7',border:'1px solid #fcd34d',borderRadius:8,marginBottom:14,color:'#92400e',fontSize:13}}>
+                    <div style={{padding:14,background:'#d1fae5',border:'1px solid #6ee7b7',borderRadius:8,marginBottom:14,color:'#065f46'}}>
+                        <strong style={{fontSize:14}}><i className="fas fa-check-circle" style={{marginRight:6}}></i>Ovo OSTAJE netaknuto:</strong>
+                        <ul style={{margin:'6px 0 6px 20px',fontSize:13,lineHeight:1.7}}>
+                            <li>Imena, prezimena, pozicije, lokacije</li>
+                            <li>Datumi zaposlenja, minuli staž, uloge</li>
+                            <li>PIN-ovi, evidencija rada, svi poslovni podaci</li>
+                        </ul>
+                    </div>
+                    <div style={{padding:14,background:'#dbeafe',border:'1px solid #93c5fd',borderRadius:8,marginBottom:14,color:'#1e40af',fontSize:13}}>
                         <i className="fas fa-info-circle" style={{marginRight:6}}></i>
-                        Nakon reseta, novi radnici se ručno dodaju klikom na <strong>"Novi radnik"</strong>. Svaki novi radnik će postaviti svoj PIN kad se prvi put loguje.
+                        Nakon reseta, svaki radnik će <strong>kroz "Moj profil"</strong> sam unijeti svoje lične podatke kad se prvi put loguje.
                     </div>
                     <div className="form-group">
-                        <label>Da bi potvrdio, upiši <strong style={{color:'#dc2626'}}>OBRISI</strong> velikim slovima:</label>
+                        <label>Za potvrdu upiši <strong style={{color:'#d97706'}}>OBRISI</strong> velikim slovima:</label>
                         <input className="form-control" value={resetText} onChange={e=>setResetText(e.target.value)} placeholder="OBRISI" style={{fontFamily:'monospace',letterSpacing:2}} autoFocus />
                     </div>
                 </Modal>
@@ -6578,6 +6583,22 @@ function ProfilPage({ currentUser, radnici }) {
     const [loading, setLoading] = useState(true);
     const [pinForm, setPinForm] = useState({ stari: '', novi: '', ponovi: '', err: '', loading: false });
     const [showPin, setShowPin] = useState(false);
+    const me = radnici.find(r => r.id === currentUser?.id) || currentUser;
+    const [licniForm, setLicniForm] = useState({
+        telefon: me?.telefon || '',
+        datum_rodjenja: me?.datum_rodjenja || '',
+        telegram_username: me?.telegram_username || '',
+    });
+    const [licniSaving, setLicniSaving] = useState(false);
+    const handleSaveLicni = async () => {
+        setLicniSaving(true);
+        try {
+            await api(`/api/radnici/${currentUser.id}/profil`, 'PUT', { ...licniForm, requester_id: currentUser.id });
+            showAlert('Lični podaci spremljeni.', 'success');
+        } catch(e) { showAlert('Greška pri spremanju.', 'error'); }
+        setLicniSaving(false);
+    };
+    const profileIncomplete = !licniForm.telefon || !licniForm.datum_rodjenja;
 
     useEffect(() => {
         const load = async () => {
@@ -6727,6 +6748,35 @@ function ProfilPage({ currentUser, radnici }) {
                 </div>
                 </>
             )}
+
+            {/* Moji lični podaci */}
+            <div style={{background:'var(--bg-card)',borderRadius:12,padding:'16px 20px',border:`1px solid ${profileIncomplete?'#fcd34d':'var(--gray-200)'}`,boxShadow:'0 1px 3px rgba(0,0,0,0.06)',marginBottom:16}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap',gap:8}}>
+                    <div style={{fontWeight:600,fontSize:14}}><i className="fas fa-id-card" style={{marginRight:8,color:'var(--gray-400)'}}></i>Moji lični podaci</div>
+                    {profileIncomplete && <span style={{fontSize:11,padding:'3px 10px',borderRadius:12,background:'#fef3c7',color:'#92400e',fontWeight:600}}><i className="fas fa-exclamation-circle" style={{marginRight:4}}></i>Popuni svoje podatke</span>}
+                </div>
+                <div className="form-row">
+                    <div className="form-group">
+                        <label><i className="fas fa-phone" style={{marginRight:6,color:'#059669'}}></i>Telefon</label>
+                        <input className="form-control" value={licniForm.telefon} onChange={e=>setLicniForm({...licniForm,telefon:e.target.value})} placeholder="npr. 061 123 456" />
+                    </div>
+                    <div className="form-group">
+                        <label><i className="fas fa-birthday-cake" style={{marginRight:6,color:'#ec4899'}}></i>Datum rođenja</label>
+                        <DateInput className="form-control" value={licniForm.datum_rodjenja} onChange={e=>setLicniForm({...licniForm,datum_rodjenja:e.target.value})} />
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label><i className="fab fa-telegram" style={{marginRight:6,color:'#0088cc'}}></i>Telegram username (opcionalno)</label>
+                    <input className="form-control" value={licniForm.telegram_username} onChange={e=>setLicniForm({...licniForm,telegram_username:e.target.value})} placeholder="@username" />
+                </div>
+                <button className="btn btn-primary" onClick={handleSaveLicni} disabled={licniSaving}>
+                    {licniSaving ? <><i className="fas fa-spinner fa-spin"></i> Spremam...</> : <><i className="fas fa-save"></i> Spremi moje podatke</>}
+                </button>
+                <div style={{fontSize:11,color:'var(--gray-400)',marginTop:8}}>
+                    <i className="fas fa-shield-alt" style={{marginRight:4}}></i>
+                    Ovi podaci su tvoji — samo ti i administrator ih vidite.
+                </div>
+            </div>
 
             {/* Sigurnost — PIN */}
             <div style={{background:'var(--bg-card)',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
