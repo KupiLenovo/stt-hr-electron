@@ -6491,6 +6491,308 @@ function ProfilPage({ currentUser, radnici }) {
     );
 }
 
+// =====================================================================
+// GLOBALNA PRETRAGA (Ctrl+K) — Spotlight-style command palette
+// =====================================================================
+function GlobalSearch({ isOpen, onClose, radnici, primopredaje, polozi, evidencije, setPage, currentUser }) {
+    const [q, setQ] = useState('');
+    const [zadaci, setZadaci] = useState([]);
+    const [leadovi, setLeadovi] = useState([]);
+    const [selectedIdx, setSelectedIdx] = useState(0);
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (!isOpen) { setQ(''); setSelectedIdx(0); return; }
+        setTimeout(() => inputRef.current?.focus(), 50);
+        // Lazy load zadataka i leadova
+        api('/api/zadaci').then(setZadaci).catch(()=>{});
+        api('/api/leadovi').then(setLeadovi).catch(()=>{});
+    }, [isOpen]);
+
+    const ql = q.toLowerCase().trim();
+    const rezultati = useMemo(() => {
+        if (!ql) {
+            // Bez query-ja — pokaži najčešće akcije
+            return [
+                { tip: 'akcija', icon: 'fa-clock', label: 'Evidencija rada', sub: 'Prijava dolaska/odlaska', action: () => setPage('evidencija') },
+                { tip: 'akcija', icon: 'fa-cash-register', label: 'Polog pazara', sub: 'Evidentiraj pazar', action: () => setPage('pazar') },
+                { tip: 'akcija', icon: 'fa-exchange-alt', label: 'Primopredaja', sub: 'Predaj smjenu', action: () => setPage('primopredaja') },
+                { tip: 'akcija', icon: 'fa-tasks', label: 'Zadaci', sub: 'Pregled zadataka', action: () => setPage('zadaci') },
+                { tip: 'akcija', icon: 'fa-bullhorn', label: 'Sales leadovi', sub: 'Lista leadova', action: () => setPage('leadovi') },
+                { tip: 'akcija', icon: 'fa-umbrella-beach', label: 'Godišnji odmori', sub: 'Zahtjevi za odmor', action: () => setPage('odmori') },
+                { tip: 'akcija', icon: 'fa-user-circle', label: 'Moj profil', sub: 'Statistike, PIN', action: () => setPage('profil') },
+            ];
+        }
+        const out = [];
+        // Radnici
+        radnici.filter(r => r.aktivan && (`${r.ime} ${r.prezime}`.toLowerCase().includes(ql) || (r.telefon||'').includes(ql))).slice(0,5).forEach(r => {
+            const lok = LOKACIJE.find(l => l.id === r.lokacija_id);
+            const poz = POZICIJE.find(p => p.id === r.pozicija_id);
+            out.push({ tip: 'radnik', icon: 'fa-user', label: `${r.ime} ${r.prezime}`, sub: `${poz?.naziv||''} • ${lok?.naziv||''}${r.telefon?' • '+r.telefon:''}`, action: () => { setPage('radnici'); } });
+        });
+        // Lokacije
+        LOKACIJE.filter(l => l.aktivan!==false && l.naziv.toLowerCase().includes(ql)).slice(0,3).forEach(l => {
+            out.push({ tip: 'lokacija', icon: 'fa-map-marker-alt', label: l.naziv, sub: `${l.adresa||''} • ${l.radno_vrijeme||''}`, action: () => setPage('admin_evidencija') });
+        });
+        // Stranice
+        const pageMap = {
+            'centrala':'fa-building','dashboard':'fa-tachometer-alt','evidencija':'fa-clock','primopredaja':'fa-exchange-alt',
+            'pazar':'fa-cash-register','dostava':'fa-truck','dopuna':'fa-boxes','vozila':'fa-car-side','zadaci':'fa-tasks',
+            'leadovi':'fa-bullhorn','servis':'fa-tools','kasnjenja':'fa-exclamation-triangle','odmori':'fa-umbrella-beach',
+            'chat':'fa-comments','pravila':'fa-book','dopuna_vp':'fa-ship','izvjestaji':'fa-chart-bar','radnici':'fa-users-cog',
+            'audit':'fa-history','profil':'fa-user-circle','admin_evidencija':'fa-user-clock'
+        };
+        const pageNames = {
+            'centrala':'Centrala','dashboard':'Dashboard','evidencija':'Evidencija rada','primopredaja':'Primopredaja smjena',
+            'pazar':'Polog pazara','dostava':'Dostava robe','dopuna':'Dopuna maloprodaje','vozila':'Službena vozila',
+            'zadaci':'Poslovni zadaci','leadovi':'Sales leadovi','servis':'Servisni prijem','kasnjenja':'Kašnjenja',
+            'odmori':'Godišnji odmori','chat':'Chat','pravila':'Pravila i instrukcije','dopuna_vp':'Dopuna VP',
+            'izvjestaji':'Izvještaji','radnici':'Radnici','audit':'Audit log','profil':'Moj profil','admin_evidencija':'Pregled evidencije'
+        };
+        Object.entries(pageNames).filter(([k,v]) => v.toLowerCase().includes(ql)).slice(0,4).forEach(([k,v]) => {
+            out.push({ tip: 'stranica', icon: pageMap[k]||'fa-file', label: v, sub: 'Otvori stranicu', action: () => setPage(k) });
+        });
+        // Zadaci
+        zadaci.filter(z => (z.naslov||'').toLowerCase().includes(ql) || (z.opis||'').toLowerCase().includes(ql)).slice(0,4).forEach(z => {
+            out.push({ tip: 'zadatak', icon: 'fa-tasks', label: z.naslov, sub: `Zadatak • ${z.status||'aktivan'}`, action: () => setPage('zadaci') });
+        });
+        // Leadovi
+        leadovi.filter(l => (l.kupac_ime||l.naziv_klijenta||'').toLowerCase().includes(ql) || (l.napomena||'').toLowerCase().includes(ql)).slice(0,4).forEach(l => {
+            out.push({ tip: 'lead', icon: 'fa-bullhorn', label: l.kupac_ime||l.naziv_klijenta||'(bez imena)', sub: `Lead • ${l.status||''}${l.iznos?' • '+formatCurrency(l.iznos):''}`, action: () => setPage('leadovi') });
+        });
+        // Primopredaje (po imenu radnika ili napomeni)
+        primopredaje.filter(p => (p.predaje_ime||'').toLowerCase().includes(ql) || (p.preuzima_ime||'').toLowerCase().includes(ql) || (p.napomena||'').toLowerCase().includes(ql)).slice(0,3).forEach(p => {
+            out.push({ tip: 'primopredaja', icon: 'fa-exchange-alt', label: `Primopredaja #${p.id}`, sub: `${p.predaje_ime} → ${p.preuzima_ime} • ${formatDate(p.datum)}`, action: () => setPage('primopredaja') });
+        });
+        return out;
+    }, [ql, radnici, zadaci, leadovi, primopredaje]);
+
+    const handleKey = (e) => {
+        if (e.key === 'Escape') { onClose(); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIdx(i => Math.min(i+1, rezultati.length-1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIdx(i => Math.max(i-1, 0)); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (rezultati[selectedIdx]) { rezultati[selectedIdx].action(); onClose(); } }
+    };
+
+    if (!isOpen) return null;
+
+    const tipColor = { radnik:'#2563eb', lokacija:'#059669', stranica:'#7c3aed', zadatak:'#d97706', lead:'#dc2626', primopredaja:'#0891b2', akcija:'#6b7280' };
+    const tipLabel = { radnik:'Radnik', lokacija:'Lokacija', stranica:'Stranica', zadatak:'Zadatak', lead:'Lead', primopredaja:'Primopredaja', akcija:'Brza akcija' };
+
+    return (
+        <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'10vh'}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'white',width:'90%',maxWidth:600,borderRadius:14,boxShadow:'0 20px 50px rgba(0,0,0,0.3)',overflow:'hidden'}}>
+                <div style={{display:'flex',alignItems:'center',padding:'14px 18px',borderBottom:'1px solid var(--gray-100)',gap:12}}>
+                    <i className="fas fa-search" style={{color:'var(--gray-400)',fontSize:16}}></i>
+                    <input ref={inputRef} value={q} onChange={e=>{setQ(e.target.value);setSelectedIdx(0);}} onKeyDown={handleKey} placeholder="Pretraži radnike, lokacije, zadatke, leadove..."
+                        style={{flex:1,border:'none',outline:'none',fontSize:15,background:'transparent',color:'var(--gray-700)'}} />
+                    <span style={{fontSize:11,color:'var(--gray-400)',background:'var(--gray-100)',padding:'2px 8px',borderRadius:4}}>ESC</span>
+                </div>
+                <div style={{maxHeight:'60vh',overflowY:'auto'}}>
+                    {rezultati.length === 0 ? (
+                        <div style={{padding:40,textAlign:'center',color:'var(--gray-400)'}}>
+                            <i className="fas fa-search" style={{fontSize:24,marginBottom:8,opacity:0.5}}></i>
+                            <div style={{fontSize:13}}>Nema rezultata za "{q}"</div>
+                        </div>
+                    ) : rezultati.map((r,i) => (
+                        <div key={i} onClick={()=>{r.action();onClose();}} onMouseEnter={()=>setSelectedIdx(i)}
+                            style={{display:'flex',alignItems:'center',gap:14,padding:'12px 18px',cursor:'pointer',background:i===selectedIdx?'var(--gray-50)':'transparent',borderLeft:i===selectedIdx?'3px solid var(--primary)':'3px solid transparent',transition:'all 0.1s'}}>
+                            <div style={{width:36,height:36,borderRadius:8,background:tipColor[r.tip]+'15',color:tipColor[r.tip],display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>
+                                <i className={`fas ${r.icon}`}></i>
+                            </div>
+                            <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:14,fontWeight:500,color:'var(--gray-700)'}}>{r.label}</div>
+                                <div style={{fontSize:11,color:'var(--gray-400)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.sub}</div>
+                            </div>
+                            <span style={{fontSize:10,color:tipColor[r.tip],background:tipColor[r.tip]+'15',padding:'2px 8px',borderRadius:4,textTransform:'uppercase',fontWeight:600,flexShrink:0}}>{tipLabel[r.tip]}</span>
+                        </div>
+                    ))}
+                </div>
+                <div style={{padding:'8px 18px',borderTop:'1px solid var(--gray-100)',display:'flex',gap:14,fontSize:11,color:'var(--gray-400)',background:'var(--gray-50)'}}>
+                    <span><kbd style={{background:'white',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>↑↓</kbd> Navigacija</span>
+                    <span><kbd style={{background:'white',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>↵</kbd> Otvori</span>
+                    <span style={{marginLeft:'auto'}}><kbd style={{background:'white',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>Ctrl+K</kbd> Pretraga</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =====================================================================
+// PAMETNI PODSJETNICI — proaktivna upozorenja za radnika
+// =====================================================================
+function SmartReminders({ currentUser, evidencije, polozi, zahtjeviOdmora, primopredaje, setPage }) {
+    const [open, setOpen] = useState(false);
+    const [zadaci, setZadaci] = useState([]);
+    useEffect(() => { api('/api/zadaci').then(setZadaci).catch(()=>{}); }, []);
+
+    const reminders = useMemo(() => {
+        if (!currentUser) return [];
+        const out = [];
+        const danas = today();
+        const myEv = evidencije.filter(e => e.radnik_id === currentUser.id);
+        // 1. Otvorena evidencija iz prošlog dana (zaboravio se odjaviti)
+        const otvorenaProsla = myEv.find(e => e.datum < danas && e.dolazak && !e.odlazak);
+        if (otvorenaProsla) {
+            out.push({ severity: 'warning', icon: 'fa-clock', label: `Zaboravio si se odjaviti — ${formatDate(otvorenaProsla.datum)}`, sub: 'Otvori evidenciju i kontaktiraj voditelja', action: () => setPage('evidencija') });
+        }
+        // 2. Radnik MP ima dolazak danas, prošlo je 22h, a nema pologa
+        const lok = LOKACIJE.find(l => l.id === currentUser.lokacija_id);
+        if (lok?.tip === 'maloprodaja') {
+            const danasEv = myEv.find(e => e.datum === danas && e.dolazak);
+            const danasOdlazak = myEv.find(e => e.datum === danas && e.odlazak);
+            const myPologDanas = polozi.find(p => p.radnik_id === currentUser.id && p.datum === danas);
+            const sada = new Date();
+            if (danasOdlazak && !myPologDanas && sada.getHours() >= 16) {
+                out.push({ severity: 'danger', icon: 'fa-cash-register', label: 'Niste predali polog pazara danas', sub: 'Otvorite stranicu i evidentirajte', action: () => setPage('pazar') });
+            }
+            // Smjena završava — niste još predali smjenu (samo u maloprodaji za II smjenu)
+            if (danasEv && !danasOdlazak && sada.getHours() >= 21 && sada.getHours() <= 22) {
+                const danasPP = primopredaje?.find(p => p.datum === danas && (p.predaje_id === currentUser.id || p.preuzima_id === currentUser.id));
+                if (!danasPP) {
+                    out.push({ severity: 'warning', icon: 'fa-exchange-alt', label: 'Vrijeme za primopredaju smjene', sub: 'Predajte smjenu sljedećem radniku', action: () => setPage('primopredaja') });
+                }
+            }
+        }
+        // 3. Primopredaje koje čekaju moju potvrdu
+        const cekajuMojuPotvrdu = primopredaje?.filter(p => p.preuzima_id === currentUser.id && !p.potvrdjeno && p.status !== 'problem' && p.datum >= danas) || [];
+        cekajuMojuPotvrdu.forEach(p => {
+            out.push({ severity: 'info', icon: 'fa-handshake', label: `Primopredaja čeka tvoju potvrdu`, sub: `Od ${p.predaje_ime} • ${formatCurrency(p.stanje_kase)} u kasi`, action: () => setPage('primopredaja') });
+        });
+        // 4. Zadaci dodijeljeni meni sa rokom danas/sutra
+        const sutra = new Date(); sutra.setDate(sutra.getDate()+1);
+        const sutraStr = sutra.toISOString().slice(0,10);
+        const mojiZadaci = zadaci.filter(z => z.radnik_id === currentUser.id && z.status !== 'zavrsen' && z.rok && z.rok <= sutraStr);
+        mojiZadaci.forEach(z => {
+            const isOverdue = z.rok < danas;
+            out.push({ severity: isOverdue ? 'danger' : 'warning', icon: 'fa-tasks', label: z.naslov, sub: `${isOverdue?'Probijen rok':'Rok: '+formatDate(z.rok)}`, action: () => setPage('zadaci') });
+        });
+        // 5. Admin/voditelj: odmori na čekanju
+        if (currentUser.uloga === 'admin' || currentUser.uloga === 'voditelj') {
+            const odmori = (zahtjeviOdmora || []).filter(z => z.status === 'na_cekanju');
+            if (odmori.length > 0) {
+                out.push({ severity: 'info', icon: 'fa-umbrella-beach', label: `${odmori.length} zahtjev${odmori.length===1?'':'a'} za odmor čeka odluku`, sub: 'Odobri ili odbij', action: () => setPage('odmori') });
+            }
+        }
+        return out;
+    }, [currentUser, evidencije, polozi, primopredaje, zadaci, zahtjeviOdmora]);
+
+    if (reminders.length === 0) return null;
+
+    const sevColor = { danger: '#dc2626', warning: '#d97706', info: '#2563eb' };
+    const sevBg = { danger: '#fee2e2', warning: '#fef3c7', info: '#dbeafe' };
+
+    return (
+        <div style={{position:'relative'}}>
+            <button onClick={()=>setOpen(o=>!o)} style={{
+                width:38,height:38,borderRadius:10,border:'1px solid var(--gray-200)',
+                background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',transition:'all 0.15s'
+            }} title={`${reminders.length} podsjetnik${reminders.length===1?'':'a'}`}>
+                <i className="fas fa-lightbulb" style={{fontSize:16,color:'#d97706'}}></i>
+                <span style={{position:'absolute',top:-6,right:-6,background:'#d97706',color:'white',borderRadius:'50%',width:20,height:20,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid white'}}>{reminders.length}</span>
+            </button>
+            {open && <>
+                <div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998,background:'transparent'}}></div>
+                <div style={{position:'absolute',top:46,right:0,width:380,maxWidth:'90vw',background:'white',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
+                    <div style={{padding:'14px 18px',borderBottom:'1px solid var(--gray-100)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <strong style={{fontSize:14}}><i className="fas fa-lightbulb" style={{color:'#d97706',marginRight:8}}></i>Pametni podsjetnici</strong>
+                        <span style={{fontSize:11,color:'var(--gray-400)'}}>{reminders.length} stavki</span>
+                    </div>
+                    {reminders.map((r,i)=>(
+                        <div key={i} onClick={()=>{r.action();setOpen(false);}}
+                            style={{padding:'12px 18px',borderBottom:'1px solid var(--gray-100)',cursor:'pointer',display:'flex',gap:12,alignItems:'flex-start',transition:'background 0.1s'}}
+                            onMouseEnter={e=>e.currentTarget.style.background='var(--gray-50)'}
+                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            <div style={{width:32,height:32,borderRadius:8,background:sevBg[r.severity],color:sevColor[r.severity],display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13}}>
+                                <i className={`fas ${r.icon}`}></i>
+                            </div>
+                            <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:500,color:'var(--gray-700)'}}>{r.label}</div>
+                                <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>{r.sub}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </>}
+        </div>
+    );
+}
+
+// =====================================================================
+// LIVE PRESENCE — koliko je trenutno radnika na poslu
+// =====================================================================
+function LivePresence({ evidencije, radnici, setPage, currentUser }) {
+    const [open, setOpen] = useState(false);
+    const danas = today();
+    const naPoslu = evidencije.filter(e => e.datum === danas && e.dolazak && !e.odlazak);
+    const naPauzi = naPoslu.filter(e => e.pocetak_pauze && !e.kraj_pauze).length;
+
+    if (!currentUser) return null;
+    const isAdmin = currentUser.uloga === 'admin' || currentUser.uloga === 'voditelj';
+    if (!isAdmin) return null;
+
+    const byLok = {};
+    naPoslu.forEach(e => { if (!byLok[e.lokacija_id]) byLok[e.lokacija_id] = []; byLok[e.lokacija_id].push(e); });
+
+    return (
+        <div style={{position:'relative'}}>
+            <button onClick={()=>setOpen(o=>!o)} style={{
+                height:38,borderRadius:10,border:'1px solid var(--gray-200)',background:'white',cursor:'pointer',
+                padding:'0 12px',display:'flex',alignItems:'center',gap:8,transition:'all 0.15s'
+            }} title="Trenutno na poslu">
+                <span style={{width:8,height:8,borderRadius:'50%',background:'#10b981',animation:'pulse 2s infinite'}}></span>
+                <span style={{fontSize:13,fontWeight:600,color:'var(--gray-700)'}}>{naPoslu.length}</span>
+                <span className="hide-mobile" style={{fontSize:11,color:'var(--gray-400)'}}>na poslu</span>
+            </button>
+            {open && <>
+                <div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998}}></div>
+                <div style={{position:'absolute',top:46,right:0,width:340,maxWidth:'90vw',background:'white',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
+                    <div style={{padding:'14px 18px',borderBottom:'1px solid var(--gray-100)'}}>
+                        <strong style={{fontSize:14}}><i className="fas fa-broadcast-tower" style={{color:'#10b981',marginRight:8}}></i>Trenutno na poslu</strong>
+                        <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>{naPoslu.length} aktivni{naPauzi>0?` • ${naPauzi} na pauzi`:''}</div>
+                    </div>
+                    {Object.keys(byLok).length === 0 ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
+                            <i className="fas fa-user-clock" style={{fontSize:24,marginBottom:8,display:'block',opacity:0.5}}></i>
+                            Niko nije na poslu
+                        </div>
+                    ) : Object.entries(byLok).map(([lokId, evs]) => {
+                        const lok = LOKACIJE.find(l => l.id === Number(lokId));
+                        return (
+                            <div key={lokId} style={{padding:'10px 18px',borderBottom:'1px solid var(--gray-100)'}}>
+                                <div style={{fontSize:11,color:'var(--gray-400)',fontWeight:600,textTransform:'uppercase',marginBottom:6}}>{lok?.naziv||'?'}</div>
+                                {evs.map(e => {
+                                    const r = radnici.find(x => x.id === e.radnik_id);
+                                    const naPauzi = e.pocetak_pauze && !e.kraj_pauze;
+                                    const dolMin = new Date(e.dolazak); const sada = new Date();
+                                    const trajanjeMin = Math.round((sada - dolMin) / 60000);
+                                    const h = Math.floor(trajanjeMin/60); const m = trajanjeMin%60;
+                                    return (
+                                        <div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'4px 0'}}>
+                                            <div style={{width:28,height:28,borderRadius:'50%',background:naPauzi?'#fef3c7':'#d1fae5',color:naPauzi?'#92400e':'#065f46',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0}}>
+                                                {r?.ime?.[0]||'?'}{r?.prezime?.[0]||''}
+                                            </div>
+                                            <div style={{flex:1}}>
+                                                <div style={{fontSize:13,fontWeight:500}}>{r?`${r.ime} ${r.prezime}`:'?'}</div>
+                                                <div style={{fontSize:11,color:'var(--gray-400)'}}>{naPauzi?'Na pauzi':`${h}h ${m}min`} • Dolazak: {formatTime(e.dolazak)}</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+                    <div style={{padding:'10px 18px',background:'var(--gray-50)'}}>
+                        <button className="btn btn-sm btn-outline" onClick={()=>{setPage('admin_evidencija');setOpen(false);}} style={{width:'100%'}}>
+                            Otvori pregled evidencije <i className="fas fa-arrow-right" style={{marginLeft:6}}></i>
+                        </button>
+                    </div>
+                </div>
+            </>}
+        </div>
+    );
+}
+
 function App() {
     const [page, setPage] = useState('centrala');
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -6520,6 +6822,19 @@ function App() {
     const [notifikacije, setNotifikacije] = useState([]);
     const [showNotifPanel, setShowNotifPanel] = useState(false);
     const [notifBroj, setNotifBroj] = useState(0);
+    const [showSearch, setShowSearch] = useState(false);
+
+    // Ctrl+K / Cmd+K — otvori globalnu pretragu
+    useEffect(() => {
+        const handler = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                if (currentUser) setShowSearch(s => !s);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [currentUser]);
 
     // Toast sistem
     const [toasts, setToasts] = useState([]);
@@ -7203,6 +7518,21 @@ function App() {
                         </span>
                         <span style={{fontSize:13,color:'var(--gray-500)',display:'none'}} className="hide-mobile">{`${DANI_BS[new Date().getDay()]}, ${String(new Date().getDate()).padStart(2,'0')}.${String(new Date().getMonth()+1).padStart(2,'0')}.${new Date().getFullYear()}.`}</span>
 
+                        {/* Live presence — samo admin/voditelj */}
+                        <LivePresence evidencije={evidencije} radnici={radnici} setPage={setPage} currentUser={currentUser} />
+
+                        {/* Globalna pretraga — Ctrl+K */}
+                        <button onClick={()=>setShowSearch(true)} title="Pretraga (Ctrl+K)" style={{
+                            height:38,borderRadius:10,border:'1px solid var(--gray-200)',background:'white',cursor:'pointer',
+                            padding:'0 10px',display:'flex',alignItems:'center',gap:8,transition:'all 0.15s'
+                        }}>
+                            <i className="fas fa-search" style={{fontSize:14,color:'var(--gray-500)'}}></i>
+                            <span className="hide-mobile" style={{fontSize:11,color:'var(--gray-400)',background:'var(--gray-100)',padding:'2px 6px',borderRadius:4,fontFamily:'monospace'}}>Ctrl+K</span>
+                        </button>
+
+                        {/* Pametni podsjetnici */}
+                        <SmartReminders currentUser={currentUser} evidencije={evidencije} polozi={polozi} zahtjeviOdmora={zahtjeviOdmora} primopredaje={primopredaje} setPage={setPage} />
+
                         {/* Backdrop za zatvaranje notif panela - mora biti PRIJE panela u DOM-u */}
                         {showNotifPanel && <div style={{position:'fixed',inset:0,zIndex:9998,background:'transparent'}} onClick={() => setShowNotifPanel(false)}></div>}
 
@@ -7359,6 +7689,9 @@ function App() {
                     ))}
                 </div>
             </div>
+
+            {/* Globalna pretraga (Ctrl+K) */}
+            <GlobalSearch isOpen={showSearch} onClose={()=>setShowSearch(false)} radnici={radnici} primopredaje={primopredaje} polozi={polozi} evidencije={evidencije} setPage={setPage} currentUser={currentUser} />
 
             {/* Toast notifikacije */}
             <div className="toast-container">
