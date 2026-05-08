@@ -135,6 +135,35 @@
         /* btn-outline u dark mode */
         [data-theme="dark"] .btn-outline:hover { background: var(--bg-input) !important; color: var(--text-primary) !important; }
 
+        /* GLOBAL DARK MODE OVERRIDE — forsira sva input/textarea/select polja */
+        [data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+        [data-theme="dark"] textarea,
+        [data-theme="dark"] select {
+            background: var(--bg-input) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--border-color) !important;
+        }
+        [data-theme="dark"] input:focus, [data-theme="dark"] textarea:focus, [data-theme="dark"] select:focus {
+            border-color: var(--primary) !important;
+            outline: none;
+        }
+        [data-theme="dark"] input::placeholder, [data-theme="dark"] textarea::placeholder {
+            color: var(--gray-400) !important;
+            opacity: 0.7;
+        }
+        /* Date input ikonice u dark mode */
+        [data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+        [data-theme="dark"] input[type="month"]::-webkit-calendar-picker-indicator,
+        [data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: invert(1) opacity(0.7);
+        }
+        /* Datalist option u dark mode */
+        [data-theme="dark"] datalist option { background: var(--bg-input) !important; color: var(--text-primary) !important; }
+        /* Native button na sidebar-u i sl. */
+        [data-theme="dark"] button:not(.btn-primary):not(.btn-success):not(.btn-warning):not(.btn-danger):not([style*="background"]) {
+            color: var(--text-primary);
+        }
+
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-app); color: var(--text-primary); transition: background 0.2s, color 0.2s; }
 
         /* Layout */
@@ -9572,7 +9601,7 @@ function LoyaltyPage({ program, currentUser }) {
     const [loyaltyModule, setLoyaltyModule] = useState(program === 'tuttocapsule' ? 'tuttocapsule' : program === 'staff' ? null : 'kupilenovo');
     
     return (
-        <div className="fade-in" style={{height:'calc(100vh - 64px)', overflowY:'auto', background:'#f9fafb'}}>
+        <div className="fade-in" style={{height:'calc(100vh - 64px)', overflowY:'auto', background:'var(--bg-app)'}}>
             <div style={{padding:'16px 20px', borderBottom:'1px solid var(--gray-200)', background:'var(--bg-card)', display:'flex', gap:8, alignItems:'center'}}>
                 <i className="fas fa-star" style={{color:'#f59e0b', fontSize:18}}></i>
                 <strong style={{fontSize:16}}>
