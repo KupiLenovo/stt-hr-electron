@@ -1394,9 +1394,10 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
             const min = Math.floor((radnoMs % 3600000) / 60000);
             if (!await askConfirm(`Potvrdi odlazak\n\nUkupno na poslu: ${sati}h ${min}min\n\nJesi li siguran?`)) return;
         }
-        // GPS verifikacija pri dolasku/odlasku
+        // GPS verifikacija pri dolasku/odlasku — samo za radnike (ne voditelje/admine)
         let gpsData = null;
-        if (action === 'dolazak' || action === 'odlazak') {
+        const skipGPS = currentUser?.uloga === 'admin' || currentUser?.uloga === 'voditelj';
+        if ((action === 'dolazak' || action === 'odlazak') && !skipGPS) {
             const lok = LOKACIJE.find(l=>l.id===currentUser.lokacija_id);
             if (lok?.gps && navigator.geolocation) {
                 setLoading(true);
@@ -5610,7 +5611,7 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
                         <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                             <div style={{position:'relative'}}>
                                 <div style={{width:24,height:24,borderRadius:12,background:avatarColors[r.id%avatarColors.length],color:'white',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:600}}>{getInitials(r)}</div>
-                                <div style={{position:'absolute',bottom:-1,right:-1,width:8,height:8,borderRadius:4,background:'#059669',border:'2px solid white'}}></div>
+                                <div style={{position:'absolute',bottom:-1,right:-1,width:8,height:8,borderRadius:4,background:'#059669',border:'2px solid var(--bg-card)'}}></div>
                             </div>
                             <span style={{fontSize:12}}>{r.ime} {r.prezime?.charAt(0) || ''}.</span>
                         </div>
@@ -6919,7 +6920,7 @@ function SmartReminders({ currentUser, evidencije, polozi, zahtjeviOdmora, primo
                 background:'var(--bg-card)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',transition:'all 0.15s'
             }} title={`${reminders.length} podsjetnik${reminders.length===1?'':'a'}`}>
                 <i className="fas fa-lightbulb" style={{fontSize:16,color:'#d97706'}}></i>
-                <span style={{position:'absolute',top:-6,right:-6,background:'#d97706',color:'white',borderRadius:'50%',width:20,height:20,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid white'}}>{reminders.length}</span>
+                <span style={{position:'absolute',top:-6,right:-6,background:'#d97706',color:'white',borderRadius:'50%',width:20,height:20,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid var(--bg-card)'}}>{reminders.length}</span>
             </button>
             {open && <>
                 <div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998,background:'transparent'}}></div>
@@ -6970,9 +6971,9 @@ function LivePresence({ evidencije, radnici, setPage, currentUser }) {
                 height:38,borderRadius:10,border:'1px solid var(--gray-200)',background:'var(--bg-card)',cursor:'pointer',
                 padding:'0 12px',display:'flex',alignItems:'center',gap:8,transition:'all 0.15s'
             }} title="Trenutno na poslu">
-                <span style={{width:8,height:8,borderRadius:'50%',background:'#10b981',animation:'pulse 2s infinite'}}></span>
-                <span style={{fontSize:13,fontWeight:600,color:'var(--gray-700)'}}>{naPoslu.length}</span>
-                <span className="hide-mobile" style={{fontSize:11,color:'var(--gray-400)'}}>na poslu</span>
+                <span style={{width:8,height:8,borderRadius:'50%',background:'#10b981',animation:'pulse 2s infinite',flexShrink:0}}></span>
+                <span style={{fontSize:14,fontWeight:700,color:'var(--text-primary)'}}>{naPoslu.length}</span>
+                <span className="hide-mobile" style={{fontSize:11,color:'var(--text-secondary)'}}>na poslu</span>
             </button>
             {open && <>
                 <div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998}}></div>
@@ -8541,7 +8542,7 @@ function App() {
                                         background:'#dc2626', color:'white', borderRadius:'50%',
                                         width:20, height:20, fontSize:11, fontWeight:700,
                                         display:'flex', alignItems:'center', justifyContent:'center',
-                                        border:'2px solid white', animation: 'pulse 2s infinite'
+                                        border:'2px solid var(--bg-card)', animation: 'pulse 2s infinite'
                                     }}>{notifBroj > 99 ? '99+' : notifBroj}</span>
                                 )}
                             </button>
