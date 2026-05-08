@@ -8051,6 +8051,63 @@ function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
 }
 
 // =====================================================================
+// EVIDENCIJA BLOCKER — radnik bez dolaska danas ne moze koristiti app
+// =====================================================================
+function EvidencijaBlocker({ currentUser, evidencije, setPage, page, onLogout }) {
+    if (!currentUser) return null;
+    if (currentUser.uloga !== 'radnik') return null; // admin/voditelj nisu blokirani
+    if (page === 'evidencija' || page === 'profil') return null; // dozvoljene stranice
+    const danas = today();
+    const todayEv = evidencije.find(e => e.radnik_id === currentUser.id && e.datum === danas);
+    if (todayEv?.dolazak) return null; // već se prijavio danas
+    // Provjeri je li danas radni dan za njegovu lokaciju
+    const lok = LOKACIJE.find(l => l.id === currentUser.lokacija_id);
+    if (lok?.radni_dani) {
+        const dayOfWeek = new Date().getDay() || 7; // 0 (ned) -> 7
+        const radniDani = lok.radni_dani.split(',').map(d => parseInt(d.trim())).filter(n => !isNaN(n));
+        if (radniDani.length > 0 && !radniDani.includes(dayOfWeek)) return null; // nije radni dan
+    }
+    const DANI = ['Nedjelja','Ponedjeljak','Utorak','Srijeda','Cetvrtak','Petak','Subota'];
+    return (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:20,backdropFilter:'blur(6px)'}}>
+            <div style={{maxWidth:500,width:'100%',padding:'40px 32px',background:'var(--bg-card)',borderRadius:20,textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,0.5)',color:'var(--text-primary)',animation:'fadeIn 0.3s'}}>
+                <div style={{width:88,height:88,margin:'0 auto 20px',borderRadius:'50%',background:'linear-gradient(135deg,#f59e0b,#dc2626)',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 24px rgba(220,38,38,0.4)'}}>
+                    <i className="fas fa-clock" style={{fontSize:40,color:'white'}}></i>
+                </div>
+                <h2 style={{fontSize:24,fontWeight:700,marginBottom:8,color:'var(--text-primary)'}}>Niste prijavljeni na posao</h2>
+                <p style={{fontSize:15,color:'var(--gray-500)',marginBottom:6,lineHeight:1.5}}>
+                    Morate evidentirati dolazak da biste mogli koristiti aplikaciju.
+                </p>
+                <div style={{fontSize:13,color:'var(--gray-400)',marginBottom:28}}>
+                    {DANI[new Date().getDay()]}, {new Date().toLocaleDateString('hr-HR')}
+                </div>
+                <button onClick={()=>setPage('evidencija')} style={{
+                    width:'100%',padding:'16px 24px',borderRadius:12,border:'none',
+                    background:'linear-gradient(135deg, #059669, #047857)',color:'white',
+                    fontSize:16,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+                    boxShadow:'0 6px 20px rgba(5,150,105,0.35)',marginBottom:12,transition:'transform 0.15s'
+                }}
+                onMouseEnter={e=>e.currentTarget.style.transform='scale(1.02)'}
+                onMouseLeave={e=>e.currentTarget.style.transform=''}>
+                    <i className="fas fa-sign-in-alt"></i> Prijavi dolazak
+                </button>
+                <button onClick={onLogout} style={{
+                    width:'100%',padding:'12px',borderRadius:10,border:'1px solid var(--border-color)',
+                    background:'transparent',color:'var(--gray-500)',fontSize:13,cursor:'pointer'
+                }}>
+                    <i className="fas fa-sign-out-alt" style={{marginRight:6}}></i> Odjava (nisam danas na poslu)
+                </button>
+                <div style={{marginTop:20,padding:12,background:'var(--bg-input)',borderRadius:8,fontSize:11,color:'var(--gray-400)',lineHeight:1.5}}>
+                    <i className="fas fa-info-circle" style={{marginRight:4,color:'var(--primary)'}}></i>
+                    Prijava se može obaviti samo na lokaciji <strong style={{color:'var(--text-primary)'}}>{lok?.naziv||'?'}</strong>.
+                    Ako si na bolovanju ili odmoru, javi voditelju.
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =====================================================================
 // CHAT BUBBLE — Messenger-style floating chat ikona
 // =====================================================================
 function ChatBubble({ currentUser, page, setPage }) {
@@ -9508,6 +9565,9 @@ function App() {
 
             {/* Mobile bottom navigation */}
             <MobileBottomNav page={page} setPage={setPage} currentUser={currentUser} setSidebarOpen={setSidebarOpen} />
+
+            {/* Evidencija blocker — radnici se moraju prijaviti */}
+            <EvidencijaBlocker currentUser={currentUser} evidencije={evidencije} page={page} setPage={setPage} onLogout={handleLogout} />
 
             {/* Toast notifikacije */}
             <div className="toast-container">
