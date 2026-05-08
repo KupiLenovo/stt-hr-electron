@@ -8871,6 +8871,133 @@ function LoyaltyBaza({ program, currentUser }) {
         await refresh();
     };
 
+    // ─── CSV IMPORT ─────────────────────────────────────────────────
+    const [importPreview, setImportPreview] = useState(null); // { rows, errors }
+    const [importing, setImporting] = useState(false);
+
+    const parseCSV = (text) => {
+        // Detektuj separator (zarez ili tačka-zarez — Excel BIH često sprema kao ;)
+        const firstLine = text.split(/\r?\n/)[0] || '';
+        const sep = (firstLine.match(/;/g)||[]).length > (firstLine.match(/,/g)||[]).length ? ';' : ',';
+        // Ukloni BOM
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+        const out = [];
+        for (const line of lines) {
+            const fields = [];
+            let cur = '', inQuote = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"' && line[i+1] === '"') { cur += '"'; i++; }
+                else if (ch === '"') { inQuote = !inQuote; }
+                else if (ch === sep && !inQuote) { fields.push(cur); cur = ''; }
+                else cur += ch;
+            }
+            fields.push(cur);
+            out.push(fields.map(f => f.trim()));
+        }
+        return out;
+    };
+
+    const normalizeHeader = (h) => h.toLowerCase().replace(/[čć]/g,'c').replace(/[š]/g,'s').replace(/[ž]/g,'z').replace(/[đ]/g,'dj').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+
+    const handleFileImport = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const rows = parseCSV(ev.target.result);
+                if (rows.length < 2) { showAlert('CSV mora imati zaglavlje i bar jedan red podataka.', 'warning'); return; }
+                const headers = rows[0].map(normalizeHeader);
+                // Mapping: header alias → property
+                const aliasMap = {
+                    ime: ['ime','first_name','first','name','imeprezime'],
+                    prezime: ['prezime','last_name','last','surname'],
+                    telefon: ['telefon','tel','phone','broj','mobitel','mobile'],
+                    email: ['email','e_mail','mail'],
+                    datum_rodjenja: ['datum_rodjenja','rodjendan','birthday','dob','rodjenje'],
+                    adresa: ['adresa','address'],
+                    laptop_model: ['laptop_model','laptop','model','model_laptopa'],
+                    datum_kupovine_laptopa: ['datum_kupovine_laptopa','datum_kupovine','datum_laptop'],
+                    aparat: ['aparat','model_aparata','machine'],
+                    datum_kupovine_aparata: ['datum_kupovine_aparata','datum_aparata','datum_kupovine'],
+                    garancija_produzena: ['garancija_produzena','garancija_prod','produzena'],
+                    garancija_placena: ['garancija_placena','garancija_pl','placena'],
+                    cistenje_iskorisceno: ['cistenje_iskorisceno','cistenje','iskoristeno_cistenje'],
+                    newsletter: ['newsletter','prijavljen'],
+                    napomena: ['napomena','note','komentar'],
+                };
+                const colMap = {};
+                Object.entries(aliasMap).forEach(([key, aliases]) => {
+                    const idx = headers.findIndex(h => aliases.includes(h));
+                    if (idx >= 0) colMap[key] = idx;
+                });
+                if (colMap.ime === undefined && colMap.prezime === undefined) {
+                    showAlert('CSV mora imati kolone "Ime" i "Prezime".', 'error'); return;
+                }
+                const parsedRows = []; const errors = [];
+                const parseDate = (v) => {
+                    if (!v) return null;
+                    if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0,10);
+                    const m = v.match(/(\d{1,2})[\.\/-](\d{1,2})[\.\/-](\d{2,4})/);
+                    if (m) {
+                        let [_, d, mo, y] = m;
+                        if (y.length === 2) y = '20' + y;
+                        return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+                    }
+                    return null;
+                };
+                const parseBool = (v) => /^(da|yes|true|1|x|✓)$/i.test(String(v||'').trim());
+                rows.slice(1).forEach((row, i) => {
+                    const get = (k) => colMap[k] !== undefined ? row[colMap[k]] : '';
+                    const ime = get('ime')?.trim();
+                    const prezime = get('prezime')?.trim();
+                    if (!ime && !prezime) { errors.push({row: i+2, error: 'Nema imena ni prezimena'}); return; }
+                    parsedRows.push({
+                        ime: ime || '',
+                        prezime: prezime || '',
+                        telefon: get('telefon') || '',
+                        email: get('email') || '',
+                        datum_rodjenja: parseDate(get('datum_rodjenja')) || '',
+                        adresa: get('adresa') || '',
+                        program: program,
+                        aparat: get('aparat') || '',
+                        datum_kupovine_aparata: parseDate(get('datum_kupovine_aparata')) || '',
+                        laptop_model: get('laptop_model') || '',
+                        datum_kupovine_laptopa: parseDate(get('datum_kupovine_laptopa')) || '',
+                        garancija_produzena: parseBool(get('garancija_produzena')),
+                        garancija_placena: parseBool(get('garancija_placena')),
+                        cistenje_iskorisceno: parseBool(get('cistenje_iskorisceno')),
+                        newsletter: get('newsletter') ? parseBool(get('newsletter')) : true,
+                        napomena: get('napomena') || '',
+                    });
+                });
+                setImportPreview({ rows: parsedRows, errors, headers, totalRows: rows.length-1 });
+            } catch(err) {
+                showAlert('Greška pri čitanju CSV-a: ' + err.message, 'error');
+            }
+        };
+        reader.readAsText(file, 'utf-8');
+        e.target.value = ''; // reset za reupload istog fajla
+    };
+
+    const handleImportConfirm = async () => {
+        if (!importPreview?.rows?.length) return;
+        setImporting(true);
+        let success = 0, failed = 0;
+        for (const row of importPreview.rows) {
+            try {
+                await api('/api/loyalty/clanovi', 'POST', { ...row, radnik_id: currentUser?.id });
+                success++;
+            } catch(e) { failed++; }
+        }
+        setImporting(false);
+        await refresh();
+        setImportPreview(null);
+        showAlert(`Uvezeno ${success} članova${failed?`, ${failed} grešaka`:''}.`, failed ? 'warning' : 'success');
+    };
+
     const exportCSV = () => {
         const header = isKupilenovo 
             ? ['Ime', 'Prezime', 'Telefon', 'Email', 'Datum rodjenja', 'Adresa', 'Laptop model', 'Datum kupovine', 'Garancija produzena', 'Garancija placena', 'Cistenje iskorisceno', 'Newsletter', 'Datum upisa']
@@ -9154,7 +9281,11 @@ function LoyaltyBaza({ program, currentUser }) {
                 <input className="form-control" placeholder="Pretraži po imenu, telefonu, emailu..." value={search}
                     onChange={e=>setSearch(e.target.value)} style={{maxWidth:300}} />
                 <span style={{fontSize:13,color:'var(--gray-500)'}}>{filtrirani.length} {filtrirani.length===1?'član':'članova'}</span>
-                <div style={{marginLeft:'auto',display:'flex',gap:8}}>
+                <div style={{marginLeft:'auto',display:'flex',gap:8,flexWrap:'wrap'}}>
+                    <label className="btn btn-outline" style={{cursor:'pointer',position:'relative'}} title="Uvoz CSV fajla">
+                        <i className="fas fa-file-import"></i> Import CSV
+                        <input type="file" accept=".csv,text/csv" onChange={handleFileImport} style={{position:'absolute',inset:0,opacity:0,cursor:'pointer'}} />
+                    </label>
                     <button className="btn btn-outline" onClick={exportCSV} title="Export u CSV/Excel">
                         <i className="fas fa-file-excel"></i> Export CSV
                     </button>
@@ -9163,6 +9294,70 @@ function LoyaltyBaza({ program, currentUser }) {
                     </button>
                 </div>
             </div>
+
+            {/* Import preview modal */}
+            {importPreview && (
+                <Modal isOpen={true} onClose={()=>!importing && setImportPreview(null)} title={`Pregled CSV uvoza — ${isKupilenovo?'Kupilenovo':'Tutto Capsule'}`} footer={
+                    <><button className="btn btn-outline" onClick={()=>setImportPreview(null)} disabled={importing}>Otkaži</button>
+                    <button className="btn btn-primary" onClick={handleImportConfirm} disabled={importing||!importPreview.rows.length}>
+                        {importing ? <><i className="fas fa-spinner fa-spin"></i> Uvozim...</> : <><i className="fas fa-check"></i> Potvrdi uvoz ({importPreview.rows.length})</>}
+                    </button></>
+                }>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
+                        <div style={{padding:10,background:'#d1fae5',borderRadius:8,textAlign:'center'}}>
+                            <div style={{fontSize:11,color:'#065f46'}}>SPREMNO ZA UVOZ</div>
+                            <div style={{fontSize:20,fontWeight:700,color:'#059669'}}>{importPreview.rows.length}</div>
+                        </div>
+                        <div style={{padding:10,background:importPreview.errors.length?'#fee2e2':'var(--bg-input)',borderRadius:8,textAlign:'center'}}>
+                            <div style={{fontSize:11,color:importPreview.errors.length?'#991b1b':'var(--gray-500)'}}>GREŠKE</div>
+                            <div style={{fontSize:20,fontWeight:700,color:importPreview.errors.length?'#dc2626':'var(--gray-500)'}}>{importPreview.errors.length}</div>
+                        </div>
+                        <div style={{padding:10,background:'var(--bg-input)',borderRadius:8,textAlign:'center'}}>
+                            <div style={{fontSize:11,color:'var(--gray-500)'}}>UKUPNO REDOVA</div>
+                            <div style={{fontSize:20,fontWeight:700}}>{importPreview.totalRows}</div>
+                        </div>
+                    </div>
+
+                    {importPreview.errors.length > 0 && (
+                        <div style={{padding:10,background:'#fee2e2',borderRadius:8,marginBottom:12,fontSize:12}}>
+                            <strong style={{color:'#991b1b'}}>Greške:</strong>
+                            <ul style={{margin:'4px 0 0 20px',color:'#991b1b'}}>
+                                {importPreview.errors.slice(0,5).map((e,i) => <li key={i}>Red {e.row}: {e.error}</li>)}
+                                {importPreview.errors.length > 5 && <li>+ {importPreview.errors.length-5} više...</li>}
+                            </ul>
+                        </div>
+                    )}
+
+                    <div style={{fontSize:12,color:'var(--gray-500)',marginBottom:8}}>
+                        Detektovane kolone: <strong>{importPreview.headers.join(', ')}</strong>
+                    </div>
+
+                    <div style={{maxHeight:'40vh',overflow:'auto',border:'1px solid var(--border-color)',borderRadius:8}}>
+                        <table style={{fontSize:12}}>
+                            <thead><tr><th>#</th><th>Ime</th><th>Prezime</th><th>Telefon</th><th>Email</th>{isKupilenovo ? <><th>Laptop</th><th>Datum kup.</th></> : <><th>Aparat</th><th>Datum kup.</th></>}</tr></thead>
+                            <tbody>
+                                {importPreview.rows.slice(0,50).map((r,i) => (
+                                    <tr key={i}>
+                                        <td>{i+1}</td>
+                                        <td><strong>{r.ime}</strong></td>
+                                        <td>{r.prezime}</td>
+                                        <td>{r.telefon}</td>
+                                        <td>{r.email}</td>
+                                        {isKupilenovo ? <><td>{r.laptop_model}</td><td>{r.datum_kupovine_laptopa}</td></> : <><td>{r.aparat}</td><td>{r.datum_kupovine_aparata}</td></>}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {importPreview.rows.length > 50 && <div style={{padding:8,textAlign:'center',color:'var(--gray-400)',fontSize:11}}>... + {importPreview.rows.length-50} više redova nije prikazano</div>}
+                    </div>
+
+                    <div style={{marginTop:12,padding:10,background:'#dbeafe',borderRadius:8,fontSize:12,color:'#1e40af'}}>
+                        <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                        <strong>Podržane kolone:</strong> Ime, Prezime, Telefon, Email, Datum rodjenja, Adresa, {isKupilenovo?'Laptop model, Datum kupovine, Garancija produzena/placena, Cistenje':'Aparat, Datum kupovine aparata'}, Newsletter, Napomena.
+                        Datum može biti u formatu YYYY-MM-DD ili DD.MM.YYYY. Da/Ne polja: "Da", "Yes", "1", "X", "✓".
+                    </div>
+                </Modal>
+            )}
 
             {/* Table */}
             <div className="card">
