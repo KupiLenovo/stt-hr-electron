@@ -1379,11 +1379,26 @@ function AdminEvidencijaPage({ radnici }) {
 }
 
 // --- Evidencija Rada (Clock In/Out) ---
-function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
+function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser, setPage }) {
     const [time, setTime] = useState(new Date());
     const [loading, setLoading] = useState(false);
+    const [pendingPP, setPendingPP] = useState([]); // primopredaje koje cekaju moju potvrdu
+    const [todayPredaja, setTodayPredaja] = useState(null); // jesam li danas predao smjenu
 
     useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
+
+    // Provjera primopredaja koje cekaju mene + jesam li ja predao danas
+    const refreshPP = async () => {
+        try {
+            const data = await api('/api/primopredaje');
+            const danas = today();
+            const cekaju = data.filter(p => p.preuzima_id === currentUser.id && !p.potvrdjeno && p.status !== 'problem' && p.datum >= danas);
+            setPendingPP(cekaju);
+            const moja = data.find(p => p.predaje_id === currentUser.id && p.datum === danas);
+            setTodayPredaja(moja);
+        } catch(e) {}
+    };
+    useEffect(() => { refreshPP(); }, [currentUser?.id]);
 
     // Osvježi evidenciju sa servera
     const refreshEvidencija = async () => {
@@ -1394,8 +1409,23 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
     const todayEv = todayEvAll.length > 0 ? todayEvAll[todayEvAll.length - 1] : null;
 
     const handleAction = async (action) => {
-        // Potvrda prije odlaska — pokazuje koliko je radnik radio
+        // KRITIČNO: MP radnik MORA predati smjenu prije odlaska
         if (action === 'odlazak' && todayEv?.dolazak) {
+            const lok = LOKACIJE.find(l => l.id === currentUser.lokacija_id);
+            const isMP = lok?.tip === 'maloprodaja';
+            const radnoSati = (Date.now() - new Date(todayEv.dolazak).getTime()) / 3600000;
+            // Smjena trajala bar 3h i nema predaje — blokiraj
+            if (isMP && radnoSati >= 3 && !todayPredaja && currentUser.uloga === 'radnik') {
+                showAlert('Moraš predati smjenu prije odlaska!', 'error');
+                if (await askConfirm('⚠ KRITIČNO\n\nNisi predao smjenu sljedećoj smjeni.\n\nKliknš "OK" da ideš na primopredaju.\nTo je obavezno za radnike u maloprodaji.', false)) {
+                    setPage && setPage('primopredaja');
+                }
+                return;
+            }
+            // Voditelj/admin — samo upozorenje
+            if (isMP && !todayPredaja && (currentUser.uloga === 'voditelj' || currentUser.uloga === 'admin')) {
+                if (!await askConfirm('Nisi predao smjenu danas. Odlazak svejedno?')) return;
+            }
             const pausaMs = (todayEv.pocetak_pauze && todayEv.kraj_pauze)
                 ? (new Date(todayEv.kraj_pauze) - new Date(todayEv.pocetak_pauze)) : 0;
             const radnoMs = Date.now() - new Date(todayEv.dolazak).getTime() - pausaMs;
@@ -1441,6 +1471,7 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
             if (action === 'dolazak') {
                 await api('/api/evidencija/dolazak', 'POST', { radnik_id: currentUser.id, lokacija_id: currentUser.lokacija_id, gps: gpsData });
                 await refreshEvidencija();
+                await refreshPP();
             } else if (action === 'pauza_start') {
                 await api('/api/evidencija/pauza-start', 'POST', { radnik_id: currentUser.id });
             } else if (action === 'pauza_end') {
@@ -1475,6 +1506,47 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
 
     return (
         <div className="fade-in">
+            {/* HITNO: primopredaja čeka moju potvrdu */}
+            {pendingPP.length > 0 && setPage && (
+                <div style={{padding:16,background:'linear-gradient(135deg, #f59e0b, #d97706)',color:'white',borderRadius:12,marginBottom:16,boxShadow:'0 4px 12px rgba(217,119,6,0.3)',animation:'pulse 2.5s infinite',cursor:'pointer'}}
+                    onClick={()=>setPage('primopredaja')}>
+                    <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+                        <i className="fas fa-handshake" style={{fontSize:28}}></i>
+                        <div style={{flex:1,minWidth:200}}>
+                            <div style={{fontSize:12,opacity:0.9,fontWeight:600,letterSpacing:1,textTransform:'uppercase'}}>HITNO — Čeka tvoju potvrdu</div>
+                            <div style={{fontSize:16,fontWeight:700,marginTop:2}}>
+                                {pendingPP.length === 1 ? `Primopredaja od ${pendingPP[0].predaje_ime}` : `${pendingPP.length} primopredaje na čekanju`}
+                            </div>
+                            <div style={{fontSize:12,opacity:0.9,marginTop:2}}>Klikni da pregledaš i potvrdiš ili prijaviš problem</div>
+                        </div>
+                        <i className="fas fa-arrow-right" style={{fontSize:20}}></i>
+                    </div>
+                </div>
+            )}
+
+            {/* Upozorenje: nisi predao smjenu (MP radnik) */}
+            {(() => {
+                const lok = LOKACIJE.find(l=>l.id===currentUser.lokacija_id);
+                const isMP = lok?.tip === 'maloprodaja';
+                if (!isMP || todayPredaja || !todayEv?.dolazak || todayEv?.odlazak) return null;
+                const radnoSati = (Date.now() - new Date(todayEv.dolazak).getTime()) / 3600000;
+                if (radnoSati < 2) return null; // pokazuje tek nakon 2h rada
+                const urgency = radnoSati >= 5 ? 'high' : 'medium';
+                return (
+                    <div style={{padding:14,background:urgency==='high'?'linear-gradient(135deg, #dc2626, #991b1b)':'linear-gradient(135deg, #d97706, #b45309)',color:'white',borderRadius:12,marginBottom:16,cursor:'pointer'}}
+                        onClick={()=>setPage && setPage('primopredaja')}>
+                        <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                            <i className="fas fa-exclamation-triangle" style={{fontSize:24}}></i>
+                            <div style={{flex:1,minWidth:200}}>
+                                <div style={{fontSize:14,fontWeight:700}}>Predaja smjene još nije obavljena</div>
+                                <div style={{fontSize:12,opacity:0.9,marginTop:2}}>{urgency==='high'?'Smjena ti uskoro završava — predaj smjenu sada!':'Pripremi primopredaju za sljedeću smjenu'}</div>
+                            </div>
+                            <i className="fas fa-arrow-right" style={{fontSize:18}}></i>
+                        </div>
+                    </div>
+                );
+            })()}
+
             <div className="clock-widget">
                 <div className="clock-date">{`${DANI_BS[time.getDay()]}, ${String(time.getDate()).padStart(2,'0')}.${String(time.getMonth()+1).padStart(2,'0')}.${time.getFullYear()}.`}</div>
                 <div className="clock-time">{time.toLocaleTimeString('bs-BA', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>
@@ -1538,12 +1610,12 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
 // --- Primopredaja Smjena ---
 function PrimopredajaPage({ radnici, currentUser }) {
     const CHECKLIST_STAVKE = [
-        { key: 'kasa_zatvorena', label: 'Kasa zatvorena i obračunata', icon: 'fa-cash-register' },
-        { key: 'sef_zakljucan', label: 'Sef zaključan', icon: 'fa-vault' },
+        { key: 'kasa_zatvorena', label: 'Kasa zatvorena i obračunata', icon: 'fa-cash-register', required: true },
+        { key: 'sef_zakljucan', label: 'Sef zaključan', icon: 'fa-vault', required: true },
+        { key: 'roba_evidentirana', label: 'Roba sređena i evidentirana', icon: 'fa-boxes', required: true },
         { key: 'lokacija_uredna', label: 'Prodajni prostor uredan i čist', icon: 'fa-broom' },
         { key: 'izlog_uredan', label: 'Izlog i displej u redu', icon: 'fa-store' },
         { key: 'pos_radi', label: 'POS terminal i printer rade', icon: 'fa-receipt' },
-        { key: 'roba_evidentirana', label: 'Roba sređena i evidentirana', icon: 'fa-boxes' },
         { key: 'alarm_postavljen', label: 'Alarm postavljen (ako se zatvara)', icon: 'fa-shield-alt' },
     ];
     const initForm = () => ({
@@ -1569,6 +1641,12 @@ function PrimopredajaPage({ radnici, currentUser }) {
         if (!form.preuzima_id) return showAlert('Izaberi radnika koji preuzima smjenu!', 'warning');
         if (Number(form.predaje_id) === Number(form.preuzima_id)) return showAlert('Radnik ne može sam sebi predati smjenu!', 'warning');
         if (form.stanje_kase === '' || form.stanje_kase === null) return showAlert('Unesi stanje kase!', 'warning');
+        // Obavezne checklist stavke
+        const required = CHECKLIST_STAVKE.filter(s => s.required);
+        const missing = required.filter(s => !form.checklist[s.key]);
+        if (missing.length > 0) {
+            return showAlert(`Moraš potvrditi obavezne stavke: ${missing.map(m=>m.label).join(', ')}`, 'warning');
+        }
         try {
             await api('/api/primopredaje', 'POST', {
                 lokacija_id: form.lokacija_id,
@@ -1833,6 +1911,16 @@ function PrimopredajaPage({ radnici, currentUser }) {
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nova primopredaja smjene" footer={
                 <><button className="btn btn-outline" onClick={() => setShowModal(false)}>Otkaži</button><button className="btn btn-primary" onClick={handleSubmit}><i className="fas fa-paper-plane"></i> Pošalji preuzimaocu</button></>
             }>
+                <div style={{padding:14,background:'linear-gradient(135deg, #1e40af, #3b82f6)',borderRadius:8,marginBottom:14,color:'white'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:12}}>
+                        <i className="fas fa-handshake" style={{fontSize:24}}></i>
+                        <div>
+                            <div style={{fontSize:11,opacity:0.9,fontWeight:600,letterSpacing:1,textTransform:'uppercase'}}>Važna procedura</div>
+                            <div style={{fontSize:14,fontWeight:600,marginTop:2}}>Predaja smjene odgovornom radniku</div>
+                            <div style={{fontSize:11,opacity:0.85,marginTop:2}}>Provjeri sve obavezne stavke (* označene). Preuzimaoc mora potvrditi prijem.</div>
+                        </div>
+                    </div>
+                </div>
                 <div className="form-row">
                     <div className="form-group">
                         <label>Lokacija</label>
@@ -1883,15 +1971,32 @@ function PrimopredajaPage({ radnici, currentUser }) {
                 </div>
 
                 <div className="form-group">
-                    <label style={{marginBottom:8,display:'block'}}>Checklist primopredaje</label>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr',gap:6,padding:12,background:'var(--gray-50)',borderRadius:8}}>
-                        {CHECKLIST_STAVKE.map(s => (
-                            <label key={s.key} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'6px 8px',borderRadius:6,background:form.checklist[s.key]?'#d1fae5':'transparent',transition:'background 0.2s'}}>
-                                <input type="checkbox" checked={form.checklist[s.key]} onChange={e=>setForm({...form,checklist:{...form.checklist,[s.key]:e.target.checked}})} style={{width:18,height:18,cursor:'pointer'}} />
-                                <i className={`fas ${s.icon}`} style={{width:16,color:form.checklist[s.key]?'#059669':'var(--gray-400)'}}></i>
-                                <span style={{fontSize:13}}>{s.label}</span>
-                            </label>
-                        ))}
+                    <label style={{marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span>Checklist primopredaje</span>
+                        <span style={{fontSize:11,color:'var(--gray-400)'}}>
+                            {Object.values(form.checklist).filter(Boolean).length} / {CHECKLIST_STAVKE.length} • <span style={{color:'#dc2626'}}>* obavezno</span>
+                        </span>
+                    </label>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr',gap:6,padding:12,background:'var(--bg-input)',borderRadius:8}}>
+                        {CHECKLIST_STAVKE.map(s => {
+                            const checked = form.checklist[s.key];
+                            const missing = s.required && !checked;
+                            return (
+                                <label key={s.key} style={{
+                                    display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'8px 10px',borderRadius:6,
+                                    background: checked ? '#d1fae5' : missing ? '#fef3c7' : 'transparent',
+                                    border: missing ? '1px solid #fcd34d' : '1px solid transparent',
+                                    transition:'all 0.2s'
+                                }}>
+                                    <input type="checkbox" checked={!!checked} onChange={e=>setForm({...form,checklist:{...form.checklist,[s.key]:e.target.checked}})} style={{width:18,height:18,cursor:'pointer'}} />
+                                    <i className={`fas ${s.icon}`} style={{width:16,color:checked?'#059669':missing?'#d97706':'var(--gray-400)'}}></i>
+                                    <span style={{fontSize:13,color:checked?'#065f46':missing?'#92400e':'var(--text-primary)',fontWeight:s.required?600:400}}>
+                                        {s.label}
+                                        {s.required && <span style={{color:'#dc2626',marginLeft:4}}>*</span>}
+                                    </span>
+                                </label>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -4035,6 +4140,17 @@ function CentralaPage({ radnici, evidencije, polozi, dostave, zahtjeviDopune, za
     const aktivneLokacije = LOKACIJE.filter(l => l.tip === 'maloprodaja' && !l.aktivan === undefined || !l.naziv.includes('PRIPREMI'));
     const mpLokacije = LOKACIJE.filter(l => l.tip === 'maloprodaja' && !l.naziv?.includes('PRIPREMI'));
 
+    // Banner: provjeri jesu li sve MP lokacije obavile primopredaju u zadnjih 24h
+    const danas = today();
+    const mpAktivneLok = LOKACIJE.filter(l => l.tip === 'maloprodaja' && !l.naziv?.includes('PRIPREMI'));
+    const lokacijeBezPP = mpAktivneLok.filter(lok => {
+        const radioBilo = evidencije.some(e => e.lokacija_id === lok.id && e.datum === danas && e.dolazak);
+        if (!radioBilo) return false; // niko nije radio = ne treba PP
+        const ppDanas = primopredaje?.find(p => p.lokacija_id === lok.id && p.datum === danas);
+        return !ppDanas;
+    });
+    const ppProblemi = primopredaje?.filter(p => p.datum === danas && p.status === 'problem') || [];
+
     return (
         <div className="fade-in">
             <div style={{background:'linear-gradient(135deg, #1e40af, #1a56db)',borderRadius:12,padding:24,color:'white',marginBottom:24}}>
@@ -4049,6 +4165,29 @@ function CentralaPage({ radnici, evidencije, polozi, dostave, zahtjeviDopune, za
                     </div>
                 </div>
             </div>
+
+            {/* Banner: lokacije bez primopredaje */}
+            {(lokacijeBezPP.length > 0 || ppProblemi.length > 0) && (
+                <div style={{padding:16,background:lokacijeBezPP.length>0?'linear-gradient(135deg, #dc2626, #b91c1c)':'linear-gradient(135deg, #d97706, #b45309)',color:'white',borderRadius:12,marginBottom:20,boxShadow:'0 4px 12px rgba(220,38,38,0.3)'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+                        <i className="fas fa-exclamation-triangle" style={{fontSize:28}}></i>
+                        <div style={{flex:1,minWidth:200}}>
+                            <div style={{fontSize:12,opacity:0.9,fontWeight:600,letterSpacing:1,textTransform:'uppercase'}}>Pažnja — primopredaje</div>
+                            {lokacijeBezPP.length > 0 && (
+                                <div style={{fontSize:15,fontWeight:700,marginTop:4}}>
+                                    {lokacijeBezPP.length} {lokacijeBezPP.length===1?'lokacija nije obavila':'lokacije nisu obavile'} primopredaju danas
+                                    <div style={{fontSize:12,fontWeight:400,opacity:0.9,marginTop:2}}>{lokacijeBezPP.map(l=>l.naziv).join(', ')}</div>
+                                </div>
+                            )}
+                            {ppProblemi.length > 0 && (
+                                <div style={{fontSize:14,fontWeight:600,marginTop:lokacijeBezPP.length>0?8:4}}>
+                                    <i className="fas fa-bug" style={{marginRight:6}}></i>{ppProblemi.length} prijavljenih problema na primopredajama danas
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <h3 style={{fontSize:16,fontWeight:600,marginBottom:16,color:'var(--gray-700)'}}>Status maloprodaja</h3>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))',gap:16,marginBottom:24}}>
@@ -8763,7 +8902,7 @@ function App() {
             case 'centrala': return <CentralaPage radnici={radnici} evidencije={evidencije} polozi={polozi} dostave={dostave} zahtjeviDopune={zahtjeviDopune} zahtjeviOdmora={zahtjeviOdmora} primopredaje={primopredaje} />;
             case 'dashboard': return <DashboardPage radnici={radnici} evidencije={evidencije} polozi={polozi} dostave={dostave} zahtjeviOdmora={zahtjeviOdmora} currentUser={currentUser} />;
             case 'admin_evidencija': return <AdminEvidencijaPage radnici={radnici} currentUser={currentUser} />;
-            case 'evidencija': return <EvidencijaPage radnici={radnici} evidencije={evidencije} setEvidencije={setEvidencije} currentUser={currentUser} />;
+            case 'evidencija': return <EvidencijaPage radnici={radnici} evidencije={evidencije} setEvidencije={setEvidencije} currentUser={currentUser} setPage={setPage} />;
             case 'primopredaja': return <PrimopredajaPage radnici={radnici} currentUser={currentUser} />;
             case 'pazar': return <PazarPage radnici={radnici} polozi={polozi} setPolozi={setPolozi} currentUser={currentUser} sendNotif={sendNotif} />;
             case 'dostava': return <DostavaPage radnici={radnici} currentUser={currentUser} />;
@@ -8822,9 +8961,20 @@ function App() {
                             <i className="fas fa-user-clock"></i>Pregled evidencije
                         </div>
                     )}
-                    <div className={`nav-item ${page==='primopredaja'?'active':''}`} onClick={()=>{setPage('primopredaja');setSidebarOpen(false);}}>
-                        <i className="fas fa-exchange-alt"></i>Primopredaja smjena
-                    </div>
+                    {(()=>{
+                        const danas = today();
+                        const myPending = primopredaje ? primopredaje.filter(p => p.preuzima_id === currentUser.id && !p.potvrdjeno && p.status !== 'problem' && p.datum >= danas).length : 0;
+                        const lokPending = primopredaje ? primopredaje.filter(p => p.lokacija_id === currentUser.lokacija_id && !p.potvrdjeno && p.status === 'u_toku' && p.datum === danas).length : 0;
+                        const badge = myPending || lokPending;
+                        return (
+                            <div className={`nav-item ${page==='primopredaja'?'active':''}`} onClick={()=>{setPage('primopredaja');setSidebarOpen(false);}}
+                                style={badge>0?{borderLeft:'3px solid #f59e0b'}:{}}>
+                                <i className="fas fa-exchange-alt"></i>
+                                <span style={{flex:1}}>Primopredaja smjena</span>
+                                {badge > 0 && <span style={{background:myPending>0?'#dc2626':'#f59e0b',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700,minWidth:18,textAlign:'center',animation:'pulse 2s infinite'}}>{badge}</span>}
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 <div className="nav-section">
