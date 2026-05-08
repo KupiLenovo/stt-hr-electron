@@ -3298,6 +3298,24 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState({ ime: '', prezime: '', pozicija_id: 3, lokacija_id: 2, datum_zaposlenja: '', minuli_staz: 0, uloga: 'radnik', telefon: '', datum_rodjenja: '', telegram_username: '' });
     const [lokacijaLoading, setLokacijaLoading] = useState(null);
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetText, setResetText] = useState('');
+    const [resetting, setResetting] = useState(false);
+
+    const handleResetBaze = async () => {
+        if (resetText !== 'OBRISI') return showAlert('Moraš upisati "OBRISI" da potvrdiš.', 'warning');
+        setResetting(true);
+        try {
+            const result = await api('/api/admin/radnici/reset', 'POST', { confirm_text: 'OBRISI', current_user_id: currentUser.id });
+            const novi = await api('/api/radnici');
+            setRadnici(novi);
+            setShowResetModal(false); setResetText(''); setResetting(false);
+            showAlert(`Obrisano ${result.deleted_radnici} radnika i svi njihovi vezani podaci. Ostao si samo ti.`, 'success');
+        } catch(e) {
+            setResetting(false);
+            showAlert('Greška: ' + (e.message || 'nepoznato'), 'error');
+        }
+    };
 
     const openNew = () => { setEditingId(null); setForm({ ime:'',prezime:'',pozicija_id:3,lokacija_id:2,datum_zaposlenja:'',minuli_staz:0,uloga:'radnik',telefon:'',datum_rodjenja:'',telegram_username:'' }); setShowModal(true); };
     const openEdit = (r) => { setEditingId(r.id); setForm({ime:r.ime,prezime:r.prezime||'',pozicija_id:r.pozicija_id,lokacija_id:r.lokacija_id,datum_zaposlenja:r.datum_zaposlenja,minuli_staz:r.minuli_staz,uloga:r.uloga,telefon:r.telefon||'',datum_rodjenja:r.datum_rodjenja||'',telegram_username:r.telegram_username||''}); setShowModal(true); };
@@ -3346,6 +3364,11 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
                         });
                         exportCSV(['Ime i prezime','Telefon','Pozicija','Lokacija','Datum zaposlenja','Minuli staz','Uloga','GO dana'], rows, 'radnici');
                     }}><i className="fas fa-download" style={{marginRight:4}}></i>CSV</button>
+                    {currentUser?.uloga === 'admin' && (
+                        <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={()=>setShowResetModal(true)} title="Obriši sve radnike osim sebe">
+                            <i className="fas fa-trash-alt"></i> Reset baze
+                        </button>
+                    )}
                     <button className="btn btn-primary" onClick={openNew}><i className="fas fa-user-plus"></i> Novi radnik</button>
                 </div>
             </div>
@@ -3433,6 +3456,37 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
                     </select>
                 </div>
             </Modal>
+
+            {/* Reset baze radnika modal */}
+            {showResetModal && (
+                <Modal isOpen={true} onClose={()=>!resetting && (setShowResetModal(false), setResetText(''))} title="⚠ Reset baze radnika" footer={
+                    <><button className="btn btn-outline" onClick={()=>{setShowResetModal(false); setResetText('');}} disabled={resetting}>Otkaži</button>
+                    <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={handleResetBaze} disabled={resetting||resetText!=='OBRISI'}>
+                        {resetting ? <><i className="fas fa-spinner fa-spin"></i> Brišem...</> : <><i className="fas fa-trash-alt"></i> OBRIŠI SVE</>}
+                    </button></>
+                }>
+                    <div style={{padding:14,background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:8,marginBottom:14,color:'#991b1b'}}>
+                        <strong style={{fontSize:14}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>OPASNA AKCIJA</strong>
+                        <div style={{fontSize:13,marginTop:6,lineHeight:1.6}}>
+                            Ovo će <strong>nepovratno obrisati</strong>:
+                            <ul style={{margin:'6px 0 6px 20px'}}>
+                                <li>Sve radnike osim tebe ({currentUser?.ime} {currentUser?.prezime})</li>
+                                <li>Sve njihove evidencije rada</li>
+                                <li>Sve njihove polozi pazara, primopredaje, leadovi, zadatke, kašnjenja, zahtjeve</li>
+                            </ul>
+                            <strong>LOKACIJE, POZICIJE, vodiče, VP dugovanja, loyalty članove ostaju netaknuti.</strong>
+                        </div>
+                    </div>
+                    <div style={{padding:14,background:'#fef3c7',border:'1px solid #fcd34d',borderRadius:8,marginBottom:14,color:'#92400e',fontSize:13}}>
+                        <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                        Nakon reseta, novi radnici se ručno dodaju klikom na <strong>"Novi radnik"</strong>. Svaki novi radnik će postaviti svoj PIN kad se prvi put loguje.
+                    </div>
+                    <div className="form-group">
+                        <label>Da bi potvrdio, upiši <strong style={{color:'#dc2626'}}>OBRISI</strong> velikim slovima:</label>
+                        <input className="form-control" value={resetText} onChange={e=>setResetText(e.target.value)} placeholder="OBRISI" style={{fontFamily:'monospace',letterSpacing:2}} autoFocus />
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 }
