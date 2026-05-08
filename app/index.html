@@ -8388,17 +8388,21 @@ function BirthdayJubileWidget({ radnici, currentUser }) {
 function App() {
     const [page, setPage] = useState('centrala');
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    // "Last seen" timestamps za badge notifikacije
-    const [seenTs, setSeenTs] = useState(() => { try { return JSON.parse(localStorage.getItem('stt_seen_ts')||'{}'); } catch { return {}; } });
-    const markSeen = useCallback((key) => {
-        const upd = {...seenTs, [key]: Date.now()};
-        setSeenTs(upd);
-        localStorage.setItem('stt_seen_ts', JSON.stringify(upd));
-    }, [seenTs]);
-    useEffect(() => {
-        const badgePages = ['dopuna','pazar','dopuna_vp','leadovi','leadovi_vp'];
-        if (badgePages.includes(page)) markSeen(page);
-    }, [page]);
+    // VIĐENI ID-JEVI po stranici — pouzdano praćenje (ne vremenski)
+    const [seenIds, setSeenIds] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('stt_seen_ids')||'{}'); }
+        catch { return {}; }
+    });
+    const markIdsSeen = useCallback((key, ids) => {
+        if (!ids || ids.length === 0) return;
+        setSeenIds(prev => {
+            const existing = new Set(prev[key] || []);
+            ids.forEach(id => existing.add(id));
+            const upd = { ...prev, [key]: Array.from(existing) };
+            try { localStorage.setItem('stt_seen_ids', JSON.stringify(upd)); } catch(e) {}
+            return upd;
+        });
+    }, []);
     const [radnici, setRadnici] = useState(initialRadnici);
     const [evidencije, setEvidencije] = useState([]);
     const [primopredaje, setPrimopredaje] = useState([]);
@@ -8417,6 +8421,13 @@ function App() {
     const [showSearch, setShowSearch] = useState(false);
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('stt_theme') === 'dark');
     const [showFab, setShowFab] = useState(false);
+
+    // Markiraj ID-jeve kao viđene kad korisnik otvori stranicu
+    useEffect(() => {
+        if (page === 'dopuna') markIdsSeen('dopuna', zahtjeviDopune.map(z => z.id));
+        else if (page === 'pazar') markIdsSeen('pazar', polozi.map(p => p.id));
+        else if (page === 'dopuna_vp') markIdsSeen('dopuna_vp', zahtjeviDopune.filter(z => z.tip === 'vp').map(z => z.id));
+    }, [page, zahtjeviDopune.length, polozi.length]);
 
     // Apply dark mode
     useEffect(() => {
@@ -8979,10 +8990,10 @@ function App() {
 
                 <div className="nav-section">
                     {(()=>{
-                        const lastDopune = seenTs['dopuna'] || 0;
-                        const lastPazar = seenTs['pazar'] || 0;
-                        const noveNarudzbe = zahtjeviDopune ? zahtjeviDopune.filter(z=>(z.status==='na_cekanju'||z.status==='novi') && new Date((z.created_at||'').replace(' ','T')).getTime() > lastDopune).length : 0;
-                        const nepotvrdjeni = polozi.filter(p=>p.status==='pripremljen' && new Date((p.created_at||p.datum||'').replace(' ','T')).getTime() > lastPazar).length;
+                        const seenDopune = new Set(seenIds['dopuna'] || []);
+                        const seenPazar = new Set(seenIds['pazar'] || []);
+                        const noveNarudzbe = zahtjeviDopune ? zahtjeviDopune.filter(z => (z.status==='na_cekanju'||z.status==='novi') && !seenDopune.has(z.id)).length : 0;
+                        const nepotvrdjeni = polozi.filter(p => p.status==='pripremljen' && !seenPazar.has(p.id)).length;
                         const mpBadge = noveNarudzbe + nepotvrdjeni;
                         return (<>
                         <div className="nav-section-title" style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingRight:16}}>
