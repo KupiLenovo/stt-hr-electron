@@ -5731,7 +5731,47 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
     const [showInfoPanel, setShowInfoPanel] = useState(false);
     const [showNovi, setShowNovi] = useState(false);
     const [noviForm, setNoviForm] = useState({ tip: 'dm', clanovi: [], naziv: '' });
+    const [editGrupa, setEditGrupa] = useState(null); // grupa koja se editujem
+    const [editForm, setEditForm] = useState({ naziv: '', clanovi: [] });
     const chatEndRef = React.useRef(null);
+
+    // Sync edit form when editGrupa changes
+    useEffect(() => {
+        if (editGrupa) {
+            setEditForm({
+                naziv: editGrupa.naziv || '',
+                clanovi: (editGrupa.clanovi || []).map(c => c.id).filter(id => id !== currentUser.id),
+            });
+        }
+    }, [editGrupa?.id]);
+
+    const handleSaveEditGrupa = async () => {
+        if (!editGrupa) return;
+        if (!editForm.naziv?.trim()) return showAlert('Naziv je obavezan.', 'warning');
+        if (editForm.clanovi.length === 0) return showAlert('Mora biti bar 1 član osim tebe.', 'warning');
+        try {
+            await api(`/api/chat-grupe/${editGrupa.id}`, 'PUT', {
+                naziv: editForm.naziv,
+                clanovi: editForm.clanovi,
+                requester_id: currentUser.id,
+            });
+            await loadGrupe();
+            setEditGrupa(null);
+            showAlert('Grupa ažurirana.', 'success');
+        } catch(e) { showAlert('Greška: ' + (e.message||'nepoznato'), 'error'); }
+    };
+
+    const handleDeleteGrupa = async () => {
+        if (!editGrupa) return;
+        if (!await askConfirm(`Obrisati grupu "${editGrupa.naziv}"?\nSva historija razgovora će biti izgubljena.`, true)) return;
+        try {
+            await api(`/api/chat-grupe/${editGrupa.id}`, 'DELETE', { requester_id: currentUser.id });
+            await loadGrupe();
+            setEditGrupa(null);
+            setActiveGrupa('cijela_ekipa');
+            showAlert('Grupa obrisana.', 'success');
+        } catch(e) { showAlert('Greška.', 'error'); }
+    };
 
     // Ucitaj custom grupe sa servera
     const loadGrupe = () => {
@@ -5985,6 +6025,9 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
                                 <i className="fas fa-broadcast-tower" style={{marginRight:4}}></i> Automatska grupa — samo prijavljeni
                             </div>
                         )}
+                        {aktivnaGrupa?.tip === 'grupa' && (Number(aktivnaGrupa.kreirao_id) === currentUser.id || currentUser.uloga === 'admin') && (
+                            <button className="btn btn-sm btn-outline" onClick={()=>setEditGrupa(aktivnaGrupa)} title="Uredi članove"><i className="fas fa-user-edit"></i></button>
+                        )}
                         <button className="btn btn-sm btn-outline" onClick={()=>setShowInfoPanel(!showInfoPanel)}><i className="fas fa-info-circle"></i></button>
                     </div>
                 </div>
@@ -6159,6 +6202,52 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
                         <div style={{fontSize:11,color:'var(--gray-400)',marginTop:6}}>
                             {noviForm.tip === 'dm' ? 'Klikni jednu osobu' : `Odabrano: ${noviForm.clanovi.length}`}
                         </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Edit grupe modal */}
+            {editGrupa && (
+                <Modal isOpen={true} onClose={()=>setEditGrupa(null)} title={`Uredi grupu — ${editGrupa.naziv}`} footer={
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'space-between',width:'100%'}}>
+                        <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={handleDeleteGrupa}><i className="fas fa-trash"></i> Obriši grupu</button>
+                        <div style={{display:'flex',gap:8}}>
+                            <button className="btn btn-outline" onClick={()=>setEditGrupa(null)}>Otkaži</button>
+                            <button className="btn btn-primary" onClick={handleSaveEditGrupa}><i className="fas fa-save"></i> Spremi</button>
+                        </div>
+                    </div>
+                }>
+                    <div className="form-group">
+                        <label>Naziv grupe</label>
+                        <input className="form-control" value={editForm.naziv} onChange={e=>setEditForm({...editForm,naziv:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                        <label>Članovi <span style={{fontSize:11,color:'var(--gray-400)',fontWeight:400,marginLeft:6}}>(ti si automatski uključen kao kreator)</span></label>
+                        <div style={{maxHeight:340,overflow:'auto',border:'1px solid var(--border-color)',borderRadius:8,padding:6}}>
+                            {radnici.filter(r => r.aktivan && r.id !== currentUser.id).map(r => {
+                                const lok = LOKACIJE.find(l => l.id === r.lokacija_id);
+                                const sel = editForm.clanovi.includes(r.id);
+                                return (
+                                    <div key={r.id} onClick={()=>{
+                                        setEditForm({...editForm, clanovi: sel ? editForm.clanovi.filter(id => id !== r.id) : [...editForm.clanovi, r.id]});
+                                    }} style={{padding:'8px 10px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',borderRadius:6,background:sel?'#d1fae5':'transparent',transition:'background 0.15s'}}>
+                                        <div style={{width:32,height:32,borderRadius:'50%',background:'var(--bg-input)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600}}>{r.ime[0]}{r.prezime?.[0]||''}</div>
+                                        <div style={{flex:1}}>
+                                            <div style={{fontSize:13,fontWeight:500}}>{r.ime} {r.prezime}</div>
+                                            <div style={{fontSize:11,color:'var(--gray-500)'}}>{lok?.naziv||''}</div>
+                                        </div>
+                                        {sel ? <i className="fas fa-check-circle" style={{color:'#059669',fontSize:18}}></i> : <i className="far fa-circle" style={{color:'var(--gray-300)',fontSize:18}}></i>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div style={{fontSize:11,color:'var(--gray-400)',marginTop:6}}>
+                            Aktivnih članova (uključujući tebe): <strong>{editForm.clanovi.length + 1}</strong>
+                        </div>
+                    </div>
+                    <div style={{padding:10,background:'#fef3c7',border:'1px solid #fcd34d',borderRadius:8,fontSize:12,color:'#92400e'}}>
+                        <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                        Isključeni članovi gube pristup chatu i njegovoj historiji. Novi članovi vide cijelu prošlu historiju.
                     </div>
                 </Modal>
             )}
