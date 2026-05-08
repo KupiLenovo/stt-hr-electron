@@ -515,6 +515,62 @@
             .fab-wrapper { bottom: 84px !important; right: 16px !important; }
             .chat-bubble { bottom: 84px !important; left: 16px !important; width: 50px !important; height: 50px !important; font-size: 20px !important; }
 
+            /* Topbar dropdowns (Pametni podsjetnici, Live presence) — full width na mobile */
+            .topbar-dropdown {
+                position: fixed !important;
+                top: 60px !important;
+                right: 8px !important;
+                left: 8px !important;
+                width: auto !important;
+                max-width: none !important;
+                max-height: calc(100vh - 80px) !important;
+            }
+            /* Notif panel — full width */
+            .notif-panel {
+                right: 8px !important;
+                left: 8px !important;
+                width: auto !important;
+                top: 60px !important;
+                max-height: calc(100vh - 100px) !important;
+            }
+
+            /* Topbar — manje gap, manji search */
+            .topbar-right > button[title*="Pretraga"] span,
+            .topbar-right span.hide-mobile { display: none !important; }
+            .topbar-right > button[title*="Pretraga"] { width: 38px !important; padding: 0 !important; justify-content: center; }
+
+            /* Modal max-height = ne preklapa bottom nav */
+            .modal { max-height: calc(100vh - 80px) !important; margin-bottom: 70px; }
+
+            /* Sidebar veci touch padding */
+            .sidebar { width: 280px !important; }
+            .nav-item { padding: 14px 20px !important; min-height: 48px; }
+
+            /* Globalna pretraga — manji margin */
+            .topbar-right > button[title*="Pretraga"] { padding: 0 !important; }
+
+            /* Stat-card label u 1 redu na mobilu */
+            .stat-label { font-size: 11px; line-height: 1.2; }
+
+            /* Card hover / klikabilni redovi */
+            tr.hover-row { -webkit-tap-highlight-color: rgba(0,0,0,0.05); }
+
+            /* Lokacije kartice — full width na malo */
+            .vodici-layout > .card { max-height: 200px; }
+
+            /* Chat layout — split na mobilu */
+            .chat-layout-mobile-list { display: flex !important; }
+            .chat-layout-mobile-msg { display: none !important; }
+            .chat-layout-mobile-list.chat-active { display: none !important; }
+            .chat-layout-mobile-msg.chat-active { display: flex !important; }
+        }
+        @media (max-width: 480px) {
+            /* Jos manji ekran — sakrij neke buttone iz topbara da se ne preklapaju */
+            .topbar-right > button[title*="Svijetla"], .topbar-right > button[title*="Tamna"] { display: none !important; }
+            /* Sidebar uzima skoro cijeli ekran */
+            .sidebar { width: 88vw !important; max-width: 320px; }
+        }
+
             /* Bottom navigation */
             .mobile-bottom-nav {
                 display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
@@ -7476,7 +7532,7 @@ function SmartReminders({ currentUser, evidencije, polozi, zahtjeviOdmora, primo
             </button>
             {open && <>
                 <div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998,background:'transparent'}}></div>
-                <div style={{position:'absolute',top:46,right:0,width:380,maxWidth:'90vw',background:'var(--bg-card)',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
+                <div className="topbar-dropdown" style={{position:'absolute',top:46,right:0,width:380,maxWidth:'90vw',background:'var(--bg-card)',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
                     <div style={{padding:'14px 18px',borderBottom:'1px solid var(--gray-100)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                         <strong style={{fontSize:14}}><i className="fas fa-lightbulb" style={{color:'#d97706',marginRight:8}}></i>Pametni podsjetnici</strong>
                         <span style={{fontSize:11,color:'var(--gray-400)'}}>{reminders.length} stavki</span>
@@ -7533,7 +7589,7 @@ function LivePresence({ evidencije, radnici, setPage, currentUser }) {
             </button>
             {open && <>
                 <div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998}}></div>
-                <div style={{position:'absolute',top:46,right:0,width:340,maxWidth:'90vw',background:'var(--bg-card)',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
+                <div className="topbar-dropdown" style={{position:'absolute',top:46,right:0,width:340,maxWidth:'90vw',background:'var(--bg-card)',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
                     <div style={{padding:'14px 18px',borderBottom:'1px solid var(--gray-100)'}}>
                         <strong style={{fontSize:14}}><i className="fas fa-broadcast-tower" style={{color:'#10b981',marginRight:8}}></i>Trenutno na poslu</strong>
                         <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>{naPoslu.length} aktivni{naPauzi>0?` • ${naPauzi} na pauzi`:''}</div>
@@ -9661,7 +9717,7 @@ function App() {
 
                             {/* Notifikacijski panel */}
                             {showNotifPanel && (
-                                <div style={{
+                                <div className="notif-panel" style={{
                                     position:'fixed', right:16, top:64, width:380, maxHeight:520,
                                     background:'var(--bg-card)', borderRadius:14, boxShadow:'0 20px 60px rgba(0,0,0,0.18)',
                                     border:'1px solid var(--gray-200)', zIndex:10000, overflow:'hidden',
