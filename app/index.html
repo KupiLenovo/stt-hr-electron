@@ -6814,7 +6814,11 @@ function GlobalSearch({ isOpen, onClose, radnici, primopredaje, polozi, evidenci
 function SmartReminders({ currentUser, evidencije, polozi, zahtjeviOdmora, primopredaje, setPage }) {
     const [open, setOpen] = useState(false);
     const [zadaci, setZadaci] = useState([]);
-    useEffect(() => { api('/api/zadaci').then(setZadaci).catch(()=>{}); }, []);
+    const [vpDugovanja, setVpDugovanja] = useState([]);
+    useEffect(() => {
+        api('/api/zadaci').then(setZadaci).catch(()=>{});
+        api('/api/vp-dugovanja').then(setVpDugovanja).catch(()=>{});
+    }, []);
 
     const reminders = useMemo(() => {
         if (!currentUser) return [];
@@ -6863,9 +6867,24 @@ function SmartReminders({ currentUser, evidencije, polozi, zahtjeviOdmora, primo
             if (odmori.length > 0) {
                 out.push({ severity: 'info', icon: 'fa-umbrella-beach', label: `${odmori.length} zahtjev${odmori.length===1?'':'a'} za odmor čeka odluku`, sub: 'Odobri ili odbij', action: () => setPage('odmori') });
             }
+            // VP dugovanja prosročena
+            const prosrocena = vpDugovanja.filter(d => d.status !== 'placeno' && d.rok_placanja && d.rok_placanja < danas);
+            if (prosrocena.length > 0) {
+                const ukupno = prosrocena.reduce((s,d) => s + (d.ukupan_iznos - d.placeni_iznos), 0);
+                out.push({ severity: 'danger', icon: 'fa-hand-holding-usd', label: `${prosrocena.length} prosročeno VP dugovanje${prosrocena.length===1?'':'a'}`, sub: `Ukupno: ${formatCurrency(ukupno)}`, action: () => setPage('vp_dugovanja') });
+            }
+            // VP dugovanja koja dospijevaju u 3 dana
+            const blizu = vpDugovanja.filter(d => {
+                if (d.status === 'placeno' || !d.rok_placanja) return false;
+                const dana = Math.ceil((new Date(d.rok_placanja) - new Date(danas)) / 86400000);
+                return dana >= 0 && dana <= 3;
+            });
+            if (blizu.length > 0) {
+                out.push({ severity: 'warning', icon: 'fa-clock', label: `${blizu.length} VP dugovanje${blizu.length===1?'':'a'} dospijeva u 3 dana`, sub: 'Provjeri rokove', action: () => setPage('vp_dugovanja') });
+            }
         }
         return out;
-    }, [currentUser, evidencije, polozi, primopredaje, zadaci, zahtjeviOdmora]);
+    }, [currentUser, evidencije, polozi, primopredaje, zadaci, zahtjeviOdmora, vpDugovanja]);
 
     if (reminders.length === 0) return null;
 
@@ -6979,6 +6998,366 @@ function LivePresence({ evidencije, radnici, setPage, currentUser }) {
                     </div>
                 </div>
             </>}
+        </div>
+    );
+}
+
+// =====================================================================
+// VP DUGOVANJA — neplacena prodata roba (veleprodaja)
+// =====================================================================
+function VPDugovanjaPage({ currentUser, radnici }) {
+    const [dugovanja, setDugovanja] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showForm, setShowForm] = useState(false);
+    const [detalji, setDetalji] = useState(null); // sa uplatama
+    const [uplata, setUplata] = useState(null); // {dugovanje_id, iznos, ...}
+    const [filter, setFilter] = useState({ status: '', q: '' });
+    const initForm = () => ({ klijent_ime:'', klijent_firma:'', klijent_telefon:'', klijent_jib:'',
+        datum_izdavanja: today(), rok_placanja:'', ukupan_iznos:'', lokacija_id: 7,
+        opis_artikala:'', broj_fakture:'', napomena:'' });
+    const [form, setForm] = useState(initForm());
+
+    const load = () => api('/api/vp-dugovanja').then(d => { setDugovanja(d); setLoading(false); }).catch(()=>setLoading(false));
+    useEffect(() => { load(); }, []);
+
+    const handleSave = async () => {
+        if (!form.klijent_ime?.trim()) return showAlert('Unesi ime klijenta!', 'warning');
+        if (!form.ukupan_iznos || Number(form.ukupan_iznos) <= 0) return showAlert('Unesi ukupan iznos!', 'warning');
+        try {
+            await api('/api/vp-dugovanja', 'POST', { ...form, izdao_id: currentUser?.id, ukupan_iznos: Number(form.ukupan_iznos) });
+            await load();
+            setShowForm(false);
+            setForm(initForm());
+            showAlert('Dugovanje evidentirano.', 'success');
+        } catch(e) { showAlert('Greška pri spremanju.', 'error'); }
+    };
+
+    const otvoriDetalje = async (id) => {
+        try {
+            const data = await api(`/api/vp-dugovanja/${id}`);
+            setDetalji(data);
+        } catch(e) { showAlert('Greška pri učitavanju.', 'error'); }
+    };
+
+    const handleUplata = async () => {
+        if (!uplata.iznos || Number(uplata.iznos) <= 0) return showAlert('Unesi iznos uplate.', 'warning');
+        try {
+            await api(`/api/vp-dugovanja/${uplata.dugovanje_id}/uplata`, 'POST', { iznos: Number(uplata.iznos), datum: uplata.datum, nacin: uplata.nacin, napomena: uplata.napomena, evidentirao_id: currentUser?.id });
+            await load();
+            await otvoriDetalje(uplata.dugovanje_id);
+            setUplata(null);
+            showAlert('Uplata evidentirana.', 'success');
+        } catch(e) { showAlert('Greška.', 'error'); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!await askConfirm('Sigurno obrisati ovo dugovanje sa svim uplatama?')) return;
+        try { await api(`/api/vp-dugovanja/${id}`, 'DELETE'); await load(); setDetalji(null); showAlert('Obrisano.', 'success'); }
+        catch(e) { showAlert('Greška.', 'error'); }
+    };
+
+    const handleObrisiUplatu = async (uplataId) => {
+        if (!await askConfirm('Obrisati ovu uplatu?')) return;
+        try {
+            await api(`/api/vp-dugovanja/uplata/${uplataId}`, 'DELETE');
+            await load();
+            if (detalji) await otvoriDetalje(detalji.id);
+            showAlert('Uplata obrisana.', 'success');
+        } catch(e) { showAlert('Greška.', 'error'); }
+    };
+
+    // Filteri + računanje
+    const filtrirano = dugovanja.filter(d => {
+        if (filter.status && d.status !== filter.status) return false;
+        if (filter.q) {
+            const q = filter.q.toLowerCase();
+            const all = [d.klijent_ime, d.klijent_firma, d.klijent_telefon, d.broj_fakture, d.opis_artikala].filter(Boolean).join(' ').toLowerCase();
+            if (!all.includes(q)) return false;
+        }
+        return true;
+    });
+
+    const danas = today();
+    const ukupnoDugovanje = dugovanja.filter(d => d.status !== 'placeno').reduce((s,d) => s + (d.ukupan_iznos - d.placeni_iznos), 0);
+    const prosroceni = dugovanja.filter(d => d.status !== 'placeno' && d.rok_placanja && d.rok_placanja < danas);
+    const ukupnoProsroceno = prosroceni.reduce((s,d) => s + (d.ukupan_iznos - d.placeni_iznos), 0);
+    const blizuRoka = dugovanja.filter(d => {
+        if (d.status === 'placeno' || !d.rok_placanja) return false;
+        const dana = Math.ceil((new Date(d.rok_placanja) - new Date(danas)) / 86400000);
+        return dana >= 0 && dana <= 7;
+    });
+    const placenoMjesec = dugovanja.filter(d => d.status === 'placeno' && d.datum_zatvaranja?.slice(0,7) === danas.slice(0,7))
+        .reduce((s,d) => s + d.ukupan_iznos, 0);
+
+    const statusBadge = (d) => {
+        if (d.status === 'placeno') return <span className="badge badge-success"><i className="fas fa-check"></i> Plaćeno</span>;
+        if (d.rok_placanja && d.rok_placanja < danas) return <span className="badge badge-danger"><i className="fas fa-exclamation-triangle"></i> Prosročeno</span>;
+        if (d.status === 'djelimicno') return <span className="badge badge-warning">Djelimično</span>;
+        return <span className="badge badge-info">Otvoreno</span>;
+    };
+
+    const danaDoRoka = (d) => {
+        if (!d.rok_placanja) return null;
+        const dana = Math.ceil((new Date(d.rok_placanja) - new Date(danas)) / 86400000);
+        if (dana === 0) return { txt: 'Danas', color: '#d97706' };
+        if (dana < 0) return { txt: `${Math.abs(dana)} dana zakašnjenja`, color: '#dc2626' };
+        if (dana <= 7) return { txt: `Za ${dana} dana`, color: '#d97706' };
+        return { txt: `Za ${dana} dana`, color: '#6b7280' };
+    };
+
+    const printRecap = (d) => {
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dugovanje #${d.id}</title>
+        <style>body{font-family:Arial;font-size:13px;padding:30px;color:#000}h1{font-size:18px;margin:0 0 4px}.header{border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:20px}table{width:100%;border-collapse:collapse;margin-bottom:16px}td{padding:6px 10px;border-bottom:1px solid #eee}.lbl{color:#666;width:180px}.box{border:1px solid #ddd;padding:12px;border-radius:6px;margin-bottom:12px}.sigs{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:50px}.sig{border-top:1px solid #000;padding-top:6px;font-size:11px;color:#555}@media print{@page{margin:10mm}}</style>
+        </head><body>
+        <div class="header"><h1>POTVRDA DUGOVANJA #${d.id}</h1><div style="font-size:11px;color:#666"><strong>STT d.o.o. Sarajevo</strong> • Hifzi Bjelavca 34, Sarajevo • 033 448 504</div></div>
+        <table>
+            <tr><td class="lbl">Klijent:</td><td><strong>${d.klijent_ime}</strong>${d.klijent_firma?' • '+d.klijent_firma:''}</td></tr>
+            ${d.klijent_telefon?`<tr><td class="lbl">Telefon:</td><td>${d.klijent_telefon}</td></tr>`:''}
+            ${d.klijent_jib?`<tr><td class="lbl">JIB/OIB:</td><td>${d.klijent_jib}</td></tr>`:''}
+            <tr><td class="lbl">Datum izdavanja:</td><td>${formatDate(d.datum_izdavanja)}</td></tr>
+            ${d.rok_placanja?`<tr><td class="lbl">Rok plaćanja:</td><td>${formatDate(d.rok_placanja)}</td></tr>`:''}
+            ${d.broj_fakture?`<tr><td class="lbl">Broj fakture:</td><td>${d.broj_fakture}</td></tr>`:''}
+            <tr><td class="lbl">Ukupan iznos:</td><td><strong>${formatCurrency(d.ukupan_iznos)}</strong></td></tr>
+            <tr><td class="lbl">Plaćeno:</td><td>${formatCurrency(d.placeni_iznos)}</td></tr>
+            <tr><td class="lbl">Preostalo:</td><td><strong style="color:#dc2626">${formatCurrency(d.ukupan_iznos - d.placeni_iznos)}</strong></td></tr>
+        </table>
+        ${d.opis_artikala?`<div class="box"><strong>Roba:</strong><div style="margin-top:6px;white-space:pre-wrap">${d.opis_artikala}</div></div>`:''}
+        ${d.napomena?`<div class="box"><strong>Napomena:</strong><div style="margin-top:6px;white-space:pre-wrap">${d.napomena}</div></div>`:''}
+        <div class="sigs"><div class="sig">Potpis klijenta:<br><br><br>${d.klijent_ime}</div><div class="sig">Potpis radnika:<br><br><br>${d.izdao_ime||''}</div></div>
+        <script>window.onload=()=>window.print();<\/script>
+        </body></html>`;
+        const w = window.open('', '_blank', 'width=900,height=700');
+        w.document.write(html); w.document.close();
+    };
+
+    return (
+        <div className="fade-in">
+            <div className="stats-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:20}}>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#fee2e2',color:'#dc2626'}}><i className="fas fa-money-bill-wave"></i></div>
+                    <div className="stat-value" style={{fontSize:18}}>{formatCurrency(ukupnoDugovanje)}</div>
+                    <div className="stat-label">Ukupno otvoreno</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#fef3c7',color:'#d97706'}}><i className="fas fa-exclamation-triangle"></i></div>
+                    <div className="stat-value" style={{fontSize:18}}>{formatCurrency(ukupnoProsroceno)}</div>
+                    <div className="stat-label">{prosroceni.length} prosročeno</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#dbeafe',color:'#2563eb'}}><i className="fas fa-clock"></i></div>
+                    <div className="stat-value">{blizuRoka.length}</div>
+                    <div className="stat-label">Dospijeva u 7 dana</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#d1fae5',color:'#059669'}}><i className="fas fa-check-circle"></i></div>
+                    <div className="stat-value" style={{fontSize:18}}>{formatCurrency(placenoMjesec)}</div>
+                    <div className="stat-label">Plaćeno mjesec</div>
+                </div>
+            </div>
+
+            <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:16}}>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                    <input value={filter.q} onChange={e=>setFilter({...filter,q:e.target.value})} placeholder="Pretraga (klijent, faktura, roba)..." style={{padding:'8px 12px',borderRadius:8,border:'1px solid var(--gray-200)',fontSize:13,minWidth:240}} />
+                    <select value={filter.status} onChange={e=>setFilter({...filter,status:e.target.value})} style={{padding:'7px 10px',borderRadius:6,border:'1px solid var(--gray-200)',fontSize:13}}>
+                        <option value="">Svi statusi</option>
+                        <option value="nepoplaceno">Otvoreno</option>
+                        <option value="djelimicno">Djelimično</option>
+                        <option value="placeno">Plaćeno</option>
+                    </select>
+                    {(filter.status||filter.q) && <button className="btn btn-sm btn-outline" onClick={()=>setFilter({status:'',q:''})}><i className="fas fa-times"></i></button>}
+                </div>
+                <button className="btn btn-primary" onClick={()=>{setForm(initForm());setShowForm(true);}}><i className="fas fa-plus"></i> Novo dugovanje</button>
+            </div>
+
+            <div className="card">
+                <div className="card-header">
+                    <h3>VP Dugovanja <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({filtrirano.length})</span></h3>
+                    <button className="btn btn-sm btn-outline" onClick={() => {
+                        const rows = dugovanja.map(d => [
+                            d.klijent_ime, d.klijent_firma||'', d.klijent_telefon||'', formatDate(d.datum_izdavanja),
+                            d.rok_placanja?formatDate(d.rok_placanja):'', d.ukupan_iznos.toFixed(2), d.placeni_iznos.toFixed(2),
+                            (d.ukupan_iznos - d.placeni_iznos).toFixed(2), d.status, d.broj_fakture||''
+                        ]);
+                        exportCSV(['Klijent','Firma','Telefon','Datum izd.','Rok','Ukupno','Plaćeno','Preostalo','Status','Faktura'], rows, 'vp-dugovanja');
+                    }}><i className="fas fa-download" style={{marginRight:4}}></i>CSV</button>
+                </div>
+                <div className="card-body table-wrap">
+                    {loading ? <div style={{textAlign:'center',padding:30,color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i></div> :
+                    <table>
+                        <thead><tr><th>Klijent</th><th>Datum</th><th>Rok</th><th>Ukupno</th><th>Plaćeno</th><th>Preostalo</th><th>Status</th><th>Akcije</th></tr></thead>
+                        <tbody>
+                            {filtrirano.map(d => {
+                                const rok = danaDoRoka(d);
+                                const preostalo = d.ukupan_iznos - d.placeni_iznos;
+                                return (
+                                    <tr key={d.id} className="hover-row" style={{cursor:'pointer'}} onClick={()=>otvoriDetalje(d.id)}>
+                                        <td>
+                                            <div style={{fontWeight:500}}>{d.klijent_ime}</div>
+                                            <div style={{fontSize:11,color:'var(--gray-400)'}}>{d.klijent_firma||d.klijent_telefon||''}{d.broj_fakture?` • #${d.broj_fakture}`:''}</div>
+                                        </td>
+                                        <td style={{fontSize:12}}>{formatDate(d.datum_izdavanja)}</td>
+                                        <td>
+                                            {d.rok_placanja ? <>
+                                                <div style={{fontSize:12}}>{formatDate(d.rok_placanja)}</div>
+                                                {rok && d.status !== 'placeno' && <div style={{fontSize:10,color:rok.color,fontWeight:600}}>{rok.txt}</div>}
+                                            </> : <span style={{color:'var(--gray-400)',fontSize:12}}>-</span>}
+                                        </td>
+                                        <td style={{fontWeight:600}}>{formatCurrency(d.ukupan_iznos)}</td>
+                                        <td style={{color:'#059669'}}>{formatCurrency(d.placeni_iznos)}</td>
+                                        <td style={{fontWeight:700,color:preostalo>0?'#dc2626':'#059669'}}>{formatCurrency(preostalo)}</td>
+                                        <td>{statusBadge(d)}</td>
+                                        <td onClick={e=>e.stopPropagation()}>
+                                            <div style={{display:'flex',gap:4}}>
+                                                <button className="btn btn-sm btn-outline" title="Detalji" onClick={()=>otvoriDetalje(d.id)}><i className="fas fa-eye"></i></button>
+                                                {d.status !== 'placeno' && <button className="btn btn-sm" style={{background:'#059669',color:'white',border:'none'}} title="Dodaj uplatu" onClick={()=>setUplata({dugovanje_id:d.id,iznos:(d.ukupan_iznos-d.placeni_iznos).toFixed(2),datum:today(),nacin:'gotovina',napomena:''})}><i className="fas fa-plus"></i></button>}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {filtrirano.length === 0 && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--gray-400)',padding:24}}>{dugovanja.length===0?'Nema dugovanja':'Nema rezultata'}</td></tr>}
+                        </tbody>
+                    </table>}
+                </div>
+            </div>
+
+            {/* Forma za novo dugovanje */}
+            {showForm && (
+                <Modal isOpen={true} onClose={()=>setShowForm(false)} title="Novo VP dugovanje" footer={
+                    <><button className="btn btn-outline" onClick={()=>setShowForm(false)}>Otkaži</button>
+                    <button className="btn btn-primary" onClick={handleSave}><i className="fas fa-save"></i> Spremi</button></>
+                }>
+                    <div className="form-row">
+                        <div className="form-group"><label>Ime/prezime klijenta <span style={{color:'#dc2626'}}>*</span></label><input className="form-control" value={form.klijent_ime} onChange={e=>setForm({...form,klijent_ime:e.target.value})} placeholder="npr. Mirsad Hodzic" /></div>
+                        <div className="form-group"><label>Firma</label><input className="form-control" value={form.klijent_firma} onChange={e=>setForm({...form,klijent_firma:e.target.value})} placeholder="npr. Hodzic d.o.o." /></div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group"><label>Telefon</label><input className="form-control" value={form.klijent_telefon} onChange={e=>setForm({...form,klijent_telefon:e.target.value})} placeholder="061..." /></div>
+                        <div className="form-group"><label>JIB/OIB</label><input className="form-control" value={form.klijent_jib} onChange={e=>setForm({...form,klijent_jib:e.target.value})} placeholder="opcionalno" /></div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group"><label>Datum izdavanja</label><DateInput className="form-control" value={form.datum_izdavanja} onChange={e=>setForm({...form,datum_izdavanja:e.target.value})} /></div>
+                        <div className="form-group"><label>Rok plaćanja</label><DateInput className="form-control" value={form.rok_placanja} onChange={e=>setForm({...form,rok_placanja:e.target.value})} /></div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group"><label>Ukupan iznos (KM) <span style={{color:'#dc2626'}}>*</span></label><input className="form-control" type="number" step="0.01" value={form.ukupan_iznos} onChange={e=>setForm({...form,ukupan_iznos:e.target.value})} placeholder="0.00" /></div>
+                        <div className="form-group"><label>Broj fakture</label><input className="form-control" value={form.broj_fakture} onChange={e=>setForm({...form,broj_fakture:e.target.value})} placeholder="opcionalno (Eline broj)" /></div>
+                    </div>
+                    <div className="form-group">
+                        <label>Lokacija</label>
+                        <select className="form-control" value={form.lokacija_id} onChange={e=>setForm({...form,lokacija_id:Number(e.target.value)})}>
+                            {LOKACIJE.filter(l=>l.tip==='veleprodaja'||l.tip==='sjediste').map(l=><option key={l.id} value={l.id}>{l.naziv}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label>Roba (opis stavki)</label>
+                        <textarea className="form-control" rows={4} value={form.opis_artikala} onChange={e=>setForm({...form,opis_artikala:e.target.value})} placeholder={`npr.\n2x HP printer toner\n5x SSD 480GB`}></textarea>
+                    </div>
+                    <div className="form-group">
+                        <label>Napomena</label>
+                        <textarea className="form-control" rows={2} value={form.napomena} onChange={e=>setForm({...form,napomena:e.target.value})}></textarea>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Detalj modal */}
+            {detalji && (
+                <Modal isOpen={true} onClose={()=>setDetalji(null)} title={`Dugovanje #${detalji.id} — ${detalji.klijent_ime}`} footer={
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'space-between',width:'100%'}}>
+                        <div style={{display:'flex',gap:8}}>
+                            <button className="btn btn-outline" onClick={()=>setDetalji(null)}>Zatvori</button>
+                            <button className="btn btn-outline" onClick={()=>printRecap(detalji)}><i className="fas fa-print"></i> Print</button>
+                            <button className="btn btn-sm" style={{background:'#dc2626',color:'white',border:'none'}} onClick={()=>handleDelete(detalji.id)}><i className="fas fa-trash"></i></button>
+                        </div>
+                        {detalji.status !== 'placeno' && <button className="btn btn-success" onClick={()=>setUplata({dugovanje_id:detalji.id,iznos:(detalji.ukupan_iznos-detalji.placeni_iznos).toFixed(2),datum:today(),nacin:'gotovina',napomena:''})}><i className="fas fa-plus"></i> Nova uplata</button>}
+                    </div>
+                }>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
+                        <div style={{padding:12,background:'#dbeafe',borderRadius:8,textAlign:'center'}}>
+                            <div style={{fontSize:11,color:'#1e40af',marginBottom:4}}>UKUPNO</div>
+                            <div style={{fontSize:16,fontWeight:700}}>{formatCurrency(detalji.ukupan_iznos)}</div>
+                        </div>
+                        <div style={{padding:12,background:'#d1fae5',borderRadius:8,textAlign:'center'}}>
+                            <div style={{fontSize:11,color:'#065f46',marginBottom:4}}>PLAĆENO</div>
+                            <div style={{fontSize:16,fontWeight:700}}>{formatCurrency(detalji.placeni_iznos)}</div>
+                        </div>
+                        <div style={{padding:12,background:detalji.placeni_iznos<detalji.ukupan_iznos?'#fee2e2':'#d1fae5',borderRadius:8,textAlign:'center'}}>
+                            <div style={{fontSize:11,color:'#991b1b',marginBottom:4}}>PREOSTALO</div>
+                            <div style={{fontSize:16,fontWeight:700,color:detalji.placeni_iznos<detalji.ukupan_iznos?'#dc2626':'#059669'}}>{formatCurrency(detalji.ukupan_iznos-detalji.placeni_iznos)}</div>
+                        </div>
+                    </div>
+
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginBottom:12}}>
+                        {detalji.klijent_firma && <div><strong>Firma:</strong> {detalji.klijent_firma}</div>}
+                        {detalji.klijent_telefon && <div><strong>Telefon:</strong> {detalji.klijent_telefon}</div>}
+                        {detalji.klijent_jib && <div><strong>JIB:</strong> {detalji.klijent_jib}</div>}
+                        {detalji.broj_fakture && <div><strong>Faktura:</strong> #{detalji.broj_fakture}</div>}
+                        <div><strong>Datum izdavanja:</strong> {formatDate(detalji.datum_izdavanja)}</div>
+                        {detalji.rok_placanja && <div><strong>Rok plaćanja:</strong> {formatDate(detalji.rok_placanja)}</div>}
+                        <div><strong>Izdao:</strong> {detalji.izdao_ime||'-'}</div>
+                        <div><strong>Status:</strong> {statusBadge(detalji)}</div>
+                    </div>
+
+                    {detalji.opis_artikala && <div style={{padding:12,background:'var(--bg-input)',borderRadius:8,marginBottom:12}}>
+                        <div style={{fontSize:11,fontWeight:600,color:'var(--gray-500)',marginBottom:4}}>ROBA</div>
+                        <div style={{whiteSpace:'pre-wrap',fontSize:13}}>{detalji.opis_artikala}</div>
+                    </div>}
+                    {detalji.napomena && <div style={{padding:12,background:'var(--bg-input)',borderRadius:8,marginBottom:12}}>
+                        <div style={{fontSize:11,fontWeight:600,color:'var(--gray-500)',marginBottom:4}}>NAPOMENA</div>
+                        <div style={{whiteSpace:'pre-wrap',fontSize:13}}>{detalji.napomena}</div>
+                    </div>}
+
+                    <div style={{marginTop:16}}>
+                        <div style={{fontSize:13,fontWeight:600,marginBottom:8,display:'flex',justifyContent:'space-between'}}>
+                            <span><i className="fas fa-history" style={{marginRight:6}}></i>Historija uplata</span>
+                            <span style={{fontSize:11,color:'var(--gray-400)',fontWeight:400}}>{detalji.uplate?.length||0} uplata</span>
+                        </div>
+                        {detalji.uplate?.length === 0 ? (
+                            <div style={{padding:20,textAlign:'center',color:'var(--gray-400)',fontSize:13,background:'var(--bg-input)',borderRadius:8}}>
+                                Nema uplata. Klikni "Nova uplata" da dodaš.
+                            </div>
+                        ) : (
+                            <div style={{border:'1px solid var(--border-color)',borderRadius:8,overflow:'hidden'}}>
+                                {detalji.uplate?.map(u => (
+                                    <div key={u.id} style={{display:'flex',gap:12,alignItems:'center',padding:'10px 12px',borderBottom:'1px solid var(--border-color)'}}>
+                                        <div style={{width:36,height:36,borderRadius:'50%',background:'#d1fae5',color:'#065f46',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                            <i className={`fas ${u.nacin==='kartica'?'fa-credit-card':u.nacin==='virman'?'fa-university':'fa-money-bill'}`}></i>
+                                        </div>
+                                        <div style={{flex:1}}>
+                                            <div style={{fontSize:14,fontWeight:600,color:'#059669'}}>{formatCurrency(u.iznos)}</div>
+                                            <div style={{fontSize:11,color:'var(--gray-400)'}}>{formatDate(u.datum)}{u.nacin?` • ${u.nacin}`:''}{u.evidentirao_ime?` • ${u.evidentirao_ime}`:''}{u.napomena?` • ${u.napomena}`:''}</div>
+                                        </div>
+                                        <button className="btn btn-sm btn-outline" title="Obriši" onClick={()=>handleObrisiUplatu(u.id)} style={{color:'#dc2626'}}><i className="fas fa-trash"></i></button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </Modal>
+            )}
+
+            {/* Uplata modal */}
+            {uplata && (
+                <Modal isOpen={true} onClose={()=>setUplata(null)} title="Nova uplata" footer={
+                    <><button className="btn btn-outline" onClick={()=>setUplata(null)}>Otkaži</button>
+                    <button className="btn btn-success" onClick={handleUplata}><i className="fas fa-save"></i> Evidentiraj</button></>
+                }>
+                    <div className="form-row">
+                        <div className="form-group"><label>Iznos (KM) <span style={{color:'#dc2626'}}>*</span></label><input className="form-control" type="number" step="0.01" value={uplata.iznos} onChange={e=>setUplata({...uplata,iznos:e.target.value})} autoFocus /></div>
+                        <div className="form-group"><label>Datum</label><DateInput className="form-control" value={uplata.datum} onChange={e=>setUplata({...uplata,datum:e.target.value})} /></div>
+                    </div>
+                    <div className="form-group">
+                        <label>Način plaćanja</label>
+                        <select className="form-control" value={uplata.nacin} onChange={e=>setUplata({...uplata,nacin:e.target.value})}>
+                            <option value="gotovina">Gotovina</option>
+                            <option value="kartica">Kartica</option>
+                            <option value="virman">Virman</option>
+                            <option value="ostalo">Ostalo</option>
+                        </select>
+                    </div>
+                    <div className="form-group"><label>Napomena</label><input className="form-control" value={uplata.napomena} onChange={e=>setUplata({...uplata,napomena:e.target.value})} placeholder="opcionalno" /></div>
+                </Modal>
+            )}
         </div>
     );
 }
@@ -7851,6 +8230,7 @@ function App() {
         audit: { title: 'Audit log', icon: 'fas fa-history' },
         profil: { title: 'Moj profil', icon: 'fas fa-user-circle' },
         vodici: { title: 'Vodici i tutorijali', icon: 'fas fa-book' },
+        vp_dugovanja: { title: 'VP Dugovanja', icon: 'fas fa-hand-holding-usd' },
     };
 
     const renderPage = () => {
@@ -7880,6 +8260,7 @@ function App() {
             case 'audit': return <AuditLogPage currentUser={currentUser} />;
             case 'profil': return <ProfilPage currentUser={currentUser} radnici={radnici} />;
             case 'vodici': return <VodiciPage currentUser={currentUser} />;
+            case 'vp_dugovanja': return <VPDugovanjaPage currentUser={currentUser} radnici={radnici} />;
             case 'loyalty_kupilenovo': return <LoyaltyPage program="kupilenovo" currentUser={currentUser} />;
             case 'loyalty_tuttocapsule': return <LoyaltyPage program="tuttocapsule" currentUser={currentUser} />;
             case 'loyalty_staff': return <LoyaltyPage program="staff" currentUser={currentUser} />;
@@ -7963,6 +8344,9 @@ function App() {
                     </div>
                     <div className={`nav-item ${page==='leadovi_vp'?'active':''}`} onClick={()=>{setPage('leadovi_vp');setSidebarOpen(false);}}>
                         <i className="fas fa-bullhorn"></i>Sales Leadovi
+                    </div>
+                    <div className={`nav-item ${page==='vp_dugovanja'?'active':''}`} onClick={()=>{setPage('vp_dugovanja');setSidebarOpen(false);}}>
+                        <i className="fas fa-hand-holding-usd"></i>VP Dugovanja
                     </div>
                 </div>
 
