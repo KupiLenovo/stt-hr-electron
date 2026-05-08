@@ -351,6 +351,10 @@
             * { transition-duration: 0s !important; }
         }
 
+        /* Klikabilni redovi tabela */
+        tr.hover-row { transition: background 0.15s; }
+        tr.hover-row:hover { background: var(--gray-50) !important; }
+
         /* Print */
         @media print {
             .sidebar, .topbar, .mobile-bottom-nav, .mobile-menu-btn { display: none !important; }
@@ -1307,63 +1311,301 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
 
 // --- Primopredaja Smjena ---
 function PrimopredajaPage({ radnici, currentUser }) {
+    const CHECKLIST_STAVKE = [
+        { key: 'kasa_zatvorena', label: 'Kasa zatvorena i obračunata', icon: 'fa-cash-register' },
+        { key: 'sef_zakljucan', label: 'Sef zaključan', icon: 'fa-vault' },
+        { key: 'lokacija_uredna', label: 'Prodajni prostor uredan i čist', icon: 'fa-broom' },
+        { key: 'izlog_uredan', label: 'Izlog i displej u redu', icon: 'fa-store' },
+        { key: 'pos_radi', label: 'POS terminal i printer rade', icon: 'fa-receipt' },
+        { key: 'roba_evidentirana', label: 'Roba sređena i evidentirana', icon: 'fa-boxes' },
+        { key: 'alarm_postavljen', label: 'Alarm postavljen (ako se zatvara)', icon: 'fa-shield-alt' },
+    ];
+    const initForm = () => ({
+        lokacija_id: currentUser?.lokacija_id||2, predaje_id: currentUser?.id||'', preuzima_id: '',
+        smjena_predaje: 2, smjena_preuzima: 3, stanje_kase: '', stanje_sefa: '',
+        napomena: '', napomena_preuzimaocu: '',
+        checklist: Object.fromEntries(CHECKLIST_STAVKE.map(s => [s.key, false]))
+    });
+
     const [showModal, setShowModal] = useState(false);
     const [primopredaje, setPrimopredaje] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [form, setForm] = useState({ lokacija_id: currentUser?.lokacija_id||2, predaje_id: '', preuzima_id: '', smjena_predaje: 1, smjena_preuzima: 2, stanje_kase: '', napomena: '' });
+    const [form, setForm] = useState(initForm());
+    const [detalji, setDetalji] = useState(null); // klikabilni row → modal
+    const [problemModal, setProblemModal] = useState(null); // {id, opis}
+    const [filter, setFilter] = useState({ lokacija: '', datum: '', status: '' });
 
-    useEffect(() => {
-        api('/api/primopredaje').then(data => { setPrimopredaje(data); setLoading(false); }).catch(() => setLoading(false));
-    }, []);
+    const reload = () => api('/api/primopredaje').then(data => { setPrimopredaje(data); setLoading(false); }).catch(() => setLoading(false));
+    useEffect(() => { reload(); }, []);
 
     const handleSubmit = async () => {
         if (!form.predaje_id) return showAlert('Izaberi radnika koji predaje smjenu!', 'warning');
         if (!form.preuzima_id) return showAlert('Izaberi radnika koji preuzima smjenu!', 'warning');
-        if (form.predaje_id === form.preuzima_id) return showAlert('Radnik ne može sam sebi predati smjenu!', 'warning');
-        if (!form.stanje_kase) return showAlert('Unesi stanje kase!', 'warning');
+        if (Number(form.predaje_id) === Number(form.preuzima_id)) return showAlert('Radnik ne može sam sebi predati smjenu!', 'warning');
+        if (form.stanje_kase === '' || form.stanje_kase === null) return showAlert('Unesi stanje kase!', 'warning');
         try {
             await api('/api/primopredaje', 'POST', {
-                lokacija_id: form.lokacija_id, predaje_id: Number(form.predaje_id),
-                preuzima_id: Number(form.preuzima_id), stanje_kase: Number(form.stanje_kase), napomena: form.napomena
+                lokacija_id: form.lokacija_id,
+                predaje_id: Number(form.predaje_id),
+                preuzima_id: Number(form.preuzima_id),
+                smjena_predaje: form.smjena_predaje,
+                smjena_preuzima: form.smjena_preuzima,
+                stanje_kase: Number(form.stanje_kase),
+                stanje_sefa: form.stanje_sefa ? Number(form.stanje_sefa) : null,
+                checklist: JSON.stringify(form.checklist),
+                napomena: form.napomena,
+                napomena_preuzimaocu: form.napomena_preuzimaocu
             });
-            const data = await api('/api/primopredaje');
-            setPrimopredaje(data);
+            await reload();
             setShowModal(false);
-            setForm({ lokacija_id: currentUser?.lokacija_id||2, predaje_id: '', preuzima_id: '', smjena_predaje: 1, smjena_preuzima: 2, stanje_kase: '', napomena: '' });
+            setForm(initForm());
+            showAlert('Primopredaja kreirana — čeka potvrdu radnika koji preuzima.', 'success');
         } catch(e) { showAlert('Greška pri snimanju. Provjeri konekciju.', 'error'); }
+    };
+
+    const handlePotvrdi = async (id) => {
+        try {
+            await api(`/api/primopredaje/${id}/potvrdi`, 'PUT', { potvrdio_id: currentUser?.id });
+            await reload();
+            setDetalji(null);
+            showAlert('Primopredaja potvrđena.', 'success');
+        } catch(e) { showAlert('Greška pri potvrdi.', 'error'); }
+    };
+
+    const handleProblem = async () => {
+        if (!problemModal?.opis?.trim()) return showAlert('Unesi opis problema.', 'warning');
+        try {
+            await api(`/api/primopredaje/${problemModal.id}/problem`, 'PUT', { problem_opis: problemModal.opis });
+            await reload();
+            setProblemModal(null);
+            setDetalji(null);
+            showAlert('Problem evidentiran.', 'warning');
+        } catch(e) { showAlert('Greška.', 'error'); }
+    };
+
+    const printPrimopredaja = (p) => {
+        const lok = LOKACIJE.find(l => l.id === p.lokacija_id);
+        const checklist = p.checklist ? JSON.parse(p.checklist) : {};
+        const checkRows = CHECKLIST_STAVKE.map(s =>
+            `<tr><td style="padding:4px 8px"><i style="color:${checklist[s.key]?'#059669':'#dc2626'};margin-right:6px">${checklist[s.key]?'✓':'✗'}</i> ${s.label}</td></tr>`
+        ).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Primopredaja smjene #${p.id}</title>
+        <style>body{font-family:Arial;font-size:13px;padding:30px;color:#000}h1{font-size:18px;margin:0 0 4px}h2{font-size:13px;font-weight:normal;color:#666;margin:0 0 20px}.header{border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:20px;display:flex;justify-content:space-between}table{width:100%;border-collapse:collapse;margin-bottom:16px}td{padding:6px 10px;border-bottom:1px solid #eee}.lbl{color:#666;width:200px}.box{border:1px solid #ddd;padding:12px;border-radius:6px;margin-bottom:12px}.sigs{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:50px}.sig{border-top:1px solid #000;padding-top:6px;font-size:11px;color:#555}@media print{@page{margin:10mm}}</style>
+        </head><body>
+        <div class="header"><div><h1>PRIMOPREDAJA SMJENE</h1><h2>#${p.id} • ${formatDate(p.datum)}</h2></div><div style="text-align:right;font-size:11px;color:#555"><strong>STT d.o.o. Sarajevo</strong><br>${lok?.naziv||''}<br>${lok?.adresa||''}</div></div>
+        <table>
+            <tr><td class="lbl">Predaje:</td><td><strong>${p.predaje_ime||'-'}</strong> — ${getSmjena(p.smjena_predaje)?.naziv||'-'}</td></tr>
+            <tr><td class="lbl">Preuzima:</td><td><strong>${p.preuzima_ime||'-'}</strong> — ${getSmjena(p.smjena_preuzima)?.naziv||'-'}</td></tr>
+            <tr><td class="lbl">Stanje kase:</td><td><strong>${formatCurrency(p.stanje_kase)}</strong></td></tr>
+            ${p.stanje_sefa!=null?`<tr><td class="lbl">Stanje sefa:</td><td><strong>${formatCurrency(p.stanje_sefa)}</strong></td></tr>`:''}
+            <tr><td class="lbl">Status:</td><td>${p.status==='zavrsena'?'✓ Završena (potvrđena)':p.status==='problem'?'⚠ Problem':'⏳ U toku'}</td></tr>
+            ${p.potvrdjeno_at?`<tr><td class="lbl">Potvrđeno:</td><td>${new Date(p.potvrdjeno_at).toLocaleString('sr-Latn')}</td></tr>`:''}
+        </table>
+        <div class="box"><strong>Checklist:</strong><table style="margin-top:8px">${checkRows}</table></div>
+        ${p.napomena?`<div class="box"><strong>Napomena:</strong><div style="margin-top:6px;white-space:pre-wrap">${p.napomena}</div></div>`:''}
+        ${p.napomena_preuzimaocu?`<div class="box" style="background:#fef3c7;border-color:#fcd34d"><strong>Poruka za preuzimaoca:</strong><div style="margin-top:6px;white-space:pre-wrap">${p.napomena_preuzimaocu}</div></div>`:''}
+        ${p.problem_opis?`<div class="box" style="background:#fee2e2;border-color:#fca5a5"><strong>Prijavljeni problem:</strong><div style="margin-top:6px;white-space:pre-wrap">${p.problem_opis}</div></div>`:''}
+        <div class="sigs"><div class="sig">Potpis predaje:<br><br><br>${p.predaje_ime||''}</div><div class="sig">Potpis preuzimaoca:<br><br><br>${p.preuzima_ime||''}</div></div>
+        <script>window.onload=()=>window.print();<\/script>
+        </body></html>`;
+        const w = window.open('', '_blank', 'width=900,height=700');
+        w.document.write(html); w.document.close();
+    };
+
+    const filtrirane = primopredaje.filter(p => {
+        if (filter.lokacija && p.lokacija_id !== Number(filter.lokacija)) return false;
+        if (filter.datum && p.datum !== filter.datum) return false;
+        if (filter.status && p.status !== filter.status) return false;
+        return true;
+    });
+
+    const danas = primopredaje.filter(p => p.datum === today());
+    const danasUToku = danas.filter(p => p.status === 'u_toku' || (!p.status || p.status === 'zavrsena' && !p.potvrdjeno)).length;
+    const danasProblem = danas.filter(p => p.status === 'problem').length;
+    const mjesecCount = primopredaje.filter(p => p.datum?.slice(0,7) === today().slice(0,7)).length;
+
+    const statusBadge = (p) => {
+        if (p.status === 'problem') return <span className="badge badge-danger"><i className="fas fa-exclamation-triangle" style={{marginRight:4}}></i>Problem</span>;
+        if (p.status === 'zavrsena' || p.potvrdjeno) return <span className="badge badge-success"><i className="fas fa-check" style={{marginRight:4}}></i>Potvrđena</span>;
+        return <span className="badge badge-warning"><i className="fas fa-clock" style={{marginRight:4}}></i>Čeka potvrdu</span>;
     };
 
     return (
         <div className="fade-in">
-            <div style={{marginBottom:16,display:'flex',justifyContent:'flex-end'}}>
-                <button className="btn btn-primary" onClick={() => setShowModal(true)}><i className="fas fa-exchange-alt"></i> Nova primopredaja</button>
-            </div>
-            <div className="card">
-                <div className="card-header"><h3>Primopredaje smjena</h3></div>
-                <div className="card-body table-wrap">
-                    <table>
-                        <thead><tr><th>Datum</th><th>Lokacija</th><th>Predaje</th><th>Smjena</th><th>Preuzima</th><th>Smjena</th><th>Stanje kase</th><th>Status</th></tr></thead>
-                        <tbody>
-                            {primopredaje.map(p => (
-                                <tr key={p.id}>
-                                    <td>{formatDate(p.datum)}</td>
-                                    <td>{getLokacija(p.lokacija_id)?.naziv}</td>
-                                    <td>{p.predaje_ime || (radnici.find(r=>r.id===p.predaje_id) ? getRadnikName(radnici.find(r=>r.id===p.predaje_id)) : '-')}</td>
-                                    <td><span className="badge badge-info">{getSmjena(p.smjena_predaje)?.naziv}</span></td>
-                                    <td>{p.preuzima_ime || (radnici.find(r=>r.id===p.preuzima_id) ? getRadnikName(radnici.find(r=>r.id===p.preuzima_id)) : '-')}</td>
-                                    <td><span className="badge badge-info">{getSmjena(p.smjena_preuzima)?.naziv}</span></td>
-                                    <td style={{fontWeight:600}}>{formatCurrency(p.stanje_kase)}</td>
-                                    <td><span className={`badge ${p.status==='zavrsena'?'badge-success':p.status==='problem'?'badge-danger':'badge-warning'}`}>{p.status === 'zavrsena' ? 'Završena' : p.status === 'problem' ? 'Problem' : 'U toku'}</span></td>
-                                </tr>
-                            ))}
-                            {primopredaje.length === 0 && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--gray-400)',padding:32}}>Nema primopredaja</td></tr>}
-                        </tbody>
-                    </table>
+            <div className="stats-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:20}}>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#dbeafe',color:'#2563eb'}}><i className="fas fa-exchange-alt"></i></div>
+                    <div className="stat-value">{danas.length}</div><div className="stat-label">Danas</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#fef3c7',color:'#d97706'}}><i className="fas fa-clock"></i></div>
+                    <div className="stat-value">{danasUToku}</div><div className="stat-label">Čeka potvrdu</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#fee2e2',color:'#dc2626'}}><i className="fas fa-exclamation-triangle"></i></div>
+                    <div className="stat-value">{danasProblem}</div><div className="stat-label">Prijavljeni problemi</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#d1fae5',color:'#059669'}}><i className="fas fa-calendar-check"></i></div>
+                    <div className="stat-value">{mjesecCount}</div><div className="stat-label">Mjesec ukupno</div>
                 </div>
             </div>
 
+            <div style={{marginBottom:16,display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                    <select value={filter.lokacija} onChange={e=>setFilter({...filter,lokacija:e.target.value})} style={{padding:'7px 10px',borderRadius:6,border:'1px solid var(--gray-200)',fontSize:13}}>
+                        <option value="">Sve lokacije</option>
+                        {LOKACIJE.filter(l=>l.tip==='maloprodaja').map(l=><option key={l.id} value={l.id}>{l.naziv}</option>)}
+                    </select>
+                    <DateInput value={filter.datum} onChange={e=>setFilter({...filter,datum:e.target.value})} style={{padding:'7px 10px',borderRadius:6,border:'1px solid var(--gray-200)',fontSize:13}} />
+                    <select value={filter.status} onChange={e=>setFilter({...filter,status:e.target.value})} style={{padding:'7px 10px',borderRadius:6,border:'1px solid var(--gray-200)',fontSize:13}}>
+                        <option value="">Svi statusi</option>
+                        <option value="u_toku">Čeka potvrdu</option>
+                        <option value="zavrsena">Potvrđena</option>
+                        <option value="problem">Problem</option>
+                    </select>
+                    {(filter.lokacija||filter.datum||filter.status) && <button className="btn btn-sm btn-outline" onClick={()=>setFilter({lokacija:'',datum:'',status:''})}><i className="fas fa-times"></i> Reset</button>}
+                </div>
+                <button className="btn btn-primary" onClick={() => { setForm(initForm()); setShowModal(true); }}><i className="fas fa-exchange-alt"></i> Nova primopredaja</button>
+            </div>
+
+            <div className="card">
+                <div className="card-header"><h3>Primopredaje smjena <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({filtrirane.length})</span></h3></div>
+                <div className="card-body table-wrap">
+                    {loading ? <div style={{textAlign:'center',padding:40,color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavam...</div> :
+                    <table>
+                        <thead><tr><th>Datum</th><th>Lokacija</th><th>Predaje</th><th>Preuzima</th><th>Stanje kase</th><th>Status</th><th style={{width:120}}>Akcije</th></tr></thead>
+                        <tbody>
+                            {filtrirane.map(p => {
+                                const lok = LOKACIJE.find(l=>l.id===p.lokacija_id);
+                                return (
+                                    <tr key={p.id} onClick={()=>setDetalji(p)} style={{cursor:'pointer'}} className="hover-row">
+                                        <td>
+                                            <div style={{fontWeight:500}}>{formatDate(p.datum)}</div>
+                                            <div style={{fontSize:11,color:'var(--gray-400)'}}>{p.created_at?.slice(11,16)}</div>
+                                        </td>
+                                        <td><div style={{fontSize:13}}>{lok?.naziv||p.lokacija_naziv}</div></td>
+                                        <td>
+                                            <div style={{fontWeight:500,fontSize:13}}>{p.predaje_ime}</div>
+                                            <div style={{fontSize:11,color:'var(--gray-400)'}}>{getSmjena(p.smjena_predaje)?.naziv||'-'}</div>
+                                        </td>
+                                        <td>
+                                            <div style={{fontWeight:500,fontSize:13}}>{p.preuzima_ime}</div>
+                                            <div style={{fontSize:11,color:'var(--gray-400)'}}>{getSmjena(p.smjena_preuzima)?.naziv||'-'}</div>
+                                        </td>
+                                        <td style={{fontWeight:600}}>{formatCurrency(p.stanje_kase)}</td>
+                                        <td>{statusBadge(p)}</td>
+                                        <td onClick={e=>e.stopPropagation()}>
+                                            <div style={{display:'flex',gap:4}}>
+                                                <button className="btn btn-sm btn-outline" title="Detalji" onClick={()=>setDetalji(p)}><i className="fas fa-eye"></i></button>
+                                                <button className="btn btn-sm btn-outline" title="Print" onClick={()=>printPrimopredaja(p)}><i className="fas fa-print"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {filtrirane.length === 0 && <tr><td colSpan={7} style={{textAlign:'center',color:'var(--gray-400)',padding:32}}>{primopredaje.length===0?'Nema primopredaja':'Nema rezultata za odabrane filtere'}</td></tr>}
+                        </tbody>
+                    </table>}
+                </div>
+            </div>
+
+            {/* Detalj modal */}
+            {detalji && (() => {
+                const checklist = detalji.checklist ? (typeof detalji.checklist==='string' ? JSON.parse(detalji.checklist) : detalji.checklist) : {};
+                const lok = LOKACIJE.find(l=>l.id===detalji.lokacija_id);
+                const moguPotvrditi = currentUser && (currentUser.id === detalji.preuzima_id || currentUser.uloga === 'admin' || currentUser.uloga === 'voditelj') && !detalji.potvrdjeno && detalji.status !== 'problem';
+                return (
+                    <Modal isOpen={true} onClose={()=>setDetalji(null)} title={`Primopredaja #${detalji.id} — ${formatDate(detalji.datum)}`} footer={
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'space-between',width:'100%'}}>
+                            <div style={{display:'flex',gap:8}}>
+                                <button className="btn btn-outline" onClick={()=>setDetalji(null)}>Zatvori</button>
+                                <button className="btn btn-outline" onClick={()=>printPrimopredaja(detalji)}><i className="fas fa-print"></i> Print</button>
+                            </div>
+                            <div style={{display:'flex',gap:8}}>
+                                {moguPotvrditi && <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={()=>setProblemModal({id:detalji.id,opis:''})}><i className="fas fa-exclamation-triangle"></i> Prijavi problem</button>}
+                                {moguPotvrditi && <button className="btn btn-success" onClick={()=>handlePotvrdi(detalji.id)}><i className="fas fa-check"></i> Potvrdi preuzimanje</button>}
+                            </div>
+                        </div>
+                    }>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                            <div style={{padding:12,background:'var(--gray-50)',borderRadius:8}}>
+                                <div style={{fontSize:11,color:'var(--gray-500)',marginBottom:4}}>PREDAJE</div>
+                                <div style={{fontWeight:600}}>{detalji.predaje_ime}</div>
+                                <div style={{fontSize:12,color:'var(--gray-500)'}}>{getSmjena(detalji.smjena_predaje)?.naziv||'-'}</div>
+                            </div>
+                            <div style={{padding:12,background:'var(--gray-50)',borderRadius:8}}>
+                                <div style={{fontSize:11,color:'var(--gray-500)',marginBottom:4}}>PREUZIMA</div>
+                                <div style={{fontWeight:600}}>{detalji.preuzima_ime}</div>
+                                <div style={{fontSize:12,color:'var(--gray-500)'}}>{getSmjena(detalji.smjena_preuzima)?.naziv||'-'}</div>
+                            </div>
+                        </div>
+
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
+                            <div style={{padding:12,background:'#dbeafe',borderRadius:8,textAlign:'center'}}>
+                                <div style={{fontSize:11,color:'#1e40af',marginBottom:4}}>LOKACIJA</div>
+                                <div style={{fontWeight:600,fontSize:13}}>{lok?.naziv||'-'}</div>
+                            </div>
+                            <div style={{padding:12,background:'#d1fae5',borderRadius:8,textAlign:'center'}}>
+                                <div style={{fontSize:11,color:'#065f46',marginBottom:4}}>STANJE KASE</div>
+                                <div style={{fontWeight:700,fontSize:16}}>{formatCurrency(detalji.stanje_kase)}</div>
+                            </div>
+                            <div style={{padding:12,background:'#fef3c7',borderRadius:8,textAlign:'center'}}>
+                                <div style={{fontSize:11,color:'#92400e',marginBottom:4}}>STANJE SEFA</div>
+                                <div style={{fontWeight:700,fontSize:16}}>{detalji.stanje_sefa!=null?formatCurrency(detalji.stanje_sefa):'—'}</div>
+                            </div>
+                        </div>
+
+                        <div style={{marginBottom:16}}>
+                            <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Checklist</div>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                                {CHECKLIST_STAVKE.map(s => (
+                                    <div key={s.key} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--gray-50)',borderRadius:6,fontSize:12}}>
+                                        <i className={`fas ${checklist[s.key]?'fa-check-circle':'fa-times-circle'}`} style={{color:checklist[s.key]?'#059669':'#dc2626'}}></i>
+                                        <span>{s.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {detalji.napomena_preuzimaocu && <div style={{padding:12,background:'#fef3c7',border:'1px solid #fcd34d',borderRadius:8,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:600,color:'#92400e',marginBottom:4}}><i className="fas fa-envelope" style={{marginRight:4}}></i>PORUKA ZA PREUZIMAOCA</div>
+                            <div style={{whiteSpace:'pre-wrap',fontSize:13}}>{detalji.napomena_preuzimaocu}</div>
+                        </div>}
+
+                        {detalji.napomena && <div style={{padding:12,background:'var(--gray-50)',borderRadius:8,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:600,color:'var(--gray-500)',marginBottom:4}}>NAPOMENA</div>
+                            <div style={{whiteSpace:'pre-wrap',fontSize:13}}>{detalji.napomena}</div>
+                        </div>}
+
+                        {detalji.problem_opis && <div style={{padding:12,background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:8,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:600,color:'#991b1b',marginBottom:4}}><i className="fas fa-exclamation-triangle" style={{marginRight:4}}></i>PRIJAVLJENI PROBLEM</div>
+                            <div style={{whiteSpace:'pre-wrap',fontSize:13}}>{detalji.problem_opis}</div>
+                        </div>}
+
+                        {detalji.potvrdjeno_at && <div style={{padding:8,background:'#d1fae5',borderRadius:6,fontSize:12,color:'#065f46'}}>
+                            <i className="fas fa-check-circle"></i> Potvrđeno: {new Date(detalji.potvrdjeno_at).toLocaleString('sr-Latn')}
+                        </div>}
+                    </Modal>
+                );
+            })()}
+
+            {/* Problem modal */}
+            {problemModal && (
+                <Modal isOpen={true} onClose={()=>setProblemModal(null)} title="Prijavi problem kod primopredaje" footer={
+                    <><button className="btn btn-outline" onClick={()=>setProblemModal(null)}>Otkaži</button>
+                    <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={handleProblem}><i className="fas fa-exclamation-triangle"></i> Prijavi problem</button></>
+                }>
+                    <div className="form-group">
+                        <label>Opis problema <span style={{color:'#dc2626'}}>*</span></label>
+                        <textarea className="form-control" rows={5} value={problemModal.opis} onChange={e=>setProblemModal({...problemModal,opis:e.target.value})} placeholder="Npr: Manjak u kasi 50 KM, izlog nesređen, kasa nije zatvorena..."></textarea>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Nova primopredaja */}
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nova primopredaja smjene" footer={
-                <><button className="btn btn-outline" onClick={() => setShowModal(false)}>Otkaži</button><button className="btn btn-primary" onClick={handleSubmit}>Potvrdi primopredaju</button></>
+                <><button className="btn btn-outline" onClick={() => setShowModal(false)}>Otkaži</button><button className="btn btn-primary" onClick={handleSubmit}><i className="fas fa-paper-plane"></i> Pošalji preuzimaocu</button></>
             }>
                 <div className="form-row">
                     <div className="form-group">
@@ -1371,10 +1613,6 @@ function PrimopredajaPage({ radnici, currentUser }) {
                         <select className="form-control" value={form.lokacija_id} onChange={e => setForm({...form, lokacija_id: Number(e.target.value)})}>
                             {LOKACIJE.filter(l=>l.tip==='maloprodaja').map(l => <option key={l.id} value={l.id}>{l.naziv}</option>)}
                         </select>
-                    </div>
-                    <div className="form-group">
-                        <label>Stanje kase (KM) <span style={{color:'#dc2626'}}>*</span></label>
-                        <input className="form-control" type="number" step="0.01" value={form.stanje_kase} onChange={e => setForm({...form, stanje_kase: e.target.value})} placeholder="0.00" />
                     </div>
                 </div>
                 <div className="form-row">
@@ -1388,7 +1626,7 @@ function PrimopredajaPage({ radnici, currentUser }) {
                     <div className="form-group">
                         <label>Smjena (predaje)</label>
                         <select className="form-control" value={form.smjena_predaje} onChange={e => setForm({...form, smjena_predaje: Number(e.target.value)})}>
-                            {SMJENE.map(s => <option key={s.id} value={s.id}>{s.naziv} ({s.pocetak}-{s.kraj})</option>)}
+                            {SMJENE.map(s => <option key={s.id} value={s.id}>{s.naziv}</option>)}
                         </select>
                     </div>
                 </div>
@@ -1397,18 +1635,46 @@ function PrimopredajaPage({ radnici, currentUser }) {
                         <label>Preuzima (radnik) <span style={{color:'#dc2626'}}>*</span></label>
                         <select className="form-control" value={form.preuzima_id} onChange={e => setForm({...form, preuzima_id: e.target.value})}>
                             <option value="">-- Izaberi --</option>
-                            {radnici.filter(r=>r.aktivan).map(r => <option key={r.id} value={r.id}>{getRadnikName(r)}</option>)}
+                            {radnici.filter(r=>r.aktivan && r.id !== Number(form.predaje_id)).map(r => <option key={r.id} value={r.id}>{getRadnikName(r)}</option>)}
                         </select>
                     </div>
                     <div className="form-group">
                         <label>Smjena (preuzima)</label>
                         <select className="form-control" value={form.smjena_preuzima} onChange={e => setForm({...form, smjena_preuzima: Number(e.target.value)})}>
-                            {SMJENE.map(s => <option key={s.id} value={s.id}>{s.naziv} ({s.pocetak}-{s.kraj})</option>)}
+                            {SMJENE.map(s => <option key={s.id} value={s.id}>{s.naziv}</option>)}
                         </select>
                     </div>
                 </div>
+                <div className="form-row">
+                    <div className="form-group">
+                        <label>Stanje kase (KM) <span style={{color:'#dc2626'}}>*</span></label>
+                        <input className="form-control" type="number" step="0.01" value={form.stanje_kase} onChange={e => setForm({...form, stanje_kase: e.target.value})} placeholder="0.00" />
+                    </div>
+                    <div className="form-group">
+                        <label>Stanje sefa (KM)</label>
+                        <input className="form-control" type="number" step="0.01" value={form.stanje_sefa} onChange={e => setForm({...form, stanje_sefa: e.target.value})} placeholder="0.00 (opcionalno)" />
+                    </div>
+                </div>
+
                 <div className="form-group">
-                    <label>Napomena</label>
+                    <label style={{marginBottom:8,display:'block'}}>Checklist primopredaje</label>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr',gap:6,padding:12,background:'var(--gray-50)',borderRadius:8}}>
+                        {CHECKLIST_STAVKE.map(s => (
+                            <label key={s.key} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'6px 8px',borderRadius:6,background:form.checklist[s.key]?'#d1fae5':'transparent',transition:'background 0.2s'}}>
+                                <input type="checkbox" checked={form.checklist[s.key]} onChange={e=>setForm({...form,checklist:{...form.checklist,[s.key]:e.target.checked}})} style={{width:18,height:18,cursor:'pointer'}} />
+                                <i className={`fas ${s.icon}`} style={{width:16,color:form.checklist[s.key]?'#059669':'var(--gray-400)'}}></i>
+                                <span style={{fontSize:13}}>{s.label}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="form-group">
+                    <label><i className="fas fa-envelope" style={{marginRight:4,color:'#d97706'}}></i>Poruka za preuzimaoca</label>
+                    <textarea className="form-control" value={form.napomena_preuzimaocu} onChange={e => setForm({...form, napomena_preuzimaocu: e.target.value})} placeholder="Stvari na koje sljedeći radnik treba obratiti pažnju..."></textarea>
+                </div>
+                <div className="form-group">
+                    <label>Opšta napomena</label>
                     <textarea className="form-control" value={form.napomena} onChange={e => setForm({...form, napomena: e.target.value})} placeholder="Dodatne informacije..."></textarea>
                 </div>
             </Modal>
