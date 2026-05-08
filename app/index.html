@@ -5926,6 +5926,192 @@ function DateInput({ value, onChange, className, style, placeholder }) {
         placeholder={placeholder || 'dd/mm/yyyy'} maxLength={10} />;
 }
 
+// ============================================================
+// --- Profil radnika ---
+// ============================================================
+function ProfilPage({ currentUser, radnici }) {
+    const [stats, setStats] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [pinForm, setPinForm] = useState({ stari: '', novi: '', ponovi: '', err: '', loading: false });
+    const [showPin, setShowPin] = useState(false);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const [evidencija, odmori, polozi, zadaci, leadovi] = await Promise.all([
+                    api('/api/evidencija').catch(() => []),
+                    api('/api/odmori').catch(() => []),
+                    api('/api/polozi').catch(() => []),
+                    api('/api/zadaci').catch(() => []),
+                    api('/api/leadovi').catch(() => []),
+                ]);
+                const now = new Date();
+                const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+                const last30 = new Date(now - 30*24*60*60*1000).toISOString().split('T')[0];
+
+                const myEv = evidencija.filter(e => e.radnik_id === currentUser.id);
+                const thisMonthEv = myEv.filter(e => e.datum && e.datum.startsWith(thisMonth));
+                const radioDana = thisMonthEv.filter(e => e.dolazak).length;
+                const ukupnoMs = thisMonthEv.reduce((acc, e) => {
+                    if (!e.dolazak || !e.odlazak) return acc;
+                    const pausaMs = (e.pocetak_pauze && e.kraj_pauze) ? (new Date(e.kraj_pauze) - new Date(e.pocetak_pauze)) : 0;
+                    return acc + (new Date(e.odlazak) - new Date(e.dolazak)) - pausaMs;
+                }, 0);
+                const prosjekMin = radioDana > 0 ? Math.round((ukupnoMs / radioDana) / 60000) : 0;
+
+                const myOdmori = odmori.filter(o => o.radnik_id === currentUser.id);
+                const odobrenGO = myOdmori.filter(o => (o.status === 'odobren' || o.status === 'iskoristen') && o.tip === 'godisnji');
+                const iskorisceniDani = odobrenGO.reduce((acc, o) => acc + (o.broj_dana || 0), 0);
+                const naChekanju = myOdmori.filter(o => o.status === 'na_cekanju').length;
+                const pravoDana = calculateOdmor(currentUser);
+
+                const myPolozi = polozi.filter(p => p.radnik_id === currentUser.id && p.datum >= last30).length;
+                const myZadaciDone = zadaci.filter(z => z.zavrsio_id === currentUser.id).length;
+                const myLeadovi = leadovi.filter(l => l.radnik_id === currentUser.id).length;
+
+                // Kasnjenja — dani gdje je dolazak bio kasno (> 9:00 za STUP, > 10:10 za MP)
+                const kasnjenja = myEv.filter(e => {
+                    if (!e.dolazak) return false;
+                    const h = new Date(e.dolazak);
+                    const limitMinutes = currentUser.lokacija_id === 1 ? 9*60+5 : 10*60+10;
+                    return h.getHours()*60 + h.getMinutes() > limitMinutes;
+                }).length;
+
+                setStats({ radioDana, prosjekMin, iskorisceniDani, pravoDana, naChekanju, myPolozi, myZadaciDone, myLeadovi, kasnjenja });
+            } catch(e) { setStats({}); }
+            setLoading(false);
+        };
+        load();
+    }, []);
+
+    const handlePinChange = async () => {
+        if (!/^\d{4}$/.test(pinForm.novi)) { setPinForm(p=>({...p, err:'PIN mora biti tacno 4 cifre'})); return; }
+        if (pinForm.novi !== pinForm.ponovi) { setPinForm(p=>({...p, err:'PIN-ovi se ne podudaraju'})); return; }
+        setPinForm(p=>({...p, loading:true, err:''}));
+        try {
+            await api('/api/auth/pin/postavi', 'POST', { radnik_id: currentUser.id, stari_pin: pinForm.stari, novi_pin: pinForm.novi });
+            setShowPin(false);
+            setPinForm({ stari:'', novi:'', ponovi:'', err:'', loading:false });
+            showAlert('PIN uspjesno promijenjen!', 'success');
+        } catch(e) { setPinForm(p=>({...p, loading:false, err:'Greska — provjeri stari PIN'})); }
+    };
+
+    const pozicija = getPozicija(currentUser.pozicija_id);
+    const lokacija = getLokacija(currentUser.lokacija_id);
+    const msNaPoslu = new Date() - new Date(currentUser.datum_zaposlenja);
+    const godineNaPoslu = Math.floor(msNaPoslu / (365.25*24*60*60*1000));
+    const mjeseciNaPoslu = Math.floor((msNaPoslu % (365.25*24*60*60*1000)) / (30.44*24*60*60*1000));
+    const uloge = { admin: 'Administrator', voditelj: 'Voditelj', radnik: 'Radnik' };
+
+    const StatCard = ({ icon, label, value, color, sub }) => (
+        <div style={{background:'white',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',textAlign:'center'}}>
+            <div style={{fontSize:22,color: color||'var(--primary)',marginBottom:6}}><i className={`fas ${icon}`}></i></div>
+            <div style={{fontSize:24,fontWeight:700,color:'var(--gray-800)'}}>{value}</div>
+            <div style={{fontSize:12,color:'var(--gray-500)',marginTop:2}}>{label}</div>
+            {sub && <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>{sub}</div>}
+        </div>
+    );
+
+    return (
+        <div className="fade-in" style={{maxWidth:720,margin:'0 auto'}}>
+
+            {/* Header kartice */}
+            <div style={{background:'linear-gradient(135deg,var(--primary-dark) 0%,var(--primary) 100%)',borderRadius:16,padding:28,marginBottom:20,color:'white',display:'flex',alignItems:'center',gap:24,flexWrap:'wrap'}}>
+                <div style={{width:80,height:80,borderRadius:20,background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32,fontWeight:700,flexShrink:0,border:'3px solid rgba(255,255,255,0.3)'}}>
+                    {currentUser.ime[0]}{currentUser.prezime?.[0]||''}
+                </div>
+                <div style={{flex:1}}>
+                    <div style={{fontSize:24,fontWeight:700,marginBottom:4}}>{currentUser.ime} {currentUser.prezime}</div>
+                    <div style={{opacity:0.85,fontSize:15,marginBottom:6}}>
+                        <i className="fas fa-briefcase" style={{marginRight:6,opacity:0.7}}></i>{pozicija?.naziv || '—'}
+                        <span style={{margin:'0 10px',opacity:0.5}}>·</span>
+                        <i className="fas fa-map-marker-alt" style={{marginRight:6,opacity:0.7}}></i>{lokacija?.naziv || '—'}
+                    </div>
+                    <div style={{display:'flex',gap:16,flexWrap:'wrap',fontSize:13,opacity:0.8}}>
+                        <span><i className="fas fa-id-badge" style={{marginRight:5}}></i>{uloge[currentUser.uloga] || currentUser.uloga}</span>
+                        {currentUser.telefon && <span><i className="fas fa-phone" style={{marginRight:5}}></i>{currentUser.telefon}</span>}
+                        <span><i className="fas fa-calendar-alt" style={{marginRight:5}}></i>Od {formatDate(currentUser.datum_zaposlenja)}
+                            {godineNaPoslu > 0 ? ` (${godineNaPoslu}g ${mjeseciNaPoslu}mj)` : ` (${mjeseciNaPoslu} mj)`}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Stats ovaj mesec */}
+            <div style={{marginBottom:8,fontWeight:600,fontSize:13,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:1}}>
+                Ovaj mjesec
+            </div>
+            {loading ? (
+                <div style={{textAlign:'center',padding:40,color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin" style={{fontSize:24}}></i></div>
+            ) : stats && (
+                <>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:12,marginBottom:20}}>
+                    <StatCard icon="fa-calendar-check" label="Radnih dana" value={stats.radioDana ?? '—'} color="#2563eb" />
+                    <StatCard icon="fa-clock" label="Prosjek/dan" value={stats.prosjekMin > 0 ? `${Math.floor(stats.prosjekMin/60)}h ${stats.prosjekMin%60}m` : '—'} color="#7c3aed" />
+                    <StatCard icon="fa-exclamation-circle" label="Kasnjenja" value={stats.kasnjenja ?? 0} color={stats.kasnjenja > 0 ? '#dc2626' : '#059669'} />
+                    <StatCard icon="fa-umbrella-beach" label="GO iskor." value={`${stats.iskorisceniDani ?? 0}d`} color="#d97706" sub={stats.naChekanju > 0 ? `+${stats.naChekanju} na čekanju` : ''} />
+                </div>
+
+                {/* Godisnji odmor progress bar */}
+                <div style={{background:'white',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                        <span style={{fontWeight:600,fontSize:14}}><i className="fas fa-umbrella-beach" style={{marginRight:8,color:'#d97706'}}></i>Godišnji odmor</span>
+                        <span style={{fontSize:13,color:'var(--gray-500)'}}>
+                            {stats.iskorisceniDani} / {stats.pravoDana} dana
+                        </span>
+                    </div>
+                    <div style={{height:10,background:'var(--gray-100)',borderRadius:8,overflow:'hidden'}}>
+                        <div style={{height:'100%',width:`${Math.min(100, (stats.iskorisceniDani / stats.pravoDana)*100)}%`,background: stats.iskorisceniDani >= stats.pravoDana ? '#dc2626' : '#d97706',borderRadius:8,transition:'width 0.5s'}}></div>
+                    </div>
+                    <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:12,color:'var(--gray-500)'}}>
+                        <span>Iskorišteno: {stats.iskorisceniDani} dana</span>
+                        <span style={{fontWeight:600,color: stats.pravoDana - stats.iskorisceniDani > 0 ? '#059669' : '#dc2626'}}>
+                            Preostalo: {Math.max(0, stats.pravoDana - stats.iskorisceniDani)} dana
+                        </span>
+                    </div>
+                </div>
+
+                {/* Aktivnost zadnjih 30 dana */}
+                <div style={{marginBottom:8,fontWeight:600,fontSize:13,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:1}}>
+                    Aktivnost — zadnjih 30 dana
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:12,marginBottom:20}}>
+                    <StatCard icon="fa-tasks" label="Zadataka završ." value={stats.myZadaciDone ?? 0} color="#059669" />
+                    <StatCard icon="fa-bullhorn" label="Sales leadova" value={stats.myLeadovi ?? 0} color="#7c3aed" />
+                    <StatCard icon="fa-cash-register" label="Pologa pazara" value={stats.myPolozi ?? 0} color="#2563eb" />
+                </div>
+                </>
+            )}
+
+            {/* Sigurnost — PIN */}
+            <div style={{background:'white',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+                <div style={{fontWeight:600,fontSize:14,marginBottom:12}}><i className="fas fa-lock" style={{marginRight:8,color:'var(--gray-400)'}}></i>Sigurnost</div>
+                {!showPin ? (
+                    <button className="btn btn-outline" onClick={()=>setShowPin(true)}><i className="fas fa-key" style={{marginRight:6}}></i>Promijeni PIN</button>
+                ) : (
+                    <div>
+                        {['stari','novi','ponovi'].map((f,i) => (
+                            <div className="form-group" key={f} style={{marginBottom:10}}>
+                                <label>{f==='stari'?'Trenutni PIN':f==='novi'?'Novi PIN':'Ponovi novi PIN'}</label>
+                                <input type="password" inputMode="numeric" maxLength={4} className="form-control"
+                                    style={{maxWidth:160,letterSpacing:8,fontSize:20}}
+                                    value={pinForm[f]} onChange={e=>setPinForm(p=>({...p,[f]:e.target.value.replace(/\D/,'')}))} />
+                            </div>
+                        ))}
+                        {pinForm.err && <div style={{color:'#dc2626',fontSize:13,marginBottom:10}}>{pinForm.err}</div>}
+                        <div style={{display:'flex',gap:8}}>
+                            <button className="btn btn-primary" onClick={handlePinChange} disabled={pinForm.loading}>
+                                {pinForm.loading ? <i className="fas fa-spinner fa-spin"></i> : 'Spremi PIN'}
+                            </button>
+                            <button className="btn btn-outline" onClick={()=>{setShowPin(false);setPinForm({stari:'',novi:'',ponovi:'',err:'',loading:false});}}>Otkaži</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function App() {
     const [page, setPage] = useState('centrala');
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -6411,6 +6597,7 @@ function App() {
         izvjestaji: { title: 'Izvještaji', icon: 'fas fa-chart-bar' },
         radnici: { title: 'Radnici', icon: 'fas fa-users-cog' },
         audit: { title: 'Audit log', icon: 'fas fa-history' },
+        profil: { title: 'Moj profil', icon: 'fas fa-user-circle' },
     };
 
     const renderPage = () => {
@@ -6438,6 +6625,7 @@ function App() {
             case 'izvjestaji': return <IzvjestajiPage radnici={radnici} currentUser={currentUser} />;
             case 'radnici': return <RadniciPage radnici={radnici} setRadnici={setRadnici} currentUser={currentUser} />;
             case 'audit': return <AuditLogPage currentUser={currentUser} />;
+            case 'profil': return <ProfilPage currentUser={currentUser} radnici={radnici} />;
             case 'loyalty_kupilenovo': return <LoyaltyPage program="kupilenovo" currentUser={currentUser} />;
             case 'loyalty_tuttocapsule': return <LoyaltyPage program="tuttocapsule" currentUser={currentUser} />;
             case 'loyalty_staff': return <LoyaltyPage program="staff" currentUser={currentUser} />;
@@ -6732,7 +6920,7 @@ function App() {
                             )}
                         </div>
 
-                        <div className="avatar" title={`${currentUser.ime} ${currentUser.prezime}`}>{currentUser.ime[0]}{currentUser.prezime?.[0]||''}</div>
+                        <div className="avatar" title={`${currentUser.ime} ${currentUser.prezime} — Moj profil`} onClick={()=>{setPage('profil');setSidebarOpen(false);}} style={{cursor:'pointer'}}>{currentUser.ime[0]}{currentUser.prezime?.[0]||''}</div>
                     </div>
                 </div>
 
