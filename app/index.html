@@ -605,13 +605,13 @@ function ServerSetupPage({ onConnected }) {
 // DATA STORE (Simulacija baze podataka)
 // ==========================================
 const LOKACIJE = [
-    { id: 1, naziv: 'STUP - Sjedište', tip: 'sjediste', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:00-16:00', radni_dani: [1,2,3,4,5], telefon_fixni: ['033 448 504', '033 864 519'] },
-    { id: 2, naziv: 'Tutto Capsule SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon_fixni: ['033 869 049'] },
-    { id: 3, naziv: 'Kupilenovo Shop SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon: '061 197 290', telefon_fixni: ['033 869 083'] },
-    { id: 4, naziv: 'Tutto Capsule Merkator Ložionička', tip: 'maloprodaja', adresa: 'Merkator, Ložionička, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6] },
-    { id: 5, naziv: 'TC Shop Merkator Dobrinja (U PRIPREMI)', tip: 'maloprodaja', adresa: 'Merkator, Dobrinja, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], aktivan: false },
+    { id: 1, naziv: 'STUP - Sjedište', tip: 'sjediste', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:30', radni_dani: [1,2,3,4,5], telefon_fixni: ['033 448 504', '033 864 519'], pocetak_min: 510 },
+    { id: 2, naziv: 'Tutto Capsule SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon_fixni: ['033 869 049'], pocetak_min: 600 },
+    { id: 3, naziv: 'Kupilenovo Shop SCC', tip: 'maloprodaja', adresa: 'Sarajevo City Center (SCC)', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], telefon: '061 197 290', telefon_fixni: ['033 869 083'], pocetak_min: 600 },
+    { id: 4, naziv: 'Tutto Capsule Merkator Ložionička', tip: 'maloprodaja', adresa: 'Merkator, Ložionička, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], pocetak_min: 600 },
+    { id: 5, naziv: 'TC Shop Merkator Dobrinja (U PRIPREMI)', tip: 'maloprodaja', adresa: 'Merkator, Dobrinja, Sarajevo', radno_vrijeme: 'Pon-Sub 10:00-22:00 (2 smjene)', radni_dani: [1,2,3,4,5,6], aktivan: false, pocetak_min: 600 },
     { id: 6, naziv: 'TC La Caffetteria (U PRIPREMI)', tip: 'maloprodaja', adresa: 'Sarajevo', radno_vrijeme: 'TBD', radni_dani: [], aktivan: false },
-    { id: 7, naziv: 'VP Skladište STUP', tip: 'veleprodaja', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:00-16:00', radni_dani: [1,2,3,4,5] },
+    { id: 7, naziv: 'VP Skladište STUP', tip: 'veleprodaja', adresa: 'Hifzi Bjelavca 34, Sarajevo', radno_vrijeme: 'Pon-Pet 08:30-16:30', radni_dani: [1,2,3,4,5], pocetak_min: 510 },
 ];
 
 const POZICIJE = [
@@ -624,7 +624,7 @@ const POZICIJE = [
 ];
 
 const SMJENE = [
-    { id: 1, naziv: 'STUP (08-16)', pocetak: '08:00', kraj: '16:00', tip: 'stup' },
+    { id: 1, naziv: 'STUP (08:30-16:30)', pocetak: '08:30', kraj: '16:30', tip: 'stup' },
     { id: 2, naziv: 'I smjena (10-16)', pocetak: '10:00', kraj: '16:00', tip: 'mp' },
     { id: 3, naziv: 'II smjena (16-22)', pocetak: '16:00', kraj: '22:00', tip: 'mp' },
     { id: 4, naziv: 'Cijeli dan MP (10-22)', pocetak: '10:00', kraj: '22:00', tip: 'mp' },
@@ -2864,17 +2864,14 @@ function KasnjenjaPage({ radnici, currentUser }) {
         const lok = LOKACIJE.find(l => l.id === e.lokacija_id);
         if (!lok) return false;
         const dolazakTime = new Date(e.dolazak);
-        const h = dolazakTime.getHours();
-        const m = dolazakTime.getMinutes();
-        const dolazakMin = h * 60 + m;
-        // STUP počinje u 8:00, MP u 10:00
-        const pocetakMin = lok.tip === 'sjediste' || lok.tip === 'veleprodaja' ? 8 * 60 : 10 * 60;
+        const dolazakMin = dolazakTime.getHours() * 60 + dolazakTime.getMinutes();
+        const pocetakMin = lok.pocetak_min ?? (lok.tip === 'sjediste' || lok.tip === 'veleprodaja' ? 510 : 600);
         return dolazakMin > pocetakMin + 5; // 5 min tolerancija
     }).map(e => {
         const lok = LOKACIJE.find(l => l.id === e.lokacija_id);
         const dolazakTime = new Date(e.dolazak);
         const dolazakMin = dolazakTime.getHours() * 60 + dolazakTime.getMinutes();
-        const pocetakMin = lok.tip === 'sjediste' || lok.tip === 'veleprodaja' ? 8 * 60 : 10 * 60;
+        const pocetakMin = lok.pocetak_min ?? (lok.tip === 'sjediste' || lok.tip === 'veleprodaja' ? 510 : 600);
         return { ...e, minuta_kasnjenja: dolazakMin - pocetakMin, lokacija: lok };
     });
 
@@ -5972,9 +5969,10 @@ function ProfilPage({ currentUser, radnici }) {
                 // Kasnjenja — dani gdje je dolazak bio kasno (> 9:00 za STUP, > 10:10 za MP)
                 const kasnjenja = myEv.filter(e => {
                     if (!e.dolazak) return false;
-                    const h = new Date(e.dolazak);
-                    const limitMinutes = currentUser.lokacija_id === 1 ? 9*60+5 : 10*60+10;
-                    return h.getHours()*60 + h.getMinutes() > limitMinutes;
+                    const lok = LOKACIJE.find(l => l.id === (currentUser.lokacija_id));
+                    const pocetakMin = lok?.pocetak_min ?? (lok?.tip === 'sjediste' || lok?.tip === 'veleprodaja' ? 510 : 600);
+                    const dolazakMin = new Date(e.dolazak).getHours()*60 + new Date(e.dolazak).getMinutes();
+                    return dolazakMin > pocetakMin + 5;
                 }).length;
 
                 setStats({ radioDana, prosjekMin, iskorisceniDani, pravoDana, naChekanju, myPolozi, myZadaciDone, myLeadovi, kasnjenja });
