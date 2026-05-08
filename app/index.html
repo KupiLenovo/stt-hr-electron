@@ -7520,6 +7520,353 @@ function VPDugovanjaPage({ currentUser, radnici }) {
 }
 
 // =====================================================================
+// LOKACIJE — administracija + profil sa stats
+// =====================================================================
+function LokacijePage({ currentUser }) {
+    const [lokacije, setLokacije] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selektovana, setSelektovana] = useState(null); // { lokacija, radnici, pazar*, ... }
+    const [edit, setEdit] = useState(null); // null | new | id
+    const [form, setForm] = useState(null);
+    const isAdmin = currentUser?.uloga === 'admin';
+
+    const load = () => api('/api/lokacije').then(d => { setLokacije(d); setLoading(false); }).catch(()=>setLoading(false));
+    useEffect(() => { load(); }, []);
+
+    const otvoriProfil = async (id) => {
+        try {
+            const profil = await api(`/api/lokacije/${id}/profil`);
+            setSelektovana(profil);
+        } catch(e) { showAlert('Greška pri učitavanju.', 'error'); }
+    };
+
+    const otvoriEdit = (lok) => {
+        setForm(lok ? {
+            ...lok,
+            gps_lat: lok.gps_lat || '',
+            gps_lng: lok.gps_lng || '',
+            gps_radius: lok.gps_radius || '',
+            pocetak_min: lok.pocetak_min || '',
+            kraj_min: lok.kraj_min || '',
+        } : {
+            naziv: '', tip: 'maloprodaja', adresa: '', telefon: '', gps_lat: '', gps_lng: '', gps_radius: 80,
+            radno_vrijeme: '', pocetak_min: '', kraj_min: '', napomena: '', radni_dani: '1,2,3,4,5,6'
+        });
+        setEdit(lok ? lok.id : 'new');
+    };
+
+    const handleSave = async () => {
+        if (!form.naziv?.trim()) return showAlert('Unesi naziv lokacije.', 'warning');
+        const payload = {
+            naziv: form.naziv,
+            tip: form.tip,
+            adresa: form.adresa,
+            telefon: form.telefon,
+            gps_lat: form.gps_lat ? Number(form.gps_lat) : null,
+            gps_lng: form.gps_lng ? Number(form.gps_lng) : null,
+            gps_radius: form.gps_radius ? Number(form.gps_radius) : null,
+            radno_vrijeme: form.radno_vrijeme,
+            pocetak_min: form.pocetak_min ? Number(form.pocetak_min) : null,
+            kraj_min: form.kraj_min ? Number(form.kraj_min) : null,
+            napomena: form.napomena,
+            radni_dani: form.radni_dani,
+            requester_id: currentUser.id,
+        };
+        try {
+            if (edit === 'new') await api('/api/lokacije', 'POST', payload);
+            else await api(`/api/lokacije/${edit}`, 'PUT', { ...payload, aktivan: form.aktivan ?? 1 });
+            await load();
+            setEdit(null);
+            setForm(null);
+            showAlert('Spremljeno. Restartuj aplikaciju da bi promjena bila vidljiva u svim dropdown-ima.', 'success');
+        } catch(e) { showAlert('Greška: ' + (e.message||''), 'error'); }
+    };
+
+    const handleDelete = async (lok) => {
+        if (!await askConfirm(`Obrisati lokaciju "${lok.naziv}"?`)) return;
+        try {
+            const r = await api(`/api/lokacije/${lok.id}`, 'DELETE', { requester_id: currentUser.id });
+            await load();
+            setSelektovana(null);
+            showAlert('Lokacija obrisana.', 'success');
+        } catch(e) {
+            // 409 = ima vezane podatke
+            if (e.message?.includes('409') || e.message?.includes('vezane')) {
+                if (await askConfirm(`Lokacija ima vezane podatke (radnike, pazar). Označiti kao neaktivnu umjesto da se obriše?`)) {
+                    try {
+                        await api(`/api/lokacije/${lok.id}`, 'DELETE', { requester_id: currentUser.id, force: true });
+                        await load();
+                        setSelektovana(null);
+                        showAlert('Lokacija deaktivirana.', 'success');
+                    } catch(e2) { showAlert('Greška.', 'error'); }
+                }
+            } else {
+                showAlert('Greška pri brisanju.', 'error');
+            }
+        }
+    };
+
+    const tipBadge = (tip) => {
+        const map = { maloprodaja: ['🛒 Maloprodaja','#10b981'], sjediste: ['🏢 Sjedište','#6366f1'], veleprodaja: ['📦 Veleprodaja','#f59e0b'] };
+        const [txt, color] = map[tip] || [tip, '#6b7280'];
+        return <span style={{fontSize:11,padding:'3px 8px',borderRadius:12,background:color+'20',color,fontWeight:600}}>{txt}</span>;
+    };
+
+    if (selektovana) {
+        const lok = selektovana.lokacija;
+        const MJESECI_KRATKO = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
+        return (
+            <div className="fade-in">
+                <div style={{marginBottom:16,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    <button className="btn btn-outline" onClick={()=>setSelektovana(null)}><i className="fas fa-arrow-left"></i> Nazad</button>
+                    {isAdmin && <button className="btn btn-outline" onClick={()=>otvoriEdit(lok)}><i className="fas fa-edit"></i> Uredi</button>}
+                    {isAdmin && <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={()=>handleDelete(lok)}><i className="fas fa-trash"></i> Obriši</button>}
+                </div>
+
+                {/* Header card */}
+                <div style={{padding:24,borderRadius:14,background:'linear-gradient(135deg, #1e40af, #3b82f6)',color:'white',marginBottom:16}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:12}}>
+                        <div>
+                            <div style={{fontSize:11,opacity:0.8,textTransform:'uppercase',letterSpacing:1}}>Profil lokacije</div>
+                            <h2 style={{fontSize:24,fontWeight:700,margin:'4px 0 8px',color:'white'}}>{lok.naziv}</h2>
+                            <div style={{fontSize:13,opacity:0.9}}>
+                                {lok.adresa && <><i className="fas fa-map-marker-alt" style={{marginRight:6}}></i>{lok.adresa}<br/></>}
+                                {lok.telefon && <><i className="fas fa-phone" style={{marginRight:6}}></i>{lok.telefon}<br/></>}
+                                {lok.radno_vrijeme && <><i className="fas fa-clock" style={{marginRight:6}}></i>{lok.radno_vrijeme}</>}
+                            </div>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                            <div style={{fontSize:11,opacity:0.8,marginBottom:2}}>UKUPAN PROMET</div>
+                            <div style={{fontSize:28,fontWeight:700}}>{formatCurrency(selektovana.pazarUkupno?.total||0)}</div>
+                            <div style={{fontSize:11,opacity:0.7}}>{selektovana.pazarUkupno?.broj||0} pologa od početka</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Stats */}
+                <div className="stats-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:20}}>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{background:'#dbeafe',color:'#2563eb'}}><i className="fas fa-cash-register"></i></div>
+                        <div className="stat-value" style={{fontSize:18}}>{formatCurrency(selektovana.pazarDanas?.total||0)}</div>
+                        <div className="stat-label">Pazar danas</div>
+                    </div>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{background:'#d1fae5',color:'#059669'}}><i className="fas fa-calendar-alt"></i></div>
+                        <div className="stat-value" style={{fontSize:18}}>{formatCurrency(selektovana.pazarMjesec?.total||0)}</div>
+                        <div className="stat-label">Mjesec ({selektovana.pazarMjesec?.broj||0} pologa)</div>
+                    </div>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{background:'#fef3c7',color:'#d97706'}}><i className="fas fa-chart-line"></i></div>
+                        <div className="stat-value" style={{fontSize:18}}>{formatCurrency(selektovana.pazarGodina?.total||0)}</div>
+                        <div className="stat-label">Godina</div>
+                    </div>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{background:'#ede9fe',color:'#7c3aed'}}><i className="fas fa-users"></i></div>
+                        <div className="stat-value">{selektovana.radnici?.length||0}</div>
+                        <div className="stat-label">Aktivnih radnika</div>
+                    </div>
+                </div>
+
+                <div className="grid-2" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+                    {/* Mjesečni trend */}
+                    <div className="card">
+                        <div className="card-header"><h3>Promet po mjesecima</h3></div>
+                        <div className="card-body">
+                            {selektovana.mjesecnoTrend?.length === 0 ? (
+                                <div style={{textAlign:'center',color:'var(--gray-400)',padding:20,fontSize:13}}>Još nema pologa</div>
+                            ) : (() => {
+                                const max = Math.max(...selektovana.mjesecnoTrend.map(m => m.total||0), 1);
+                                return (
+                                    <div style={{display:'flex',alignItems:'flex-end',gap:6,height:160,padding:'0 4px'}}>
+                                        {[...selektovana.mjesecnoTrend].reverse().map((m,i) => {
+                                            const pct = (m.total / max) * 100;
+                                            const [g, mi] = m.mjesec.split('-');
+                                            return (
+                                                <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}} title={`${m.mjesec}: ${formatCurrency(m.total)}`}>
+                                                    <div style={{fontSize:9,color:'var(--gray-400)'}}>{Math.round(m.total/1000)}k</div>
+                                                    <div style={{width:'100%',background:'var(--primary)',borderRadius:'3px 3px 0 0',height:`${pct}%`,minHeight:2,transition:'height 0.3s'}}></div>
+                                                    <div style={{fontSize:9,color:'var(--gray-400)'}}>{MJESECI_KRATKO[Number(mi)-1]} {g.slice(2)}</div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+
+                    {/* Top radnici */}
+                    <div className="card">
+                        <div className="card-header"><h3>Top radnici (mjesec)</h3></div>
+                        <div className="card-body">
+                            {selektovana.topRadnici?.length === 0 ? (
+                                <div style={{textAlign:'center',color:'var(--gray-400)',padding:20,fontSize:13}}>Nema podataka</div>
+                            ) : selektovana.topRadnici?.map((r,i) => (
+                                <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<selektovana.topRadnici.length-1?'1px solid var(--border-color)':'none'}}>
+                                    <div style={{width:28,height:28,borderRadius:'50%',background:i===0?'#fef3c7':'var(--bg-input)',color:i===0?'#92400e':'var(--text-secondary)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>{i+1}</div>
+                                    <div style={{flex:1,fontSize:13,fontWeight:500}}>{r.ime} {r.prezime}</div>
+                                    <div style={{textAlign:'right'}}>
+                                        <div style={{fontSize:13,fontWeight:600,color:'#059669'}}>{formatCurrency(r.total)}</div>
+                                        <div style={{fontSize:10,color:'var(--gray-400)'}}>{r.broj} pologa</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid-2" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+                    {/* Radnici */}
+                    <div className="card">
+                        <div className="card-header"><h3>Aktivni radnici ({selektovana.radnici?.length||0})</h3></div>
+                        <div className="card-body" style={{maxHeight:300,overflow:'auto'}}>
+                            {selektovana.radnici?.length === 0 ? (
+                                <div style={{textAlign:'center',color:'var(--gray-400)',padding:20,fontSize:13}}>Nema radnika</div>
+                            ) : selektovana.radnici?.map(r => (
+                                <div key={r.id} style={{display:'flex',gap:10,padding:'6px 0',borderBottom:'1px solid var(--border-color)',fontSize:13}}>
+                                    <div style={{flex:1,fontWeight:500}}>{r.ime} {r.prezime}</div>
+                                    <div style={{color:'var(--gray-400)',fontSize:11}}>{r.telefon||''}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Posljednji pologi */}
+                    <div className="card">
+                        <div className="card-header"><h3>Posljednji pologi</h3></div>
+                        <div className="card-body" style={{maxHeight:300,overflow:'auto'}}>
+                            {selektovana.posljednjiPologi?.length === 0 ? (
+                                <div style={{textAlign:'center',color:'var(--gray-400)',padding:20,fontSize:13}}>Nema pologa</div>
+                            ) : selektovana.posljednjiPologi?.map(p => {
+                                const ukupno = (Number(p.gotovina)||0)+(Number(p.kartice)||0)+(Number(p.virman)||0);
+                                return (
+                                    <div key={p.id} style={{display:'flex',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border-color)',fontSize:13}}>
+                                        <div style={{flex:1}}>
+                                            <div style={{fontWeight:500}}>{formatCurrency(ukupno)}</div>
+                                            <div style={{fontSize:11,color:'var(--gray-400)'}}>{p.radnik_ime||'?'} • {formatDate(p.datum)}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Dodatne info */}
+                <div className="card" style={{marginTop:16}}>
+                    <div className="card-header"><h3>Detalji lokacije</h3></div>
+                    <div className="card-body" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontSize:13}}>
+                        <div><strong>Tip:</strong> {tipBadge(lok.tip)}</div>
+                        <div><strong>Status:</strong> {lok.aktivan ? '✅ Aktivna' : '❌ Neaktivna'}</div>
+                        {lok.gps_lat && <div><strong>GPS:</strong> {lok.gps_lat}, {lok.gps_lng} (radius {lok.gps_radius||80}m)</div>}
+                        {lok.pocetak_min && <div><strong>Početak rada:</strong> {Math.floor(lok.pocetak_min/60)}:{String(lok.pocetak_min%60).padStart(2,'0')}</div>}
+                        {lok.kraj_min && <div><strong>Kraj rada:</strong> {Math.floor(lok.kraj_min/60)}:{String(lok.kraj_min%60).padStart(2,'0')}</div>}
+                        <div><strong>Sati rada (mjesec):</strong> {selektovana.satiMjesec}h</div>
+                        <div><strong>Primopredaje (mjesec):</strong> {selektovana.primopredajeMjesec}{selektovana.primopredajeProblem?` • ${selektovana.primopredajeProblem} problema`:''}</div>
+                        {lok.napomena && <div style={{gridColumn:'1/-1'}}><strong>Napomena:</strong> {lok.napomena}</div>}
+                    </div>
+                </div>
+                {edit !== null && form && (
+                    <LokacijaEditModal form={form} setForm={setForm} edit={edit} onClose={()=>{setEdit(null);setForm(null);}} onSave={handleSave} />
+                )}
+            </div>
+        );
+    }
+
+    // Lista
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{fontSize:13,color:'var(--gray-500)'}}>
+                    <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                    Klikni na lokaciju za pregled prometa, radnika i statistike. {isAdmin && 'Možeš urediti, dodati novu ili obrisati.'}
+                </div>
+                {isAdmin && (
+                    <button className="btn btn-primary" onClick={()=>otvoriEdit(null)}>
+                        <i className="fas fa-plus"></i> Nova lokacija
+                    </button>
+                )}
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:16}}>
+                {loading ? <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i></div> :
+                lokacije.map(l => (
+                    <div key={l.id} onClick={()=>otvoriProfil(l.id)} className="card" style={{cursor:'pointer',transition:'transform 0.15s, box-shadow 0.15s',opacity:l.aktivan?1:0.5}}
+                        onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.1)';}}
+                        onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='';}}>
+                        <div style={{padding:16}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+                                <h3 style={{fontSize:15,fontWeight:600,color:'var(--text-primary)'}}>{l.naziv}</h3>
+                                {tipBadge(l.tip)}
+                            </div>
+                            {l.adresa && <div style={{fontSize:12,color:'var(--gray-500)',marginBottom:6}}><i className="fas fa-map-marker-alt" style={{marginRight:4}}></i>{l.adresa}</div>}
+                            {l.telefon && <div style={{fontSize:12,color:'var(--gray-500)',marginBottom:6}}><i className="fas fa-phone" style={{marginRight:4}}></i>{l.telefon}</div>}
+                            {l.radno_vrijeme && <div style={{fontSize:11,color:'var(--gray-400)'}}><i className="fas fa-clock" style={{marginRight:4}}></i>{l.radno_vrijeme}</div>}
+                            {!l.aktivan && <div style={{marginTop:8,fontSize:11,color:'#dc2626',fontWeight:600}}>NEAKTIVNA</div>}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {edit !== null && form && (
+                <LokacijaEditModal form={form} setForm={setForm} edit={edit} onClose={()=>{setEdit(null);setForm(null);}} onSave={handleSave} />
+            )}
+        </div>
+    );
+}
+
+function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
+    return (
+        <Modal isOpen={true} onClose={onClose} title={edit==='new'?'Nova lokacija':`Uredi lokaciju #${edit}`} footer={
+            <><button className="btn btn-outline" onClick={onClose}>Otkaži</button>
+            <button className="btn btn-primary" onClick={onSave}><i className="fas fa-save"></i> Spremi</button></>
+        }>
+            <div className="form-row">
+                <div className="form-group" style={{flex:2}}><label>Naziv <span style={{color:'#dc2626'}}>*</span></label><input className="form-control" value={form.naziv} onChange={e=>setForm({...form,naziv:e.target.value})} /></div>
+                <div className="form-group" style={{flex:1}}><label>Tip</label>
+                    <select className="form-control" value={form.tip} onChange={e=>setForm({...form,tip:e.target.value})}>
+                        <option value="maloprodaja">Maloprodaja</option>
+                        <option value="sjediste">Sjedište</option>
+                        <option value="veleprodaja">Veleprodaja</option>
+                    </select>
+                </div>
+            </div>
+            <div className="form-row">
+                <div className="form-group" style={{flex:2}}><label>Adresa</label><input className="form-control" value={form.adresa||''} onChange={e=>setForm({...form,adresa:e.target.value})} /></div>
+                <div className="form-group" style={{flex:1}}><label>Telefon</label><input className="form-control" value={form.telefon||''} onChange={e=>setForm({...form,telefon:e.target.value})} /></div>
+            </div>
+            <div className="form-row">
+                <div className="form-group"><label>Radno vrijeme (tekst)</label><input className="form-control" value={form.radno_vrijeme||''} onChange={e=>setForm({...form,radno_vrijeme:e.target.value})} placeholder="Pon-Sub 10:00-22:00" /></div>
+                <div className="form-group"><label>Radni dani</label><input className="form-control" value={form.radni_dani||''} onChange={e=>setForm({...form,radni_dani:e.target.value})} placeholder="1,2,3,4,5,6 (1=Pon)" /></div>
+            </div>
+            <div className="form-row">
+                <div className="form-group"><label>Početak (min od ponoći)</label><input className="form-control" type="number" value={form.pocetak_min||''} onChange={e=>setForm({...form,pocetak_min:e.target.value})} placeholder="600 = 10:00" /></div>
+                <div className="form-group"><label>Kraj (min od ponoći)</label><input className="form-control" type="number" value={form.kraj_min||''} onChange={e=>setForm({...form,kraj_min:e.target.value})} placeholder="1320 = 22:00" /></div>
+            </div>
+            <div style={{padding:10,background:'var(--bg-input)',borderRadius:8,marginBottom:12,fontSize:11,color:'var(--gray-500)'}}>
+                <i className="fas fa-info-circle" style={{marginRight:4}}></i>
+                Računica: 8:30 → 8*60+30 = 510. 16:00 → 960. 22:00 → 1320.
+            </div>
+            <div className="form-row">
+                <div className="form-group"><label>GPS Latitude</label><input className="form-control" type="number" step="0.0001" value={form.gps_lat||''} onChange={e=>setForm({...form,gps_lat:e.target.value})} placeholder="43.8569" /></div>
+                <div className="form-group"><label>GPS Longitude</label><input className="form-control" type="number" step="0.0001" value={form.gps_lng||''} onChange={e=>setForm({...form,gps_lng:e.target.value})} placeholder="18.4154" /></div>
+                <div className="form-group" style={{flex:'0 0 100px'}}><label>Radius (m)</label><input className="form-control" type="number" value={form.gps_radius||''} onChange={e=>setForm({...form,gps_radius:e.target.value})} placeholder="80" /></div>
+            </div>
+            <div className="form-group">
+                <label>Napomena</label>
+                <textarea className="form-control" rows={2} value={form.napomena||''} onChange={e=>setForm({...form,napomena:e.target.value})}></textarea>
+            </div>
+            {edit !== 'new' && (
+                <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:'var(--text-primary)'}}>
+                    <input type="checkbox" checked={!!form.aktivan} onChange={e=>setForm({...form,aktivan:e.target.checked?1:0})} />
+                    Aktivna lokacija
+                </label>
+            )}
+        </Modal>
+    );
+}
+
+// =====================================================================
 // MOBILE BOTTOM NAVIGATION
 // =====================================================================
 function MobileBottomNav({ page, setPage, currentUser, setSidebarOpen }) {
@@ -8402,6 +8749,7 @@ function App() {
         profil: { title: 'Moj profil', icon: 'fas fa-user-circle' },
         vodici: { title: 'Vodici i tutorijali', icon: 'fas fa-book' },
         vp_dugovanja: { title: 'VP Dugovanja', icon: 'fas fa-hand-holding-usd' },
+        lokacije: { title: 'Lokacije', icon: 'fas fa-store' },
     };
 
     const renderPage = () => {
@@ -8432,6 +8780,7 @@ function App() {
             case 'profil': return <ProfilPage currentUser={currentUser} radnici={radnici} />;
             case 'vodici': return <VodiciPage currentUser={currentUser} />;
             case 'vp_dugovanja': return <VPDugovanjaPage currentUser={currentUser} radnici={radnici} />;
+            case 'lokacije': return <LokacijePage currentUser={currentUser} />;
             case 'loyalty_kupilenovo': return <LoyaltyPage program="kupilenovo" currentUser={currentUser} />;
             case 'loyalty_tuttocapsule': return <LoyaltyPage program="tuttocapsule" currentUser={currentUser} />;
             case 'loyalty_staff': return <LoyaltyPage program="staff" currentUser={currentUser} />;
@@ -8572,6 +8921,9 @@ function App() {
                                 <i className="fas fa-users-cog"></i>Radnici
                             </div>
                         )}
+                        <div className={`nav-item ${page==='lokacije'?'active':''}`} onClick={()=>{setPage('lokacije');setSidebarOpen(false);}}>
+                            <i className="fas fa-store"></i>Lokacije
+                        </div>
                         </>);
                     })()}
                 </div>
