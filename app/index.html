@@ -8055,7 +8055,6 @@ function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
 // =====================================================================
 function EvidencijaBlocker({ currentUser, evidencije, setPage, page, onLogout }) {
     if (!currentUser) return null;
-    if (currentUser.uloga !== 'radnik') return null; // admin/voditelj nisu blokirani
     if (page === 'evidencija' || page === 'profil') return null; // dozvoljene stranice
     const danas = today();
     const todayEv = evidencije.find(e => e.radnik_id === currentUser.id && e.datum === danas);
