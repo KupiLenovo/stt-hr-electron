@@ -875,6 +875,117 @@ function AdminEvidencijaPage({ radnici }) {
     const [evidencije, setEvidencije] = useState([]);
     const [editEv, setEditEv] = useState(null);
     const [editForm, setEditForm] = useState({});
+    const [filterMjesec, setFilterMjesec] = useState(''); // yyyy-MM za sihtaricu
+
+    const printSihtarica = () => {
+        const radnik = radnici.find(r => r.id === Number(filterRadnik));
+        if (!radnik) { showAlert('Odaberi radnika za printanje sihtarice.', 'warning'); return; }
+        const [god, mjes] = filterMjesec ? filterMjesec.split('-') : [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0')];
+        const lok = LOKACIJE.find(l => l.id === radnik.lokacija_id);
+        const poz = POZICIJE.find(p => p.id === radnik.pozicija_id);
+        const daysInMonth = new Date(Number(god), Number(mjes), 0).getDate();
+        const DANI = ['Ned','Pon','Uto','Sri','Cet','Pet','Sub'];
+        const MJESECI = ['Januar','Februar','Mart','April','Maj','Juni','Juli','August','Septembar','Oktobar','Novembar','Decembar'];
+
+        // Indexiraj evidencije po datumu
+        const evMap = {};
+        evidencije.filter(e => e.radnik_id === radnik.id).forEach(e => { evMap[e.datum] = e; });
+
+        let ukupnoMin = 0;
+        let ukupnoDana = 0;
+        let rows = '';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${god}-${mjes}-${String(d).padStart(2,'0')}`;
+            const dayOfWeek = new Date(dateStr).getDay();
+            const danNaziv = DANI[dayOfWeek];
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const ev = evMap[dateStr];
+            const dolazak = ev?.dolazak ? ev.dolazak.slice(11,16) : '';
+            const odlazak = ev?.odlazak ? ev.odlazak.slice(11,16) : '';
+            const pauza = ev?.pocetak_pauze ? `${ev.pocetak_pauze.slice(11,16)}–${ev.kraj_pauze ? ev.kraj_pauze.slice(11,16) : '...'}` : '';
+            let satiStr = '';
+            if (ev?.dolazak && ev?.odlazak) {
+                let mins = (new Date(ev.odlazak) - new Date(ev.dolazak)) / 60000;
+                if (ev.pocetak_pauze && ev.kraj_pauze) mins -= (new Date(ev.kraj_pauze) - new Date(ev.pocetak_pauze)) / 60000;
+                ukupnoMin += mins;
+                ukupnoDana++;
+                satiStr = (mins/60).toFixed(2) + 'h';
+            }
+            const rowStyle = isWeekend ? 'background:#f9f9f9;color:#999;' : ev ? '' : 'color:#bbb;';
+            rows += `<tr style="${rowStyle}">
+                <td style="text-align:center;width:32px">${d}</td>
+                <td style="text-align:center;width:36px">${danNaziv}</td>
+                <td style="text-align:center;width:60px">${dolazak}</td>
+                <td style="text-align:center;width:60px">${odlazak}</td>
+                <td style="text-align:center;width:80px">${pauza}</td>
+                <td style="text-align:center;width:60px;font-weight:${ev?'600':'400'}">${satiStr}</td>
+                <td></td>
+            </tr>`;
+        }
+
+        const ukupnoH = Math.floor(ukupnoMin / 60);
+        const ukupnoM = Math.round(ukupnoMin % 60);
+
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <title>Sihtarica — ${radnik.ime} ${radnik.prezime} — ${MJESECI[Number(mjes)-1]} ${god}</title>
+        <style>
+            body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 0; padding: 24px; }
+            h1 { font-size: 16px; margin: 0 0 2px; }
+            h2 { font-size: 13px; font-weight: normal; margin: 0 0 16px; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 12px; }
+            .firma { font-size: 11px; color: #555; text-align: right; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th { background: #222; color: #fff; padding: 6px 8px; font-size: 11px; text-align: center; }
+            td { padding: 4px 8px; border-bottom: 1px solid #eee; font-size: 12px; }
+            tr:hover { background: #f5f5f5; }
+            .total-row { font-weight: 700; background: #f0f0f0; border-top: 2px solid #000; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; font-size: 12px; }
+            .info-item { display: flex; gap: 6px; }
+            .info-label { color: #666; min-width: 100px; }
+            .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; }
+            .sig-box { border-top: 1px solid #000; padding-top: 6px; font-size: 11px; color: #555; }
+            @media print { body { padding: 10px; } @page { margin: 10mm; } }
+        </style></head><body>
+        <div class="header">
+            <div>
+                <h1>SIHTARICA — EVIDENCIJA RADA</h1>
+                <h2>${radnik.ime} ${radnik.prezime} &nbsp;|&nbsp; ${MJESECI[Number(mjes)-1]} ${god}</h2>
+            </div>
+            <div class="firma">
+                <strong>STT d.o.o. Sarajevo</strong><br>
+                Hifzi Bjelavca 34, Sarajevo<br>
+                033 448 504
+            </div>
+        </div>
+        <div class="info-grid">
+            <div class="info-item"><span class="info-label">Radnik:</span><strong>${radnik.ime} ${radnik.prezime}</strong></div>
+            <div class="info-item"><span class="info-label">Pozicija:</span>${poz?.naziv || '-'}</div>
+            <div class="info-item"><span class="info-label">Lokacija:</span>${lok?.naziv || '-'}</div>
+            <div class="info-item"><span class="info-label">Period:</span>${MJESECI[Number(mjes)-1]} ${god}</div>
+            <div class="info-item"><span class="info-label">Radnih dana:</span>${ukupnoDana}</div>
+            <div class="info-item"><span class="info-label">Ukupno sati:</span><strong>${ukupnoH}h ${ukupnoM}min</strong></div>
+        </div>
+        <table>
+            <thead><tr><th>Dan</th><th>Dan u tjednu</th><th>Dolazak</th><th>Odlazak</th><th>Pauza</th><th>Sati</th><th>Napomena</th></tr></thead>
+            <tbody>${rows}
+                <tr class="total-row">
+                    <td colspan="5" style="text-align:right;padding:6px 8px">UKUPNO:</td>
+                    <td style="text-align:center;padding:6px 8px">${ukupnoH}h ${ukupnoM}min</td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="signatures">
+            <div class="sig-box">Potpis radnika:<br><br><br>${radnik.ime} ${radnik.prezime}</div>
+            <div class="sig-box">Potpis voditelja / direktora:<br><br><br>STT d.o.o. Sarajevo</div>
+        </div>
+        <script>window.onload=()=>{window.print();}<\/script>
+        </body></html>`;
+
+        const w = window.open('', '_blank', 'width=900,height=700');
+        w.document.write(html);
+        w.document.close();
+    };
     const handleEditSave = async () => {
         if (!editEv) return;
         try {
@@ -960,7 +1071,7 @@ function AdminEvidencijaPage({ radnici }) {
             <div className="card">
                 <div className="card-header">
                     <h3>Pregled evidencije</h3>
-                    <div style={{display:'flex',gap:8}}>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
                         <button className="btn btn-sm btn-outline" onClick={() => {
                             const rows = evidencije.map(e => {
                                 const r = radnici.find(r=>r.id===e.radnik_id);
@@ -969,6 +1080,9 @@ function AdminEvidencijaPage({ radnici }) {
                             exportCSV(['Radnik','Datum','Dolazak','Odlazak','Pauza(min)','Sati'], rows, 'evidencija');
                         }}><i className="fas fa-download" style={{marginRight:4}}></i>CSV</button>
                         <button className="btn btn-sm" onClick={loadEvidencija}><i className="fas fa-sync-alt"></i> Osvježi</button>
+                        <button className="btn btn-sm" style={{background:'#1d4ed8',color:'white',border:'none'}} onClick={printSihtarica} title="Printaj sihtaricu za odabranog radnika">
+                            <i className="fas fa-print" style={{marginRight:4}}></i>Sihtarica
+                        </button>
                     </div>
                 </div>
                 <div className="card-body">
@@ -995,6 +1109,7 @@ function AdminEvidencijaPage({ radnici }) {
                             <option value="">Svi radnici</option>
                             {radnici.filter(r=>r.aktivan).map(r=><option key={r.id} value={r.id}>{r.ime} {r.prezime}</option>)}
                         </select>
+                        <input type="month" value={filterMjesec} onChange={e=>setFilterMjesec(e.target.value)} title="Odaberi mjesec za sihtaricu" style={{padding:'7px 10px',borderRadius:6,border:'1px solid var(--gray-200)',fontSize:13}} />
                     </div>
                     {loading ? (
                         <div style={{textAlign:'center',padding:40,color:'var(--gray-400)'}}>
