@@ -108,6 +108,24 @@
         [data-theme="dark"] .btn-outline:hover { background: var(--bg-input); }
         [data-theme="dark"] body { background: var(--bg-app); color: var(--text-primary); }
         [data-theme="dark"] kbd { background: var(--bg-input) !important; border-color: var(--border-color) !important; color: var(--text-primary) !important; }
+        /* Failsafe — sve podrazumijevane bijele pozadine postaju tamno-card */
+        [data-theme="dark"] [style*="background:'white'"], [data-theme="dark"] [style*="background: white"] { background: var(--bg-card) !important; }
+        [data-theme="dark"] .modal-close { color: var(--gray-500) !important; }
+        [data-theme="dark"] .modal-close:hover { color: var(--text-primary) !important; }
+        [data-theme="dark"] tr:hover { background: var(--bg-input) !important; }
+        [data-theme="dark"] th { background: var(--bg-input) !important; color: var(--gray-500) !important; }
+        [data-theme="dark"] td { color: var(--text-secondary); }
+        [data-theme="dark"] .card-body, [data-theme="dark"] .card-header { color: var(--text-primary); }
+        [data-theme="dark"] .stat-label { color: var(--gray-500) !important; }
+        [data-theme="dark"] .stat-value { color: var(--text-primary) !important; }
+        [data-theme="dark"] label { color: var(--text-primary) !important; }
+        [data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3, [data-theme="dark"] h4 { color: var(--text-primary); }
+        /* Hover-row u dark mode */
+        [data-theme="dark"] tr.hover-row:hover { background: var(--bg-input) !important; }
+        /* Datalist / option dark */
+        [data-theme="dark"] option { background: var(--bg-input); color: var(--text-primary); }
+        /* btn-outline u dark mode */
+        [data-theme="dark"] .btn-outline:hover { background: var(--bg-input) !important; color: var(--text-primary) !important; }
 
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-app); color: var(--text-primary); transition: background 0.2s, color 0.2s; }
 
@@ -125,20 +143,20 @@
         .nav-item i { width: 20px; text-align: center; font-size: 15px; }
 
         .main-content { margin-left: 260px; flex: 1; min-height: 100vh; }
-        .topbar { background: white; border-bottom: 1px solid var(--gray-200); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 40; }
+        .topbar { background: var(--bg-card); border-bottom: 1px solid var(--border-color); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 40; color: var(--text-primary); }
         .topbar h2 { font-size: 20px; font-weight: 600; }
         .topbar-right { display: flex; align-items: center; gap: 16px; }
         .page-content { padding: 24px; }
 
         /* Cards */
-        .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--gray-200); }
-        .card-header { padding: 16px 20px; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
-        .card-header h3 { font-size: 16px; font-weight: 600; }
+        .card { background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border-color); color: var(--text-primary); }
+        .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .card-header h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
         .card-body { padding: 20px; }
 
         /* Stat Cards */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .stat-card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; border: 1px solid var(--gray-200); }
+        .stat-card { background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; border: 1px solid var(--border-color); color: var(--text-primary); }
         .stat-card .stat-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 12px; }
         .stat-card .stat-value { font-size: 28px; font-weight: 700; color: var(--gray-900); }
         .stat-card .stat-label { font-size: 13px; color: var(--gray-500); margin-top: 4px; }
@@ -160,7 +178,7 @@
         .btn-warning:hover { background: #b45309; }
         .btn-danger { background: var(--danger); color: white; }
         .btn-danger:hover { background: #b91c1c; }
-        .btn-outline { background: white; border: 1px solid var(--gray-300); color: var(--gray-700); }
+        .btn-outline { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); }
         .btn-outline:hover { background: var(--gray-50); }
         .btn-sm { padding: 5px 10px; font-size: 12px; }
         .btn-lg { padding: 12px 24px; font-size: 16px; }
@@ -176,7 +194,7 @@
         /* Forms */
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--gray-700); margin-bottom: 6px; }
-        .form-control { width: 100%; padding: 9px 12px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 14px; transition: border-color 0.15s; outline: none; }
+        .form-control { width: 100%; padding: 9px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; transition: border-color 0.15s; outline: none; background: var(--bg-input); color: var(--text-primary); }
         .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
         select.form-control { appearance: auto; }
         textarea.form-control { resize: vertical; min-height: 80px; }
@@ -184,8 +202,8 @@
 
         /* Modal */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .modal { background: white; border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; }
-        .modal-header { padding: 20px; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+        .modal { background: var(--bg-card); color: var(--text-primary); border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; }
+        .modal-header { padding: 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
         .modal-header h3 { font-size: 18px; font-weight: 600; }
         .modal-close { cursor: pointer; font-size: 20px; color: var(--gray-400); background: none; border: none; }
         .modal-body { padding: 20px; }
@@ -273,7 +291,7 @@
         .mobile-overlay.show { display: block; }
 
         /* Bottom navigation for mobile */
-        .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid var(--gray-200); z-index: 50; padding-bottom: env(safe-area-inset-bottom); }
+        .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-card); border-top: 1px solid var(--border-color); z-index: 50; padding-bottom: env(safe-area-inset-bottom); }
         .mobile-bottom-nav-inner { display: flex; justify-content: space-around; padding: 6px 0; }
         .bottom-nav-item { display: flex; flex-direction: column; align-items: center; padding: 6px 8px; cursor: pointer; color: var(--gray-400); font-size: 10px; gap: 2px; min-width: 56px; transition: color 0.15s; }
         .bottom-nav-item i { font-size: 18px; }
@@ -512,7 +530,7 @@
 
         /* Session warning */
         .session-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:10000; display:flex; align-items:center; justify-content:center; }
-        .session-modal { background:white; border-radius:16px; padding:36px 32px; max-width:380px; width:90%; text-align:center; box-shadow:var(--shadow-lg); }
+        .session-modal { background:var(--bg-card); color: var(--text-primary); border-radius:16px; padding:36px 32px; max-width:380px; width:90%; text-align:center; box-shadow:var(--shadow-lg); }
         .session-modal h2 { font-size:20px; margin-bottom:8px; color:var(--gray-900); }
         .session-modal p { color:var(--gray-500); font-size:14px; margin-bottom:24px; }
         .session-countdown { font-size:42px; font-weight:800; color:var(--danger); margin:16px 0; }
@@ -528,7 +546,7 @@
 
         /* Search bar global */
         .search-bar { position:relative; }
-        .search-bar input { padding:8px 12px 8px 34px; border-radius:8px; border:1px solid var(--gray-300); font-size:13px; width:100%; background:white; }
+        .search-bar input { padding:8px 12px 8px 34px; border-radius:8px; border:1px solid var(--border-color); font-size:13px; width:100%; background:var(--bg-input); color: var(--text-primary); }
         .search-bar input:focus { outline:none; border-color:var(--primary); }
         .search-bar .search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--gray-400); font-size:13px; }
     </style>
@@ -1381,14 +1399,17 @@ function EvidencijaPage({ radnici, evidencije, setEvidencije, currentUser }) {
         if (action === 'dolazak' || action === 'odlazak') {
             const lok = LOKACIJE.find(l=>l.id===currentUser.lokacija_id);
             if (lok?.gps && navigator.geolocation) {
-                showAlert('Provjeravam GPS...', 'info');
+                setLoading(true);
+                showAlert('Provjeravam GPS lokaciju...', 'info');
                 const result = await verifyLocationGPS(currentUser.lokacija_id);
                 if (result.position) {
                     gpsData = JSON.stringify({ lat: result.position.lat, lng: result.position.lng, accuracy: result.accuracy, distance: result.distance, ok: result.ok });
                     if (!result.ok) {
                         const dalj = result.distance > 1000 ? `${(result.distance/1000).toFixed(1)} km` : `${result.distance} m`;
+                        setLoading(false);
                         const proceed = await askConfirm(`⚠ GPS UPOZORENJE\n\nNisi u radius-u lokacije "${lok.naziv}".\nUdaljenost: ${dalj}\nTačnost GPS-a: ±${result.accuracy} m\n\nNastaviti svejedno? (Voditelj će vidjeti upozorenje)`);
-                        if (!proceed) { setLoading(false); return; }
+                        if (!proceed) return;
+                        setLoading(true);
                     } else {
                         showAlert(`✓ GPS verifikovan (${result.distance}m od lokacije)`, 'success');
                     }
@@ -3033,7 +3054,7 @@ function OdmoriPage({ radnici, currentUser, sendNotif }) {
                     {bolovanjeForm.dokumenti.length > 0 && (
                         <div style={{marginTop:12}}>
                             {bolovanjeForm.dokumenti.map(doc => (
-                                <div key={doc.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',background:'white',border:'1px solid var(--gray-200)',borderRadius:6,marginBottom:6}}>
+                                <div key={doc.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',background:'var(--bg-card)',border:'1px solid var(--gray-200)',borderRadius:6,marginBottom:6}}>
                                     <div style={{display:'flex',alignItems:'center',gap:10}}>
                                         <i className={`fas ${doc.naziv.endsWith('.pdf') ? 'fa-file-pdf' : 'fa-file-image'}`} style={{color: doc.naziv.endsWith('.pdf') ? '#dc2626' : '#2563eb',fontSize:18}}></i>
                                         <div>
@@ -4249,7 +4270,7 @@ function ServisniPrijemPage({ radnici, currentUser, sendNotif }) {
         const tipNaziv = tipoviUredjaja.find(t => t.id === nalog.tip_uredjaja)?.naziv || nalog.tip_uredjaja;
 
         return (
-            <div id="print-area" style={{background:'white',color:'black',padding:32,maxWidth:800,margin:'0 auto',fontFamily:'Arial, sans-serif',fontSize:13,lineHeight:1.5}}>
+            <div id="print-area" style={{background:'#ffffff',color:'#000',padding:32,maxWidth:800,margin:'0 auto',fontFamily:'Arial, sans-serif',fontSize:13,lineHeight:1.5}}>
                 {/* Header */}
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',borderBottom:'3px solid #1a1a2e',paddingBottom:16,marginBottom:16}}>
                     <div>
@@ -5374,7 +5395,7 @@ function ZadaciPage({ radnici, currentUser, tip }) {
         const zavrsioR = z.zavrsio_id ? radnici.find(r=>r.id===z.zavrsio_id) : null;
 
         return (
-            <div key={z.id} style={{background:'white',borderRadius:10,border:'1px solid var(--gray-200)',marginBottom:8,overflow:'hidden',boxShadow:'0 1px 2px rgba(0,0,0,0.04)'}}>
+            <div key={z.id} style={{background:'var(--bg-card)',borderRadius:10,border:'1px solid var(--gray-200)',marginBottom:8,overflow:'hidden',boxShadow:'0 1px 2px rgba(0,0,0,0.04)'}}>
                 <div style={{display:'flex',alignItems:'stretch'}}>
                     {/* Lijeva traka — boja kategorije */}
                     <div style={{width:4,background:katColor,flexShrink:0}}></div>
@@ -5538,7 +5559,7 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
     };
 
     return (
-        <div className="fade-in" style={{display:'flex',height:'calc(100vh - 120px)',gap:0,background:'white',borderRadius:12,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}>
+        <div className="fade-in" style={{display:'flex',height:'calc(100vh - 120px)',gap:0,background:'var(--bg-card)',borderRadius:12,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}>
             {/* Lijevi panel — lista grupa */}
             <div style={{width:280,minWidth:280,borderRight:'1px solid var(--gray-200)',display:'flex',flexDirection:'column',background:'var(--gray-50)'}}>
                 <div style={{padding:'16px 16px 12px',borderBottom:'1px solid var(--gray-200)'}}>
@@ -6573,7 +6594,7 @@ function ProfilPage({ currentUser, radnici }) {
     const uloge = { admin: 'Administrator', voditelj: 'Voditelj', radnik: 'Radnik' };
 
     const StatCard = ({ icon, label, value, color, sub }) => (
-        <div style={{background:'white',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',textAlign:'center'}}>
+        <div style={{background:'var(--bg-card)',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',textAlign:'center'}}>
             <div style={{fontSize:22,color: color||'var(--primary)',marginBottom:6}}><i className={`fas ${icon}`}></i></div>
             <div style={{fontSize:24,fontWeight:700,color:'var(--gray-800)'}}>{value}</div>
             <div style={{fontSize:12,color:'var(--gray-500)',marginTop:2}}>{label}</div>
@@ -6622,7 +6643,7 @@ function ProfilPage({ currentUser, radnici }) {
                 </div>
 
                 {/* Godisnji odmor progress bar */}
-                <div style={{background:'white',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+                <div style={{background:'var(--bg-card)',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
                         <span style={{fontWeight:600,fontSize:14}}><i className="fas fa-umbrella-beach" style={{marginRight:8,color:'#d97706'}}></i>Godišnji odmor</span>
                         <span style={{fontSize:13,color:'var(--gray-500)'}}>
@@ -6653,7 +6674,7 @@ function ProfilPage({ currentUser, radnici }) {
             )}
 
             {/* Sigurnost — PIN */}
-            <div style={{background:'white',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+            <div style={{background:'var(--bg-card)',borderRadius:12,padding:'16px 20px',border:'1px solid var(--gray-200)',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
                 <div style={{fontWeight:600,fontSize:14,marginBottom:12}}><i className="fas fa-lock" style={{marginRight:8,color:'var(--gray-400)'}}></i>Sigurnost</div>
                 {!showPin ? (
                     <button className="btn btn-outline" onClick={()=>setShowPin(true)}><i className="fas fa-key" style={{marginRight:6}}></i>Promijeni PIN</button>
@@ -6771,7 +6792,7 @@ function GlobalSearch({ isOpen, onClose, radnici, primopredaje, polozi, evidenci
 
     return (
         <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'10vh'}}>
-            <div onClick={e=>e.stopPropagation()} style={{background:'white',width:'90%',maxWidth:600,borderRadius:14,boxShadow:'0 20px 50px rgba(0,0,0,0.3)',overflow:'hidden'}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'var(--bg-card)',width:'90%',maxWidth:600,borderRadius:14,boxShadow:'0 20px 50px rgba(0,0,0,0.3)',overflow:'hidden'}}>
                 <div style={{display:'flex',alignItems:'center',padding:'14px 18px',borderBottom:'1px solid var(--gray-100)',gap:12}}>
                     <i className="fas fa-search" style={{color:'var(--gray-400)',fontSize:16}}></i>
                     <input ref={inputRef} value={q} onChange={e=>{setQ(e.target.value);setSelectedIdx(0);}} onKeyDown={handleKey} placeholder="Pretraži radnike, lokacije, zadatke, leadove..."
@@ -6799,9 +6820,9 @@ function GlobalSearch({ isOpen, onClose, radnici, primopredaje, polozi, evidenci
                     ))}
                 </div>
                 <div style={{padding:'8px 18px',borderTop:'1px solid var(--gray-100)',display:'flex',gap:14,fontSize:11,color:'var(--gray-400)',background:'var(--gray-50)'}}>
-                    <span><kbd style={{background:'white',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>↑↓</kbd> Navigacija</span>
-                    <span><kbd style={{background:'white',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>↵</kbd> Otvori</span>
-                    <span style={{marginLeft:'auto'}}><kbd style={{background:'white',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>Ctrl+K</kbd> Pretraga</span>
+                    <span><kbd style={{background:'var(--bg-card)',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>↑↓</kbd> Navigacija</span>
+                    <span><kbd style={{background:'var(--bg-card)',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>↵</kbd> Otvori</span>
+                    <span style={{marginLeft:'auto'}}><kbd style={{background:'var(--bg-card)',padding:'1px 5px',borderRadius:3,border:'1px solid var(--gray-200)',fontFamily:'monospace'}}>Ctrl+K</kbd> Pretraga</span>
                 </div>
             </div>
         </div>
@@ -6895,14 +6916,14 @@ function SmartReminders({ currentUser, evidencije, polozi, zahtjeviOdmora, primo
         <div style={{position:'relative'}}>
             <button onClick={()=>setOpen(o=>!o)} style={{
                 width:38,height:38,borderRadius:10,border:'1px solid var(--gray-200)',
-                background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',transition:'all 0.15s'
+                background:'var(--bg-card)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',transition:'all 0.15s'
             }} title={`${reminders.length} podsjetnik${reminders.length===1?'':'a'}`}>
                 <i className="fas fa-lightbulb" style={{fontSize:16,color:'#d97706'}}></i>
                 <span style={{position:'absolute',top:-6,right:-6,background:'#d97706',color:'white',borderRadius:'50%',width:20,height:20,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid white'}}>{reminders.length}</span>
             </button>
             {open && <>
                 <div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998,background:'transparent'}}></div>
-                <div style={{position:'absolute',top:46,right:0,width:380,maxWidth:'90vw',background:'white',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
+                <div style={{position:'absolute',top:46,right:0,width:380,maxWidth:'90vw',background:'var(--bg-card)',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
                     <div style={{padding:'14px 18px',borderBottom:'1px solid var(--gray-100)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                         <strong style={{fontSize:14}}><i className="fas fa-lightbulb" style={{color:'#d97706',marginRight:8}}></i>Pametni podsjetnici</strong>
                         <span style={{fontSize:11,color:'var(--gray-400)'}}>{reminders.length} stavki</span>
@@ -6946,7 +6967,7 @@ function LivePresence({ evidencije, radnici, setPage, currentUser }) {
     return (
         <div style={{position:'relative'}}>
             <button onClick={()=>setOpen(o=>!o)} style={{
-                height:38,borderRadius:10,border:'1px solid var(--gray-200)',background:'white',cursor:'pointer',
+                height:38,borderRadius:10,border:'1px solid var(--gray-200)',background:'var(--bg-card)',cursor:'pointer',
                 padding:'0 12px',display:'flex',alignItems:'center',gap:8,transition:'all 0.15s'
             }} title="Trenutno na poslu">
                 <span style={{width:8,height:8,borderRadius:'50%',background:'#10b981',animation:'pulse 2s infinite'}}></span>
@@ -6955,7 +6976,7 @@ function LivePresence({ evidencije, radnici, setPage, currentUser }) {
             </button>
             {open && <>
                 <div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998}}></div>
-                <div style={{position:'absolute',top:46,right:0,width:340,maxWidth:'90vw',background:'white',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
+                <div style={{position:'absolute',top:46,right:0,width:340,maxWidth:'90vw',background:'var(--bg-card)',borderRadius:12,boxShadow:'0 10px 30px rgba(0,0,0,0.15)',border:'1px solid var(--gray-200)',zIndex:9999,maxHeight:'70vh',overflow:'auto'}}>
                     <div style={{padding:'14px 18px',borderBottom:'1px solid var(--gray-100)'}}>
                         <strong style={{fontSize:14}}><i className="fas fa-broadcast-tower" style={{color:'#10b981',marginRight:8}}></i>Trenutno na poslu</strong>
                         <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>{naPoslu.length} aktivni{naPauzi>0?` • ${naPauzi} na pauzi`:''}</div>
@@ -7012,8 +7033,13 @@ function VPDugovanjaPage({ currentUser, radnici }) {
     const [detalji, setDetalji] = useState(null); // sa uplatama
     const [uplata, setUplata] = useState(null); // {dugovanje_id, iznos, ...}
     const [filter, setFilter] = useState({ status: '', q: '' });
+    const defaultLok = (() => {
+        const myLok = LOKACIJE.find(l => l.id === currentUser?.lokacija_id);
+        if (myLok && (myLok.tip === 'veleprodaja' || myLok.tip === 'sjediste')) return myLok.id;
+        return 7; // VP Skladište fallback
+    })();
     const initForm = () => ({ klijent_ime:'', klijent_firma:'', klijent_telefon:'', klijent_jib:'',
-        datum_izdavanja: today(), rok_placanja:'', ukupan_iznos:'', lokacija_id: 7,
+        datum_izdavanja: today(), rok_placanja:'', ukupan_iznos:'', lokacija_id: defaultLok,
         opis_artikala:'', broj_fakture:'', napomena:'' });
     const [form, setForm] = useState(initForm());
 
@@ -7688,7 +7714,18 @@ function BirthdayJubileWidget({ radnici, currentUser }) {
     });
     events.sort((a,b) => a.datum - b.datum);
 
-    if (events.length === 0) return null;
+    if (events.length === 0) {
+        return (
+            <div className="card" style={{marginBottom:16}}>
+                <div className="card-header"><h3><i className="fas fa-gift" style={{color:'#ec4899',marginRight:8}}></i>Rođendani i jubileji</h3></div>
+                <div className="card-body" style={{textAlign:'center',padding:24,color:'var(--gray-400)',fontSize:13}}>
+                    <i className="fas fa-calendar-times" style={{fontSize:24,marginBottom:8,opacity:0.5,display:'block'}}></i>
+                    Nema rođendana ni jubileja u sljedećih 30 dana
+                    <div style={{fontSize:11,marginTop:6}}>Provjeri da su unijeti datumi rođenja u Radnici → Edit</div>
+                </div>
+            </div>
+        );
+    }
 
     const formatRelative = (d) => {
         const diff = Math.ceil((d - sada) / (1000*60*60*24));
@@ -8469,7 +8506,7 @@ function App() {
 
                         {/* Globalna pretraga — Ctrl+K */}
                         <button onClick={()=>setShowSearch(true)} title="Pretraga (Ctrl+K)" style={{
-                            height:38,borderRadius:10,border:'1px solid var(--gray-200)',background:'white',cursor:'pointer',
+                            height:38,borderRadius:10,border:'1px solid var(--gray-200)',background:'var(--bg-card)',cursor:'pointer',
                             padding:'0 10px',display:'flex',alignItems:'center',gap:8,transition:'all 0.15s'
                         }}>
                             <i className="fas fa-search" style={{fontSize:14,color:'var(--gray-500)'}}></i>
@@ -8494,7 +8531,7 @@ function App() {
                         <div style={{position:'relative'}}>
                             <button onClick={() => setShowNotifPanel(!showNotifPanel)} style={{
                                 width:38, height:38, borderRadius:10, border:'1px solid var(--gray-200)',
-                                background:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+                                background:'var(--bg-card)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
                                 position:'relative', transition:'all 0.15s'
                             }}>
                                 <i className="fas fa-bell" style={{fontSize:16, color: notifBroj > 0 ? '#dc2626' : 'var(--gray-500)'}}></i>
@@ -8513,12 +8550,12 @@ function App() {
                             {showNotifPanel && (
                                 <div style={{
                                     position:'fixed', right:16, top:64, width:380, maxHeight:520,
-                                    background:'white', borderRadius:14, boxShadow:'0 20px 60px rgba(0,0,0,0.18)',
+                                    background:'var(--bg-card)', borderRadius:14, boxShadow:'0 20px 60px rgba(0,0,0,0.18)',
                                     border:'1px solid var(--gray-200)', zIndex:10000, overflow:'hidden',
                                     display:'flex', flexDirection:'column'
                                 }} onClick={e => e.stopPropagation()}>
                                     {/* Panel header */}
-                                    <div style={{padding:'14px 16px', borderBottom:'1px solid var(--gray-100)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'white'}}>
+                                    <div style={{padding:'14px 16px', borderBottom:'1px solid var(--gray-100)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-card)'}}>
                                         <div>
                                             <div style={{fontWeight:700, fontSize:15}}>Obavijesti</div>
                                             {notifBroj > 0 && <div style={{fontSize:12, color:'var(--gray-500)'}}>{notifBroj} nepročitanih</div>}
@@ -8674,7 +8711,7 @@ function App() {
                         <button onClick={()=>setUpdateDownloaded(false)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'white',padding:'8px 16px',borderRadius:8,cursor:'pointer',fontSize:13}}>
                             Kasnije
                         </button>
-                        <button onClick={()=>window.electronAPI && window.electronAPI.installUpdate()} style={{background:'white',border:'none',color:'var(--primary)',padding:'8px 20px',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700}}>
+                        <button onClick={()=>window.electronAPI && window.electronAPI.installUpdate()} style={{background:'var(--bg-card)',border:'none',color:'var(--primary)',padding:'8px 20px',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700}}>
                             <i className="fas fa-redo" style={{marginRight:6}}></i>Restart i instaliraj
                         </button>
                     </div>
@@ -8757,7 +8794,7 @@ function LoyaltyPage({ program, currentUser }) {
     
     return (
         <div className="fade-in" style={{height:'calc(100vh - 64px)', overflowY:'auto', background:'#f9fafb'}}>
-            <div style={{padding:'16px 20px', borderBottom:'1px solid var(--gray-200)', background:'white', display:'flex', gap:8, alignItems:'center'}}>
+            <div style={{padding:'16px 20px', borderBottom:'1px solid var(--gray-200)', background:'var(--bg-card)', display:'flex', gap:8, alignItems:'center'}}>
                 <i className="fas fa-star" style={{color:'#f59e0b', fontSize:18}}></i>
                 <strong style={{fontSize:16}}>
                     {program === 'kupilenovo' ? 'Kupilenovo Care Club' : program === 'tuttocapsule' ? 'Tutto Capsule Loyalty Program' : 'STT Staff Loyalty Portal'}
@@ -9046,7 +9083,7 @@ function LoyaltyBaza({ program, currentUser }) {
                 <div style={{background:'#f0f4ff',borderRadius:10,padding:16,marginBottom:12}}>
                     <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:'var(--primary)'}}><i className="fas fa-shield-alt" style={{marginRight:6}}></i>Garancija i usluge</div>
                     <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                        <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'10px 12px',background:'white',borderRadius:8,border:'1px solid var(--gray-200)'}}>
+                        <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'10px 12px',background:'var(--bg-card)',borderRadius:8,border:'1px solid var(--gray-200)'}}>
                             <input type="checkbox" checked={form.garancija_produzena} onChange={e=>setForm({...form,garancija_produzena:e.target.checked})} style={{width:16,height:16}} />
                             <div><div style={{fontWeight:600,fontSize:13}}>Produžena garancija +12 mjeseci</div><div style={{fontSize:11,color:'var(--gray-500)'}}>24 → 36 mjeseci | <strong style={{color:'var(--primary)'}}>60 KM</strong></div></div>
                         </label>
@@ -9056,7 +9093,7 @@ function LoyaltyBaza({ program, currentUser }) {
                                 <span style={{fontSize:12}}>Plaćeno 60 KM ✅</span>
                             </label>
                         )}
-                        <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'10px 12px',background:'white',borderRadius:8,border:'1px solid var(--gray-200)'}}>
+                        <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'10px 12px',background:'var(--bg-card)',borderRadius:8,border:'1px solid var(--gray-200)'}}>
                             <input type="checkbox" checked={form.cistenje_iskorisceno} onChange={e=>setForm({...form,cistenje_iskorisceno:e.target.checked})} style={{width:16,height:16}} />
                             <div><div style={{fontWeight:600,fontSize:13}}>Čišćenje i provjera performansi iskorišćeno</div><div style={{fontSize:11,color:'var(--gray-500)'}}>Dostupno tokom garancije | <strong style={{color:'var(--primary)'}}>5 KM</strong></div></div>
                         </label>
@@ -9467,7 +9504,7 @@ function StaffLoyaltyPortal({ currentUser }) {
                                 <i className="fas fa-shield-alt" style={{marginRight:6}}></i>Garancija i usluge
                             </div>
                             <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                                <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'10px 12px',background:'white',borderRadius:8,border:'1px solid var(--gray-200)'}}>
+                                <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'10px 12px',background:'var(--bg-card)',borderRadius:8,border:'1px solid var(--gray-200)'}}>
                                     <input type="checkbox" checked={form.garancija_produzena} onChange={e=>setForm({...form,garancija_produzena:e.target.checked})} style={{width:16,height:16}} />
                                     <div>
                                         <div style={{fontWeight:600,fontSize:13}}>Produžena garancija +12 mjeseci</div>
@@ -9480,7 +9517,7 @@ function StaffLoyaltyPortal({ currentUser }) {
                                         <div style={{fontSize:12}}>Plaćeno 60 KM ✅</div>
                                     </label>
                                 )}
-                                <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'10px 12px',background:'white',borderRadius:8,border:'1px solid var(--gray-200)'}}>
+                                <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'10px 12px',background:'var(--bg-card)',borderRadius:8,border:'1px solid var(--gray-200)'}}>
                                     <input type="checkbox" checked={form.cistenje_iskorisceno} onChange={e=>setForm({...form,cistenje_iskorisceno:e.target.checked})} style={{width:16,height:16}} />
                                     <div>
                                         <div style={{fontWeight:600,fontSize:13}}>Čišćenje i provjera performansi iskorišćeno</div>
