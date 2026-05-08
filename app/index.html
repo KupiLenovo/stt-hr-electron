@@ -477,7 +477,8 @@
             .topbar { padding: 10px 12px !important; gap: 8px; }
             .topbar h2 { font-size: 16px !important; }
             .topbar-right { gap: 6px !important; }
-            .topbar-right > button, .topbar-right > div > button { width: 36px !important; height: 36px !important; }
+            .topbar-right > button:not([title*="Trenutno"]), .topbar-right > div > button:not([title*="Trenutno"]):not([title*="podsjetnik"]):not([title*="poslu"]) { width: 36px !important; height: 36px !important; }
+            .topbar-right > div > button[title*="Trenutno"], .topbar-right > div > button[title*="poslu"] { height: 36px !important; padding: 0 10px !important; min-width: 50px; }
 
             /* Page content padding manji */
             .page-content { padding: 12px !important; }
