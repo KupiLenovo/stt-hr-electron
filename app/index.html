@@ -484,6 +484,7 @@
 
             /* FAB na mobile — pomijeren iznad bottom nav-a */
             .fab-wrapper { bottom: 84px !important; right: 16px !important; }
+            .chat-bubble { bottom: 84px !important; left: 16px !important; width: 50px !important; height: 50px !important; font-size: 20px !important; }
 
             /* Bottom navigation */
             .mobile-bottom-nav {
@@ -5705,6 +5706,15 @@ function ChatPage({ radnici, evidencije, currentUser, sendNotif }) {
         api(`/api/chat/${encodeURIComponent(grupa)}`).then(data => {
             const mapped = data.map(p => ({ id: p.id, radnik_id: p.radnik_id, tekst: p.poruka, timestamp: p.created_at, tip: 'tekst', radnik_ime: p.radnik_ime }));
             setPoruke(prev => ({...prev, [grupa]: mapped}));
+            // Markiraj sve poruke u ovoj grupi kao vidjene (najveci ID)
+            if (data.length > 0) {
+                try {
+                    const seen = JSON.parse(localStorage.getItem('stt_chat_seen')||'{}');
+                    const maxId = Math.max(...data.map(p=>p.id));
+                    seen[grupa] = Math.max(seen[grupa]||0, maxId);
+                    localStorage.setItem('stt_chat_seen', JSON.stringify(seen));
+                } catch(e) {}
+            }
         }).catch(()=>{});
     };
 
@@ -8012,6 +8022,119 @@ function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
 }
 
 // =====================================================================
+// CHAT BUBBLE — Messenger-style floating chat ikona
+// =====================================================================
+function ChatBubble({ currentUser, page, setPage }) {
+    const [unreadByGroup, setUnreadByGroup] = useState({});
+    const [recentMessage, setRecentMessage] = useState(null);
+    const lastTotalRef = React.useRef(0);
+    const grupe = ['svi', 'tutto_capsule', 'kupilenovo_stup', 'na_poslu', 'kafa', 'it_podrska'];
+
+    useEffect(() => {
+        if (!currentUser || page === 'chat') {
+            setRecentMessage(null);
+            return;
+        }
+        let cancelled = false;
+        const check = async () => {
+            let seen = {};
+            try { seen = JSON.parse(localStorage.getItem('stt_chat_seen')||'{}'); } catch {}
+            const result = {};
+            let najnovijaPoruka = null;
+            let total = 0;
+            for (const g of grupe) {
+                try {
+                    const data = await api(`/api/chat/${g}`);
+                    const lastSeenId = seen[g] || 0;
+                    const novi = data.filter(p => p.id > lastSeenId && p.radnik_id !== currentUser.id);
+                    result[g] = novi.length;
+                    total += novi.length;
+                    if (novi.length > 0) {
+                        const najnovija = novi[novi.length - 1];
+                        if (!najnovijaPoruka || najnovija.id > najnovijaPoruka.id) {
+                            najnovijaPoruka = { ...najnovija, grupa: g };
+                        }
+                    }
+                } catch(e) { result[g] = 0; }
+            }
+            if (cancelled) return;
+            setUnreadByGroup(result);
+            // Pokazi preview ako broj porasao
+            if (najnovijaPoruka && total > lastTotalRef.current) {
+                setRecentMessage(najnovijaPoruka);
+                setTimeout(() => setRecentMessage(prev => prev && prev.id === najnovijaPoruka.id ? null : prev), 6000);
+            }
+            lastTotalRef.current = total;
+        };
+        check();
+        const interval = setInterval(check, 12000);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, [currentUser?.id, page]);
+
+    if (!currentUser || page === 'chat') return null;
+
+    const totalUnread = Object.values(unreadByGroup).reduce((s,n) => s+n, 0);
+    const grupaNazivi = {
+        svi: 'Kompletna ekipa',
+        tutto_capsule: 'Tutto Capsule SHOP',
+        kupilenovo_stup: 'KupiLenovo & STUP',
+        na_poslu: 'Na poslu',
+        kafa: 'Kafa / Pauza',
+        it_podrska: 'IT Podrška',
+    };
+
+    return (
+        <>
+            {/* Preview pop-up */}
+            {recentMessage && (
+                <div onClick={()=>{setPage('chat');setRecentMessage(null);}} style={{
+                    position: 'fixed', bottom: 96, left: 24, zIndex: 91,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                    borderRadius: 14, padding: '12px 16px',
+                    minWidth: 260, maxWidth: 340, cursor: 'pointer',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                    animation: 'chatBubbleIn 0.35s ease',
+                }}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                        <div style={{fontSize:11,color:'var(--gray-400)',fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>{grupaNazivi[recentMessage.grupa]||recentMessage.grupa}</div>
+                        <button onClick={(e)=>{e.stopPropagation();setRecentMessage(null);}} style={{background:'transparent',border:'none',color:'var(--gray-400)',cursor:'pointer',fontSize:14,padding:0,lineHeight:1}}><i className="fas fa-times"></i></button>
+                    </div>
+                    <div style={{fontWeight:600,fontSize:13,color:'var(--text-primary)',marginBottom:3}}>{recentMessage.radnik_ime||'Radnik'}</div>
+                    <div style={{fontSize:13,color:'var(--text-secondary)',overflow:'hidden',textOverflow:'ellipsis',display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical'}}>
+                        {recentMessage.poruka}
+                    </div>
+                </div>
+            )}
+            {/* Floating chat bubble */}
+            <div onClick={()=>setPage('chat')} className="chat-bubble" style={{
+                position:'fixed', bottom: 24, left: 24, zIndex: 90,
+                width: 56, height: 56, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #2563eb, #1e40af)',
+                color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', boxShadow: '0 6px 16px rgba(37,99,235,0.4)',
+                fontSize: 22, transition: 'transform 0.15s'
+            }}
+            onMouseEnter={e=>e.currentTarget.style.transform='scale(1.08)'}
+            onMouseLeave={e=>e.currentTarget.style.transform=''}
+            title={totalUnread>0?`${totalUnread} novih poruka`:'Chat'}>
+                <i className="fas fa-comments"></i>
+                {totalUnread > 0 && (
+                    <span style={{
+                        position: 'absolute', top: -4, right: -4,
+                        background: '#dc2626', color: 'white', borderRadius: 10,
+                        minWidth: 22, height: 22, fontSize: 11, fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: '2px solid var(--bg-card)', padding: '0 6px',
+                        animation: 'pulse 2s infinite'
+                    }}>{totalUnread > 99 ? '99+' : totalUnread}</span>
+                )}
+            </div>
+            <style>{`@keyframes chatBubbleIn{from{opacity:0;transform:translateY(10px) scale(0.9);}to{opacity:1;transform:translateY(0) scale(1);}}`}</style>
+        </>
+    );
+}
+
+// =====================================================================
 // MOBILE BOTTOM NAVIGATION
 // =====================================================================
 function MobileBottomNav({ page, setPage, currentUser, setSidebarOpen }) {
@@ -9339,6 +9462,9 @@ function App() {
 
             {/* Quick Actions FAB */}
             <QuickActionsFAB currentUser={currentUser} setPage={setPage} />
+
+            {/* Chat Bubble (Messenger-style) */}
+            <ChatBubble currentUser={currentUser} page={page} setPage={setPage} />
 
             {/* Mobile bottom navigation */}
             <MobileBottomNav page={page} setPage={setPage} currentUser={currentUser} setSidebarOpen={setSidebarOpen} />
