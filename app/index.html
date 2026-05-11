@@ -9155,6 +9155,34 @@ function BirthdayJubileWidget({ radnici, currentUser }) {
     );
 }
 
+// =====================================================================
+// ERROR BOUNDARY — uhvati JS greske umjesto crnog ekrana
+// =====================================================================
+class ErrorBoundary extends React.Component {
+    constructor(props) { super(props); this.state = { error: null, info: null }; }
+    static getDerivedStateFromError(error) { return { error }; }
+    componentDidCatch(error, info) { this.setState({ info }); console.error('ERROR:', error, info); }
+    render() {
+        if (this.state.error) {
+            return (
+                <div style={{position:'fixed',inset:0,background:'#fff',color:'#1f2937',padding:30,fontFamily:'monospace',overflow:'auto',zIndex:99999}}>
+                    <div style={{maxWidth:800,margin:'0 auto'}}>
+                        <h1 style={{color:'#dc2626',fontSize:24,marginBottom:16}}>⚠ Greška u aplikaciji</h1>
+                        <p style={{marginBottom:16,fontSize:14}}>Pošalji ovaj screenshot administratoru:</p>
+                        <pre style={{background:'#fef2f2',padding:16,borderRadius:8,fontSize:12,whiteSpace:'pre-wrap',border:'1px solid #fecaca'}}>{String(this.state.error)}</pre>
+                        {this.state.info?.componentStack && (
+                            <pre style={{background:'#f3f4f6',padding:16,borderRadius:8,fontSize:11,whiteSpace:'pre-wrap',marginTop:12,border:'1px solid #e5e7eb',maxHeight:300,overflow:'auto'}}>{this.state.info.componentStack}</pre>
+                        )}
+                        <button onClick={()=>{ localStorage.clear(); window.location.reload(); }} style={{marginTop:16,padding:'12px 24px',background:'#1a56db',color:'white',border:'none',borderRadius:8,fontSize:14,cursor:'pointer',marginRight:8}}>Resetuj i pokušaj ponovo</button>
+                        <button onClick={()=>window.location.reload()} style={{marginTop:16,padding:'12px 24px',background:'#6b7280',color:'white',border:'none',borderRadius:8,fontSize:14,cursor:'pointer'}}>Samo refresh</button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
 function App() {
     const [page, setPage] = useState('centrala');
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -13138,7 +13166,7 @@ function AuditLogPage({ currentUser }) {
     );
 }
 
-ReactDOM.render(<App />, document.getElementById('root'));
+ReactDOM.render(<ErrorBoundary><App /></ErrorBoundary>, document.getElementById('root'));
 </script>
 
 <!-- Service Worker Registration & PWA Install -->
