@@ -454,6 +454,89 @@
         tr.hover-row { transition: background 0.15s; }
         tr.hover-row:hover { background: var(--gray-50) !important; }
 
+        /* ========== TOP NAVIGATION (Corporate) ========== */
+        .top-nav-wrapper {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky; top: 64px; z-index: 39;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+        }
+        .top-nav-main {
+            display: flex;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-app) 100%);
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .top-nav-main::-webkit-scrollbar { display: none; }
+        .top-nav-item {
+            padding: 14px 18px;
+            display: flex; align-items: center; gap: 8px;
+            cursor: pointer;
+            font-size: 13px; font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+            position: relative;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .top-nav-item i { font-size: 14px; opacity: 0.7; transition: all 0.18s; }
+        .top-nav-item:hover {
+            color: var(--primary);
+            background: rgba(59,130,246,0.04);
+        }
+        .top-nav-item:hover i { opacity: 1; }
+        .top-nav-item.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            background: rgba(59,130,246,0.06);
+        }
+        .top-nav-item.active i { opacity: 1; }
+
+        .top-nav-sub {
+            display: flex;
+            padding: 8px 24px;
+            gap: 4px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .top-nav-sub::-webkit-scrollbar { display: none; }
+        .top-nav-sub-item {
+            padding: 8px 14px;
+            display: flex; align-items: center; gap: 7px;
+            cursor: pointer;
+            font-size: 13px; font-weight: 500;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .top-nav-sub-item i { font-size: 12px; opacity: 0.6; }
+        .top-nav-sub-item:hover {
+            background: var(--bg-input);
+            color: var(--text-primary);
+        }
+        .top-nav-sub-item:hover i { opacity: 1; }
+        .top-nav-sub-item.active {
+            background: var(--primary);
+            color: white;
+        }
+        .top-nav-sub-item.active i { opacity: 1; }
+        [data-theme="dark"] .top-nav-item:hover { background: rgba(96,165,250,0.08); }
+        [data-theme="dark"] .top-nav-item.active { background: rgba(96,165,250,0.12); }
+        [data-theme="dark"] .top-nav-main { background: var(--bg-card); }
+
+        /* Sidebar — sakrij na desktop, ostavi za mobile */
+        @media (min-width: 901px) {
+            .sidebar { display: none !important; }
+            .main-content { margin-left: 0 !important; }
+            .topbar { top: 0; }
+            .top-nav-wrapper { top: 64px; }
+        }
+
         /* ============== MOBILE-FIRST RESPONSIVE ============== */
         .mobile-only { display: none; }
         .mobile-bottom-nav { display: none; }
@@ -8398,6 +8481,134 @@ function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
 }
 
 // =====================================================================
+// TOP NAVIGATION — Corporate dual-row navigacija
+// =====================================================================
+function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen }) {
+    if (!currentUser) return null;
+
+    // Definicija kategorija + podkategorija
+    const KATEGORIJE = [
+        {
+            key: 'centrala', naziv: 'Centrala', icon: 'fa-building',
+            podkategorije: [
+                { key: 'centrala', naziv: 'Pregled', icon: 'fa-home' },
+                { key: 'dashboard', naziv: 'Dashboard', icon: 'fa-tachometer-alt' },
+            ]
+        },
+        {
+            key: 'radno_vrijeme', naziv: 'Radno vrijeme', icon: 'fa-clock',
+            podkategorije: [
+                { key: 'evidencija', naziv: 'Evidencija rada', icon: 'fa-clock' },
+                { key: 'admin_evidencija', naziv: 'Pregled evidencije', icon: 'fa-user-clock', uloge: ['admin','voditelj'] },
+                { key: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fa-exchange-alt' },
+                { key: 'kasnjenja', naziv: 'Kašnjenja / Izjave', icon: 'fa-exclamation-triangle' },
+            ]
+        },
+        {
+            key: 'maloprodaja', naziv: 'Maloprodaja', icon: 'fa-store',
+            podkategorije: [
+                { key: 'pazar', naziv: 'Polog pazara', icon: 'fa-cash-register' },
+                { key: 'dopuna', naziv: 'Dopuna maloprodaje', icon: 'fa-boxes' },
+                { key: 'zadaci', naziv: 'Poslovni zadaci', icon: 'fa-tasks' },
+                { key: 'leadovi', naziv: 'Sales leadovi', icon: 'fa-bullhorn' },
+            ]
+        },
+        {
+            key: 'veleprodaja', naziv: 'Veleprodaja', icon: 'fa-truck-loading',
+            podkategorije: [
+                { key: 'dostava', naziv: 'Dostava robe', icon: 'fa-truck' },
+                { key: 'dopuna_vp', naziv: 'Dopuna VP — Uvoz', icon: 'fa-ship' },
+                { key: 'leadovi_vp', naziv: 'Sales leadovi VP', icon: 'fa-bullhorn' },
+                { key: 'vp_dugovanja', naziv: 'VP Dugovanja', icon: 'fa-hand-holding-usd' },
+            ]
+        },
+        {
+            key: 'servis', naziv: 'Servis', icon: 'fa-tools',
+            podkategorije: [
+                { key: 'servis', naziv: 'Servisni prijem', icon: 'fa-tools' },
+            ]
+        },
+        {
+            key: 'logistika', naziv: 'Logistika', icon: 'fa-truck',
+            podkategorije: [
+                { key: 'vozila', naziv: 'Službena vozila', icon: 'fa-car-side' },
+            ]
+        },
+        {
+            key: 'loyalty', naziv: 'Loyalty', icon: 'fa-gem',
+            podkategorije: [
+                { key: 'loyalty_kupilenovo', naziv: 'Kupilenovo Care', icon: 'fa-laptop' },
+                { key: 'loyalty_tuttocapsule', naziv: 'Tutto Capsule', icon: 'fa-mug-hot' },
+                { key: 'loyalty_staff', naziv: 'Staff Portal', icon: 'fa-star' },
+            ]
+        },
+        {
+            key: 'hr', naziv: 'HR', icon: 'fa-users',
+            podkategorije: [
+                { key: 'odmori', naziv: 'Godišnji odmori', icon: 'fa-umbrella-beach' },
+                { key: 'chat', naziv: 'Chat', icon: 'fa-comments' },
+                { key: 'pravila', naziv: 'Pravila i instrukcije', icon: 'fa-book' },
+                { key: 'vodici', naziv: 'Vodici i tutorijali', icon: 'fa-graduation-cap' },
+            ]
+        },
+        {
+            key: 'admin', naziv: 'Administracija', icon: 'fa-cog',
+            uloge: ['admin','voditelj'],
+            podkategorije: [
+                { key: 'lokacije', naziv: 'Lokacije', icon: 'fa-store' },
+                { key: 'radnici', naziv: 'Radnici', icon: 'fa-users-cog', uloge: ['admin'] },
+                { key: 'izvjestaji', naziv: 'Izvještaji', icon: 'fa-chart-bar' },
+                { key: 'audit', naziv: 'Audit log', icon: 'fa-history', uloge: ['admin'] },
+            ]
+        },
+    ];
+
+    // Filtriraj kategorije po ulozi
+    const dostupne = KATEGORIJE.filter(k => !k.uloge || k.uloge.includes(currentUser.uloga));
+
+    // Pronađi koja kategorija sadrži trenutnu stranicu
+    const aktivnaKategorija = dostupne.find(k => k.podkategorije.some(p => p.key === page))?.key || dostupne[0]?.key;
+    const podkategorije = dostupne.find(k => k.key === aktivnaKategorija)?.podkategorije || [];
+    const dostupnePod = podkategorije.filter(p => !p.uloge || p.uloge.includes(currentUser.uloga));
+
+    return (
+        <div className="top-nav-wrapper hide-mobile">
+            {/* Glavna kategorije */}
+            <div className="top-nav-main">
+                {dostupne.map(k => {
+                    const isActive = k.key === aktivnaKategorija;
+                    return (
+                        <div key={k.key} className={`top-nav-item ${isActive?'active':''}`}
+                            onClick={() => {
+                                const prvi = k.podkategorije.find(p => !p.uloge || p.uloge.includes(currentUser.uloga));
+                                if (prvi) setPage(prvi.key);
+                            }}>
+                            <i className={`fas ${k.icon}`}></i>
+                            <span>{k.naziv}</span>
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Podkategorije */}
+            {dostupnePod.length > 1 && (
+                <div className="top-nav-sub">
+                    {dostupnePod.map(p => {
+                        const isActive = p.key === page;
+                        return (
+                            <div key={p.key} className={`top-nav-sub-item ${isActive?'active':''}`}
+                                onClick={() => setPage(p.key)}>
+                                <i className={`fas ${p.icon}`}></i>
+                                <span>{p.naziv}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// =====================================================================
 // EVIDENCIJA BLOCKER — radnik bez dolaska danas ne moze koristiti app
 // =====================================================================
 function EvidencijaBlocker({ currentUser, evidencije, setPage, page, onLogout }) {
@@ -9329,7 +9540,7 @@ function App() {
 
     const handleLogin = (radnik) => {
         setCurrentUser(radnik);
-        setPage('centrala');
+        setPage('evidencija'); // direktno na clock-in nakon logina
         lastActivityRef.current = Date.now();
         addAudit('prijava', `Lokacija ID: ${radnik.lokacija_id}`, radnik.ime);
     };
@@ -9710,7 +9921,7 @@ function App() {
                 <div className="topbar">
                     <div style={{display:'flex',alignItems:'center',gap:12}}>
                         <button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><i className="fas fa-bars"></i></button>
-                        <h2>{pages[page]?.title || 'Dashboard'}</h2>
+                        <h2 className="topbar-title"><span style={{fontSize:18,fontWeight:700,color:'var(--primary)'}}>STT</span> <span style={{fontSize:13,color:'var(--gray-400)',fontWeight:500,marginLeft:6}}>HR & ERP</span></h2>
                     </div>
                     <div className="topbar-right">
                         <span onClick={() => setSetupDone(false)} title="Promijeni server" style={{cursor:'pointer',fontSize:11, padding:'3px 8px', borderRadius:20, background: serverOnline ? '#d1fae5' : '#fee2e2', color: serverOnline ? '#065f46' : '#991b1b'}}>
@@ -9844,6 +10055,9 @@ function App() {
                         <div className="avatar" title={`${currentUser.ime} ${currentUser.prezime} — Moj profil`} onClick={()=>{setPage('profil');setSidebarOpen(false);}} style={{cursor:'pointer'}}>{currentUser.ime[0]}{currentUser.prezime?.[0]||''}</div>
                     </div>
                 </div>
+
+                {/* Top navigacija (corporate, dual-row) — samo desktop */}
+                <TopNavigation page={page} setPage={setPage} currentUser={currentUser} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
                 {/* Offline banner — vidljiv radniku kada server nije dostupan */}
                 {!serverOnline && currentUser && (
