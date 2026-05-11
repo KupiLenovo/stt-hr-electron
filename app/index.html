@@ -8623,7 +8623,12 @@ function EvidencijaBlocker({ currentUser, evidencije, setPage, page, onLogout })
     const lok = LOKACIJE.find(l => l.id === currentUser.lokacija_id);
     if (lok?.radni_dani) {
         const dayOfWeek = new Date().getDay() || 7; // 0 (ned) -> 7
-        const radniDani = lok.radni_dani.split(',').map(d => parseInt(d.trim())).filter(n => !isNaN(n));
+        let radniDani = [];
+        if (Array.isArray(lok.radni_dani)) {
+            radniDani = lok.radni_dani.map(d => Number(d)).filter(n => !isNaN(n));
+        } else if (typeof lok.radni_dani === 'string') {
+            radniDani = lok.radni_dani.split(',').map(d => parseInt(d.trim())).filter(n => !isNaN(n));
+        }
         if (radniDani.length > 0 && !radniDani.includes(dayOfWeek)) return null; // nije radni dan
     }
     const DANI = ['Nedjelja','Ponedjeljak','Utorak','Srijeda','Cetvrtak','Petak','Subota'];
