@@ -8484,7 +8484,8 @@ function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
 // TOP NAVIGATION — Corporate dual-row navigacija
 // =====================================================================
 function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen }) {
-    if (!currentUser) return null;
+    if (!currentUser || !page || !setPage) return null;
+    const uloga = currentUser.uloga || 'radnik';
 
     // Definicija kategorija + podkategorija
     const KATEGORIJE = [
@@ -8564,12 +8565,13 @@ function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen
     ];
 
     // Filtriraj kategorije po ulozi
-    const dostupne = KATEGORIJE.filter(k => !k.uloge || k.uloge.includes(currentUser.uloga));
+    const dostupne = KATEGORIJE.filter(k => !k.uloge || k.uloge.includes(uloga));
+    if (dostupne.length === 0) return null;
 
     // Pronađi koja kategorija sadrži trenutnu stranicu
-    const aktivnaKategorija = dostupne.find(k => k.podkategorije.some(p => p.key === page))?.key || dostupne[0]?.key;
-    const podkategorije = dostupne.find(k => k.key === aktivnaKategorija)?.podkategorije || [];
-    const dostupnePod = podkategorije.filter(p => !p.uloge || p.uloge.includes(currentUser.uloga));
+    const aktivnaKategorija = (dostupne.find(k => k.podkategorije.some(p => p.key === page)) || dostupne[0]).key;
+    const aktKat = dostupne.find(k => k.key === aktivnaKategorija);
+    const dostupnePod = (aktKat?.podkategorije || []).filter(p => !p.uloge || p.uloge.includes(uloga));
 
     return (
         <div className="top-nav-wrapper hide-mobile">
@@ -8626,16 +8628,16 @@ function EvidencijaBlocker({ currentUser, evidencije, setPage, page, onLogout })
     }
     const DANI = ['Nedjelja','Ponedjeljak','Utorak','Srijeda','Cetvrtak','Petak','Subota'];
     return (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:20,backdropFilter:'blur(6px)'}}>
-            <div style={{maxWidth:500,width:'100%',padding:'40px 32px',background:'var(--bg-card)',borderRadius:20,textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,0.5)',color:'var(--text-primary)',animation:'fadeIn 0.3s'}}>
+        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,0.85)',zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:20,backdropFilter:'blur(6px)'}}>
+            <div style={{maxWidth:500,width:'100%',padding:'40px 32px',background:'#ffffff',borderRadius:20,textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,0.5)',color:'#1f2937',animation:'fadeIn 0.3s',border:'2px solid #e5e7eb'}}>
                 <div style={{width:88,height:88,margin:'0 auto 20px',borderRadius:'50%',background:'linear-gradient(135deg,#f59e0b,#dc2626)',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 24px rgba(220,38,38,0.4)'}}>
                     <i className="fas fa-clock" style={{fontSize:40,color:'white'}}></i>
                 </div>
-                <h2 style={{fontSize:24,fontWeight:700,marginBottom:8,color:'var(--text-primary)'}}>Niste prijavljeni na posao</h2>
-                <p style={{fontSize:15,color:'var(--gray-500)',marginBottom:6,lineHeight:1.5}}>
+                <h2 style={{fontSize:24,fontWeight:700,marginBottom:8,color:'#1f2937'}}>Niste prijavljeni na posao</h2>
+                <p style={{fontSize:15,color:'#6b7280',marginBottom:6,lineHeight:1.5}}>
                     Morate evidentirati dolazak da biste mogli koristiti aplikaciju.
                 </p>
-                <div style={{fontSize:13,color:'var(--gray-400)',marginBottom:28}}>
+                <div style={{fontSize:13,color:'#9ca3af',marginBottom:28}}>
                     {DANI[new Date().getDay()]}, {new Date().toLocaleDateString('hr-HR')}
                 </div>
                 <button onClick={()=>setPage('evidencija')} style={{
@@ -8649,14 +8651,14 @@ function EvidencijaBlocker({ currentUser, evidencije, setPage, page, onLogout })
                     <i className="fas fa-sign-in-alt"></i> Prijavi dolazak
                 </button>
                 <button onClick={onLogout} style={{
-                    width:'100%',padding:'12px',borderRadius:10,border:'1px solid var(--border-color)',
-                    background:'transparent',color:'var(--gray-500)',fontSize:13,cursor:'pointer'
+                    width:'100%',padding:'12px',borderRadius:10,border:'1px solid #e5e7eb',
+                    background:'transparent',color:'#6b7280',fontSize:13,cursor:'pointer'
                 }}>
                     <i className="fas fa-sign-out-alt" style={{marginRight:6}}></i> Odjava (nisam danas na poslu)
                 </button>
-                <div style={{marginTop:20,padding:12,background:'var(--bg-input)',borderRadius:8,fontSize:11,color:'var(--gray-400)',lineHeight:1.5}}>
-                    <i className="fas fa-info-circle" style={{marginRight:4,color:'var(--primary)'}}></i>
-                    Prijava se može obaviti samo na lokaciji <strong style={{color:'var(--text-primary)'}}>{lok?.naziv||'?'}</strong>.
+                <div style={{marginTop:20,padding:12,background:'#f3f4f6',borderRadius:8,fontSize:11,color:'#6b7280',lineHeight:1.5}}>
+                    <i className="fas fa-info-circle" style={{marginRight:4,color:'#1a56db'}}></i>
+                    Prijava se može obaviti samo na lokaciji <strong style={{color:'#1f2937'}}>{lok?.naziv||'?'}</strong>.
                     Ako si na bolovanju ili odmoru, javi voditelju.
                 </div>
             </div>
