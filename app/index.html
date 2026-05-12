@@ -3663,17 +3663,18 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
 
     const handleSubmit = async () => {
         if (!form.ime) return;
+        const payload = {...form, pozicija_id: Number(form.pozicija_id), lokacija_id: Number(form.lokacija_id), minuli_staz: Number(form.minuli_staz), requester_id: currentUser?.id};
         try {
             if (editingId) {
-                await api(`/api/radnici/${editingId}`, 'PUT', {...form, pozicija_id: Number(form.pozicija_id), lokacija_id: Number(form.lokacija_id), minuli_staz: Number(form.minuli_staz), aktivan: 1});
+                await api(`/api/radnici/${editingId}`, 'PUT', {...payload, aktivan: 1});
                 setRadnici(prev => prev.map(r => r.id === editingId ? {...r, ...form, pozicija_id: Number(form.pozicija_id), lokacija_id: Number(form.lokacija_id)} : r));
             } else {
-                const result = await api('/api/radnici', 'POST', {...form, pozicija_id: Number(form.pozicija_id), lokacija_id: Number(form.lokacija_id), minuli_staz: Number(form.minuli_staz)});
+                const result = await api('/api/radnici', 'POST', payload);
                 setRadnici(prev => [...prev, { id: result.id, ...form, pozicija_id: Number(form.pozicija_id), lokacija_id: Number(form.lokacija_id), aktivan: true }]);
             }
         } catch(e) {
-            if (editingId) setRadnici(prev => prev.map(r => r.id === editingId ? {...r, ...form} : r));
-            else setRadnici(prev => [...prev, { id: Date.now(), ...form, aktivan: true }]);
+            showAlert('Greška: ' + (e.message || 'Nemate pristup ili server nedostupan'), 'error');
+            return;
         }
         setShowModal(false);
     };
@@ -3683,8 +3684,8 @@ function RadniciPage({ radnici, setRadnici, currentUser }) {
         if (!await askConfirm(`Premjestiti ${radnikIme} u "${lokNaziv}"?`)) return;
         setLokacijaLoading(radnikId);
         try {
-            await api(`/api/radnici/${radnikId}`, 'PUT', { lokacija_id: Number(novaLokacijaId) });
-        } catch(e) {}
+            await api(`/api/radnici/${radnikId}`, 'PUT', { lokacija_id: Number(novaLokacijaId), requester_id: currentUser?.id });
+        } catch(e) { showAlert('Greška pri premještanju.', 'error'); }
         setRadnici(prev => prev.map(r => r.id === radnikId ? {...r, lokacija_id: Number(novaLokacijaId)} : r));
         setLokacijaLoading(null);
     };
