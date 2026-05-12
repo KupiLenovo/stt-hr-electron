@@ -8482,6 +8482,310 @@ function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
 }
 
 // =====================================================================
+// UNIVERZALNI DOWNLOAD — bilo koja tabela, bilo koji format
+// =====================================================================
+function DownloadPage({ currentUser }) {
+    const IZVORI = [
+        { key:'radnici', naziv:'Radnici', icon:'fa-users-cog', color:'#1e40af', endpoint:'/api/radnici',
+          kolone:[ ['ime','Ime'],['prezime','Prezime'],['telefon','Telefon'],['datum_zaposlenja','Datum zaposlenja'],['minuli_staz','Staz (god)'],['uloga','Uloga'],['pozicija_naziv','Pozicija'],['lokacija_naziv','Lokacija'],['datum_rodjenja','Datum rodjenja'],['telegram_username','Telegram'],['aktivan','Aktivan'] ] },
+        { key:'evidencija', naziv:'Evidencija rada', icon:'fa-clock', color:'#059669', endpoint:'/api/evidencija', tipDatum:true,
+          kolone:[ ['ime','Ime'],['prezime','Prezime'],['lokacija_naziv','Lokacija'],['datum','Datum'],['dolazak','Dolazak'],['odlazak','Odlazak'],['pocetak_pauze','Poc. pauze'],['kraj_pauze','Kraj pauze'] ] },
+        { key:'primopredaje', naziv:'Primopredaje smjena', icon:'fa-exchange-alt', color:'#0891b2', endpoint:'/api/primopredaje',
+          kolone:[ ['datum','Datum'],['lokacija_naziv','Lokacija'],['predaje_ime','Predaje'],['preuzima_ime','Preuzima'],['stanje_kase','Stanje kase'],['stanje_sefa','Stanje sefa'],['status','Status'],['napomena','Napomena'] ] },
+        { key:'polozi', naziv:'Polog pazara', icon:'fa-cash-register', color:'#10b981', endpoint:'/api/polozi',
+          kolone:[ ['datum','Datum'],['lokacija_naziv','Lokacija'],['radnik_ime','Radnik'],['iznos_gotovina','Gotovina'],['iznos_kartice','Kartice'],['iznos_virman','Virman'],['status','Status'] ] },
+        { key:'dopune', naziv:'Dopune maloprodaje', icon:'fa-boxes', color:'#d97706', endpoint:'/api/dopune',
+          kolone:[ ['created_at','Datum'],['lokacija_naziv','Lokacija'],['radnik_ime','Radnik'],['prioritet','Prioritet'],['status','Status'],['napomena','Napomena'] ] },
+        { key:'leadovi', naziv:'Sales leadovi', icon:'fa-bullhorn', color:'#dc2626', endpoint:'/api/leadovi',
+          kolone:[ ['created_at','Datum'],['kupac_ime','Kupac'],['telefon','Telefon'],['email','Email'],['proizvod','Proizvod'],['iznos','Iznos'],['status','Status'] ] },
+        { key:'zadaci', naziv:'Poslovni zadaci', icon:'fa-tasks', color:'#7c3aed', endpoint:'/api/zadaci',
+          kolone:[ ['naslov','Naslov'],['radnik_ime','Radnik'],['lokacija_naziv','Lokacija'],['rok','Rok'],['status','Status'],['prioritet','Prioritet'] ] },
+        { key:'odmori', naziv:'Godisnji odmori', icon:'fa-umbrella-beach', color:'#0ea5e9', endpoint:'/api/odmori',
+          kolone:[ ['radnik_ime','Radnik'],['datum_od','Od'],['datum_do','Do'],['tip','Tip'],['status','Status'],['razlog','Razlog'] ] },
+        { key:'vp_dugovanja', naziv:'VP Dugovanja', icon:'fa-hand-holding-usd', color:'#b91c1c', endpoint:'/api/vp-dugovanja',
+          kolone:[ ['klijent_ime','Klijent'],['klijent_firma','Firma'],['klijent_telefon','Telefon'],['datum_izdavanja','Datum izd.'],['rok_placanja','Rok'],['ukupan_iznos','Ukupno'],['placeni_iznos','Placeno'],['status','Status'],['broj_fakture','Faktura'] ] },
+        { key:'loyalty_kupi', naziv:'Loyalty — Kupilenovo', icon:'fa-laptop', color:'#7c3aed', endpoint:'/api/loyalty/clanovi?program=kupilenovo',
+          kolone:[ ['ime','Ime'],['prezime','Prezime'],['telefon','Telefon'],['email','Email'],['adresa','Adresa'],['datum_rodjenja','Datum rodjenja'],['laptop_model','Laptop'],['datum_kupovine_laptopa','Datum kup.'],['garancija_produzena','Gar.prod.'],['cistenje_iskorisceno','Cisc.iskor.'] ] },
+        { key:'loyalty_tutto', naziv:'Loyalty — Tutto Capsule', icon:'fa-mug-hot', color:'#dc2626', endpoint:'/api/loyalty/clanovi?program=tuttocapsule',
+          kolone:[ ['ime','Ime'],['prezime','Prezime'],['telefon','Telefon'],['email','Email'],['adresa','Adresa'],['datum_rodjenja','Datum rodjenja'],['aparat','Aparat'],['datum_kupovine_aparata','Datum kup.'] ] },
+        { key:'lokacije', naziv:'Lokacije', icon:'fa-store', color:'#0891b2', endpoint:'/api/lokacije',
+          kolone:[ ['naziv','Naziv'],['tip','Tip'],['adresa','Adresa'],['telefon','Telefon'],['radno_vrijeme','Radno vrijeme'],['aktivan','Aktivan'] ] },
+        { key:'vozila', naziv:'Sluzbena vozila', icon:'fa-car-side', color:'#059669', endpoint:'/api/vozila',
+          kolone:[ ['naziv','Naziv'],['registracija','Registracija'],['tip','Tip'],['lokacija_naziv','Lokacija'],['aktivan','Aktivan'] ] },
+        { key:'servis', naziv:'Servisni nalozi', icon:'fa-tools', color:'#f59e0b', endpoint:'/api/servis',
+          kolone:[ ['datum','Datum'],['kupac_ime','Kupac'],['telefon','Telefon'],['tip_uredjaja','Uredjaj'],['kvar','Kvar'],['status','Status'],['cijena_konacna','Cijena'] ] },
+    ];
+
+    const [izvor, setIzvor] = useState('radnici');
+    const [format, setFormat] = useState('csv');
+    const [datumOd, setDatumOd] = useState('');
+    const [datumDo, setDatumDo] = useState('');
+    const [lokacijaFilter, setLokacijaFilter] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [preview, setPreview] = useState(null); // {rows, full}
+    const [history, setHistory] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('stt_download_history')||'[]'); } catch { return []; }
+    });
+
+    const izvorObj = IZVORI.find(i => i.key === izvor);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            let params = [];
+            if (izvorObj.tipDatum) {
+                if (datumOd) params.push(`datum_od=${datumOd}`);
+                if (datumDo) params.push(`datum_do=${datumDo}`);
+            }
+            if (lokacijaFilter) params.push(`lokacija_id=${lokacijaFilter}`);
+            const sep = izvorObj.endpoint.includes('?') ? '&' : '?';
+            const url = izvorObj.endpoint + (params.length ? sep + params.join('&') : '');
+            const data = await api(url);
+            let rows = Array.isArray(data) ? data : (data.rows || []);
+            // Lokalni filter datum (ako endpoint ne podržava)
+            if (!izvorObj.tipDatum && (datumOd || datumDo)) {
+                rows = rows.filter(r => {
+                    const d = r.datum || r.created_at?.slice(0,10) || r.datum_izdavanja;
+                    if (!d) return true;
+                    if (datumOd && d < datumOd) return false;
+                    if (datumDo && d > datumDo) return false;
+                    return true;
+                });
+            }
+            // Lokacija filter
+            if (lokacijaFilter) {
+                rows = rows.filter(r => !r.lokacija_id || Number(r.lokacija_id) === Number(lokacijaFilter));
+            }
+            setLoading(false);
+            return rows;
+        } catch(e) {
+            setLoading(false);
+            showAlert('Greška: ' + (e.message || 'Server nedostupan'), 'error');
+            return [];
+        }
+    };
+
+    const handlePreview = async () => {
+        const rows = await fetchData();
+        setPreview({ rows: rows.slice(0, 10), full: rows.length });
+    };
+
+    const toCSV = (rows, kolone, separator = ',') => {
+        const header = kolone.map(([_, label]) => `"${label}"`).join(separator);
+        const dataRows = rows.map(r => kolone.map(([key]) => {
+            let v = r[key];
+            if (v === null || v === undefined) v = '';
+            if (typeof v === 'boolean') v = v ? 'Da' : 'Ne';
+            if (typeof v === 'number') v = String(v);
+            v = String(v).replace(/"/g, '""');
+            return `"${v}"`;
+        }).join(separator));
+        return '﻿' + [header, ...dataRows].join('\n'); // UTF-8 BOM
+    };
+
+    const toJSON = (rows, kolone) => {
+        const filtered = rows.map(r => {
+            const obj = {};
+            kolone.forEach(([key, label]) => { obj[label] = r[key] ?? null; });
+            return obj;
+        });
+        return JSON.stringify(filtered, null, 2);
+    };
+
+    const downloadFile = (content, filename, mime) => {
+        const blob = new Blob([content], { type: mime + ';charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const saveHistory = (entry) => {
+        const upd = [{ ...entry, ts: new Date().toISOString() }, ...history].slice(0, 20);
+        setHistory(upd);
+        try { localStorage.setItem('stt_download_history', JSON.stringify(upd)); } catch(e) {}
+    };
+
+    const handleDownload = async () => {
+        const rows = await fetchData();
+        if (rows.length === 0) { showAlert('Nema podataka za odabrane filtere.', 'warning'); return; }
+        const dt = today();
+        const baseName = `STT_${izvor}_${dt}`;
+
+        if (format === 'csv') {
+            downloadFile(toCSV(rows, izvorObj.kolone, ','), baseName + '.csv', 'text/csv');
+        } else if (format === 'excel') {
+            downloadFile(toCSV(rows, izvorObj.kolone, ';'), baseName + '.csv', 'text/csv');
+        } else if (format === 'json') {
+            downloadFile(toJSON(rows, izvorObj.kolone), baseName + '.json', 'application/json');
+        } else if (format === 'pdf') {
+            generatePDF(rows, izvorObj);
+        }
+        saveHistory({ izvor: izvorObj.naziv, format, count: rows.length });
+        showAlert(`Preuzeto ${rows.length} redova u ${format.toUpperCase()} formatu.`, 'success');
+    };
+
+    const generatePDF = (rows, src) => {
+        const ths = src.kolone.map(([_, l]) => `<th>${l}</th>`).join('');
+        const trs = rows.map(r => '<tr>' + src.kolone.map(([k]) => {
+            let v = r[k];
+            if (v === null || v === undefined) v = '';
+            if (typeof v === 'boolean') v = v ? 'Da' : 'Ne';
+            return `<td>${String(v)}</td>`;
+        }).join('') + '</tr>').join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${src.naziv}</title>
+        <style>
+            body { font-family: Arial; font-size: 11px; padding: 16px; color: #000; }
+            h1 { font-size: 18px; margin: 0 0 4px; }
+            .meta { font-size: 11px; color: #555; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+            table { width: 100%; border-collapse: collapse; }
+            th { background: #1a56db; color: white; padding: 6px 8px; text-align: left; font-size: 11px; }
+            td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; font-size: 11px; }
+            tr:nth-child(even) td { background: #f9fafb; }
+            @media print { @page { margin: 10mm; size: A4 landscape; } }
+        </style></head><body>
+        <h1>${src.naziv}</h1>
+        <div class="meta">
+            STT d.o.o. Sarajevo • Generisao: ${new Date().toLocaleString('hr-HR')} • Ukupno: ${rows.length} ${rows.length===1?'red':'redova'}
+            ${datumOd?` • Od: ${datumOd}`:''}${datumDo?` • Do: ${datumDo}`:''}
+        </div>
+        <table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>
+        <script>window.onload=()=>window.print();<\/script>
+        </body></html>`;
+        const w = window.open('', '_blank', 'width=1200,height=800');
+        w.document.write(html); w.document.close();
+    };
+
+    const formatNazivi = { csv: 'CSV (zarez)', excel: 'CSV za Excel (tačka-zarez)', json: 'JSON', pdf: 'PDF (print)' };
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:20}}>
+                {/* Lijevo: konfiguracija */}
+                <div className="card">
+                    <div className="card-header"><h3><i className="fas fa-download" style={{marginRight:8,color:'var(--primary)'}}></i>Preuzimanje podataka</h3></div>
+                    <div className="card-body">
+                        {/* Izvor podataka */}
+                        <label style={{fontSize:12,fontWeight:600,color:'var(--gray-500)',textTransform:'uppercase',marginBottom:8,display:'block'}}>1. Izvor podataka</label>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))',gap:8,marginBottom:20,maxHeight:280,overflow:'auto',padding:4}}>
+                            {IZVORI.map(i => (
+                                <div key={i.key} onClick={()=>setIzvor(i.key)} style={{
+                                    padding:12,borderRadius:10,cursor:'pointer',textAlign:'center',
+                                    border:`2px solid ${izvor===i.key?i.color:'var(--border-color)'}`,
+                                    background:izvor===i.key?i.color+'15':'transparent',
+                                    transition:'all 0.15s'
+                                }}>
+                                    <i className={`fas ${i.icon}`} style={{fontSize:18,color:i.color,marginBottom:6,display:'block'}}></i>
+                                    <div style={{fontSize:11,fontWeight:izvor===i.key?700:500,color:izvor===i.key?i.color:'var(--text-secondary)'}}>{i.naziv}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Filteri */}
+                        <label style={{fontSize:12,fontWeight:600,color:'var(--gray-500)',textTransform:'uppercase',marginBottom:8,display:'block'}}>2. Filteri (opcionalno)</label>
+                        <div className="form-row" style={{marginBottom:12}}>
+                            <div className="form-group"><label>Od datuma</label><DateInput className="form-control" value={datumOd} onChange={e=>setDatumOd(e.target.value)} /></div>
+                            <div className="form-group"><label>Do datuma</label><DateInput className="form-control" value={datumDo} onChange={e=>setDatumDo(e.target.value)} /></div>
+                        </div>
+                        <div className="form-group" style={{marginBottom:20}}>
+                            <label>Lokacija</label>
+                            <select className="form-control" value={lokacijaFilter} onChange={e=>setLokacijaFilter(e.target.value)}>
+                                <option value="">Sve lokacije</option>
+                                {LOKACIJE.filter(l=>l.aktivan!==false).map(l=><option key={l.id} value={l.id}>{l.naziv}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Format */}
+                        <label style={{fontSize:12,fontWeight:600,color:'var(--gray-500)',textTransform:'uppercase',marginBottom:8,display:'block'}}>3. Format</label>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:20}}>
+                            {[['csv','fa-file-csv','#10b981'],['excel','fa-file-excel','#1d6f42'],['json','fa-file-code','#7c3aed'],['pdf','fa-file-pdf','#dc2626']].map(([f, icon, color]) => (
+                                <div key={f} onClick={()=>setFormat(f)} style={{
+                                    padding:14,borderRadius:10,cursor:'pointer',textAlign:'center',
+                                    border:`2px solid ${format===f?color:'var(--border-color)'}`,
+                                    background:format===f?color+'15':'transparent',
+                                    transition:'all 0.15s'
+                                }}>
+                                    <i className={`fas ${icon}`} style={{fontSize:22,color:color,marginBottom:6,display:'block'}}></i>
+                                    <div style={{fontSize:11,fontWeight:format===f?700:500}}>{f.toUpperCase()}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Akcije */}
+                        <div style={{display:'flex',gap:8}}>
+                            <button className="btn btn-outline" onClick={handlePreview} disabled={loading} style={{flex:1}}>
+                                {loading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-eye"></i>} Pregled
+                            </button>
+                            <button className="btn btn-primary" onClick={handleDownload} disabled={loading} style={{flex:2}}>
+                                {loading ? <><i className="fas fa-spinner fa-spin"></i> Učitavam...</> : <><i className="fas fa-download"></i> Preuzmi {formatNazivi[format]}</>}
+                            </button>
+                        </div>
+                        <div style={{fontSize:11,color:'var(--gray-400)',marginTop:10}}>
+                            <i className="fas fa-info-circle" style={{marginRight:4}}></i>
+                            CSV se otvara u Excel-u (koristi tačka-zarez ako Excel ne prikazuje kolone pravilno).
+                        </div>
+                    </div>
+                </div>
+
+                {/* Desno: preview + historija */}
+                <div>
+                    <div className="card" style={{marginBottom:16}}>
+                        <div className="card-header"><h3>Pregled</h3>{preview && <span style={{fontSize:12,color:'var(--gray-400)'}}>Prikazujem {preview.rows.length} od {preview.full}</span>}</div>
+                        <div className="card-body" style={{maxHeight:380,overflow:'auto'}}>
+                            {!preview ? (
+                                <div style={{textAlign:'center',padding:30,color:'var(--gray-400)'}}>
+                                    <i className="fas fa-table" style={{fontSize:32,marginBottom:10,display:'block',opacity:0.5}}></i>
+                                    Klikni "Pregled" da vidiš prvih 10 redova
+                                </div>
+                            ) : preview.rows.length === 0 ? (
+                                <div style={{textAlign:'center',padding:30,color:'var(--gray-400)',fontSize:13}}>Nema podataka za zadane filtere</div>
+                            ) : (
+                                <div style={{overflowX:'auto'}}>
+                                    <table style={{fontSize:11}}>
+                                        <thead><tr>{izvorObj.kolone.map(([k,l])=><th key={k}>{l}</th>)}</tr></thead>
+                                        <tbody>
+                                            {preview.rows.map((r,i)=>(
+                                                <tr key={i}>{izvorObj.kolone.map(([k])=><td key={k} style={{maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(()=>{const v=r[k];if(v===null||v===undefined)return '';if(typeof v==='boolean')return v?'Da':'Ne';return String(v);})()}</td>)}</tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Historija */}
+                    <div className="card">
+                        <div className="card-header"><h3>Posljednja preuzimanja</h3>{history.length>0 && <button className="btn btn-sm btn-outline" onClick={()=>{setHistory([]);try{localStorage.removeItem('stt_download_history');}catch(e){}}}><i className="fas fa-trash"></i></button>}</div>
+                        <div className="card-body">
+                            {history.length === 0 ? (
+                                <div style={{textAlign:'center',padding:20,color:'var(--gray-400)',fontSize:13}}>Još nema preuzimanja</div>
+                            ) : (
+                                <div style={{maxHeight:200,overflow:'auto'}}>
+                                    {history.map((h,i)=>(
+                                        <div key={i} style={{display:'flex',gap:10,padding:'8px 0',borderBottom:i<history.length-1?'1px solid var(--border-color)':'none',fontSize:12}}>
+                                            <div style={{width:30,height:30,borderRadius:'50%',background:'var(--bg-input)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                <i className={`fas ${h.format==='csv'||h.format==='excel'?'fa-file-csv':h.format==='json'?'fa-file-code':'fa-file-pdf'}`} style={{fontSize:11,color:'var(--gray-500)'}}></i>
+                                            </div>
+                                            <div style={{flex:1}}>
+                                                <div style={{fontWeight:500}}>{h.izvor}</div>
+                                                <div style={{fontSize:10,color:'var(--gray-400)'}}>{h.count} redova • {h.format.toUpperCase()} • {new Date(h.ts).toLocaleString('hr-HR')}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =====================================================================
 // TOP NAVIGATION — Corporate dual-row navigacija
 // =====================================================================
 function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen }) {
@@ -8560,6 +8864,7 @@ function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen
                 { key: 'lokacije', naziv: 'Lokacije', icon: 'fa-store' },
                 { key: 'radnici', naziv: 'Radnici', icon: 'fa-users-cog', uloge: ['admin'] },
                 { key: 'izvjestaji', naziv: 'Izvještaji', icon: 'fa-chart-bar' },
+                { key: 'download', naziv: 'Preuzimanje', icon: 'fa-download' },
                 { key: 'audit', naziv: 'Audit log', icon: 'fa-history', uloge: ['admin'] },
             ]
         },
@@ -9718,6 +10023,7 @@ function App() {
         vodici: { title: 'Vodici i tutorijali', icon: 'fas fa-book' },
         vp_dugovanja: { title: 'VP Dugovanja', icon: 'fas fa-hand-holding-usd' },
         lokacije: { title: 'Lokacije', icon: 'fas fa-store' },
+        download: { title: 'Preuzimanje podataka', icon: 'fas fa-download' },
     };
 
     const renderPage = () => {
@@ -9745,6 +10051,7 @@ function App() {
             case 'izvjestaji': return <IzvjestajiPage radnici={radnici} currentUser={currentUser} />;
             case 'radnici': return <RadniciPage radnici={radnici} setRadnici={setRadnici} currentUser={currentUser} />;
             case 'audit': return <AuditLogPage currentUser={currentUser} />;
+            case 'download': return <DownloadPage currentUser={currentUser} />;
             case 'profil': return <ProfilPage currentUser={currentUser} radnici={radnici} />;
             case 'vodici': return <VodiciPage currentUser={currentUser} />;
             case 'vp_dugovanja': return <VPDugovanjaPage currentUser={currentUser} radnici={radnici} />;
@@ -9902,6 +10209,9 @@ function App() {
                         )}
                         <div className={`nav-item ${page==='lokacije'?'active':''}`} onClick={()=>{setPage('lokacije');setSidebarOpen(false);}}>
                             <i className="fas fa-store"></i>Lokacije
+                        </div>
+                        <div className={`nav-item ${page==='download'?'active':''}`} onClick={()=>{setPage('download');setSidebarOpen(false);}}>
+                            <i className="fas fa-download"></i>Preuzimanje
                         </div>
                         </>);
                     })()}
