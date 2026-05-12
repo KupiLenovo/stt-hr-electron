@@ -8482,6 +8482,457 @@ function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
 }
 
 // =====================================================================
+// CRM — Kupci + Pipeline + Aktivnosti + Dashboard
+// =====================================================================
+function CRMPage({ currentUser, radnici }) {
+    const [tab, setTab] = useState('dashboard'); // dashboard, kupci, pipeline, aktivnosti
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',gap:4,marginBottom:16,borderBottom:'1px solid var(--border-color)',overflowX:'auto'}}>
+                {[
+                    {k:'dashboard',l:'Dashboard',i:'fa-chart-pie'},
+                    {k:'pipeline',l:'Pipeline',i:'fa-stream'},
+                    {k:'kupci',l:'Kupci',i:'fa-address-book'},
+                    {k:'aktivnosti',l:'Aktivnosti',i:'fa-history'},
+                ].map(t => (
+                    <button key={t.k} onClick={()=>setTab(t.k)} style={{
+                        padding:'10px 16px',border:'none',background:'transparent',
+                        cursor:'pointer',color:tab===t.k?'var(--primary)':'var(--gray-500)',
+                        borderBottom:`2px solid ${tab===t.k?'var(--primary)':'transparent'}`,
+                        fontWeight:tab===t.k?700:500,fontSize:13,whiteSpace:'nowrap'
+                    }}><i className={`fas ${t.i}`} style={{marginRight:6}}></i>{t.l}</button>
+                ))}
+            </div>
+            {tab==='dashboard' && <CRMDashboardTab currentUser={currentUser} radnici={radnici} />}
+            {tab==='pipeline' && <CRMPipelineTab currentUser={currentUser} radnici={radnici} />}
+            {tab==='kupci' && <CRMKupciTab currentUser={currentUser} radnici={radnici} />}
+            {tab==='aktivnosti' && <CRMAktivnostiTab currentUser={currentUser} radnici={radnici} />}
+        </div>
+    );
+}
+
+function CRMDashboardTab({ currentUser }) {
+    const [data, setData] = useState(null);
+    useEffect(() => { api('/api/crm/dashboard').then(setData).catch(()=>{}); }, []);
+    if (!data) return <div style={{textAlign:'center',padding:40,color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i></div>;
+    const pipelineMap = { otvoren:'Novi', kontaktiran:'Kontaktiran', kvalifikovan:'Kvalifikovan', ponuda:'Ponuda', pregovaranje:'Pregovaranje' };
+    const pipelineKolor = { otvoren:'#6b7280', kontaktiran:'#3b82f6', kvalifikovan:'#8b5cf6', ponuda:'#f59e0b', pregovaranje:'#ef4444' };
+    return (
+        <>
+            <div className="stats-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:20}}>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#dbeafe',color:'#2563eb'}}><i className="fas fa-funnel-dollar"></i></div>
+                    <div className="stat-value">{data.ukupnoMjesec}</div>
+                    <div className="stat-label">Leadova ovaj mjesec</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#d1fae5',color:'#059669'}}><i className="fas fa-check-circle"></i></div>
+                    <div className="stat-value">{data.zatvoreniUspjesno.broj}</div>
+                    <div className="stat-label">Zatvoreno uspješno</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#fef3c7',color:'#d97706'}}><i className="fas fa-percentage"></i></div>
+                    <div className="stat-value">{data.konverzija}%</div>
+                    <div className="stat-label">Konverzija</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{background:'#ede9fe',color:'#7c3aed'}}><i className="fas fa-money-bill-wave"></i></div>
+                    <div className="stat-value" style={{fontSize:18}}>{formatCurrency(data.zatvoreniUspjesno.iznos||0)}</div>
+                    <div className="stat-label">Promet (mjesec)</div>
+                </div>
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+                {/* Pipeline summary */}
+                <div className="card">
+                    <div className="card-header"><h3>Pipeline status</h3></div>
+                    <div className="card-body">
+                        {data.pipeline.length === 0 ? <div style={{textAlign:'center',padding:20,color:'var(--gray-400)',fontSize:13}}>Nema otvorenih leadova</div> :
+                        data.pipeline.map(p => (
+                            <div key={p.status} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border-color)'}}>
+                                <div style={{width:8,height:30,borderRadius:4,background:pipelineKolor[p.status]||'#9ca3af'}}></div>
+                                <div style={{flex:1}}>
+                                    <div style={{fontWeight:600,fontSize:13}}>{pipelineMap[p.status]||p.status}</div>
+                                    <div style={{fontSize:11,color:'var(--gray-400)'}}>{p.broj} {p.broj===1?'lead':'leadova'}</div>
+                                </div>
+                                <div style={{fontWeight:600,color:pipelineKolor[p.status]||'var(--text-primary)'}}>{formatCurrency(p.iznos||0)}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Top radnici */}
+                <div className="card">
+                    <div className="card-header"><h3>Top radnici (mjesec)</h3></div>
+                    <div className="card-body">
+                        {data.topRadnici.length === 0 ? <div style={{textAlign:'center',padding:20,color:'var(--gray-400)',fontSize:13}}>Nema podataka</div> :
+                        data.topRadnici.map((r,i) => (
+                            <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<data.topRadnici.length-1?'1px solid var(--border-color)':'none'}}>
+                                <div style={{width:28,height:28,borderRadius:'50%',background:i===0?'#fef3c7':'var(--bg-input)',color:i===0?'#92400e':'var(--text-secondary)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>{i+1}</div>
+                                <div style={{flex:1}}>
+                                    <div style={{fontSize:13,fontWeight:500}}>{r.ime} {r.prezime}</div>
+                                    <div style={{fontSize:11,color:'var(--gray-400)'}}>{r.broj_leadova} leadova • {r.zatvoreno} zatvoreno</div>
+                                </div>
+                                <div style={{textAlign:'right',fontSize:13,fontWeight:700,color:'#059669'}}>{formatCurrency(r.promet||0)}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="card">
+                <div className="card-header"><h3>Slijedeći koraci ({data.slijedeci.length})</h3></div>
+                <div className="card-body">
+                    {data.slijedeci.length === 0 ? <div style={{textAlign:'center',padding:20,color:'var(--gray-400)',fontSize:13}}>Nema zakazanih aktivnosti</div> :
+                    data.slijedeci.map(s => (
+                        <div key={s.id} style={{display:'flex',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border-color)',fontSize:13}}>
+                            <div style={{minWidth:80,fontSize:12,color:'var(--primary)',fontWeight:600}}>{formatDate(s.sljedeci_datum)}</div>
+                            <div style={{flex:1}}>
+                                <div style={{fontWeight:500}}>{s.sljedeci_korak}</div>
+                                <div style={{fontSize:11,color:'var(--gray-400)'}}>{s.kupac_ime ? `${s.kupac_ime} • `: ''}{s.radnik_ime}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </>
+    );
+}
+
+function CRMKupciTab({ currentUser, radnici }) {
+    const [kupci, setKupci] = useState([]);
+    const [search, setSearch] = useState('');
+    const [edit, setEdit] = useState(null); // null | 'new' | id
+    const [form, setForm] = useState({});
+    const [detail, setDetail] = useState(null);
+
+    const load = (q='') => api(`/api/kupci${q?'?q='+encodeURIComponent(q):''}`).then(setKupci).catch(()=>{});
+    useEffect(() => { load(); }, []);
+    useEffect(() => { const t = setTimeout(()=>load(search), 300); return () => clearTimeout(t); }, [search]);
+
+    const handleSave = async () => {
+        if (!form.ime?.trim()) return showAlert('Ime je obavezno', 'warning');
+        try {
+            if (edit === 'new') await api('/api/kupci', 'POST', { ...form, kreirao_id: currentUser?.id });
+            else await api(`/api/kupci/${edit}`, 'PUT', form);
+            await load(search);
+            setEdit(null); setForm({});
+            showAlert('Kupac spremljen', 'success');
+        } catch(e) { showAlert('Greška: ' + (e.message||''), 'error'); }
+    };
+    const handleDelete = async (k) => {
+        if (!await askConfirm(`Obrisati kupca ${k.ime} ${k.prezime||''}?`, true)) return;
+        try { await api(`/api/kupci/${k.id}`, 'DELETE', { requester_id: currentUser?.id }); await load(); setDetail(null); showAlert('Obrisano', 'success'); }
+        catch(e) { showAlert('Greška', 'error'); }
+    };
+
+    return (
+        <>
+            <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+                <input className="form-control" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pretraga (ime, firma, telefon, email, JIB)..." style={{flex:1,minWidth:240,maxWidth:400}} />
+                <button className="btn btn-primary" onClick={()=>{setForm({tip:'fizicko'});setEdit('new');}}><i className="fas fa-plus"></i> Novi kupac</button>
+            </div>
+            <div className="card">
+                <div className="card-header"><h3>Baza kupaca ({kupci.length})</h3></div>
+                <div className="card-body table-wrap">
+                    <table>
+                        <thead><tr><th>Ime / Firma</th><th>Telefon</th><th>Email</th><th>Grad</th><th>Leadova</th><th>Akcije</th></tr></thead>
+                        <tbody>
+                            {kupci.map(k => (
+                                <tr key={k.id} className="hover-row" onClick={()=>{api(`/api/kupci/${k.id}`).then(setDetail);}} style={{cursor:'pointer'}}>
+                                    <td>
+                                        <div style={{fontWeight:500}}>{k.ime} {k.prezime||''}</div>
+                                        {k.firma && <div style={{fontSize:11,color:'var(--gray-400)'}}><i className="fas fa-building" style={{marginRight:4}}></i>{k.firma}</div>}
+                                    </td>
+                                    <td style={{fontSize:13}}>{k.telefon||'-'}</td>
+                                    <td style={{fontSize:13}}>{k.email||'-'}</td>
+                                    <td style={{fontSize:13}}>{k.grad||'-'}</td>
+                                    <td><span className="badge badge-info">{k.broj_leadova||0}</span></td>
+                                    <td onClick={e=>e.stopPropagation()}>
+                                        <button className="btn btn-sm btn-outline" onClick={()=>{setForm({...k});setEdit(k.id);}}><i className="fas fa-edit"></i></button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {kupci.length === 0 && <tr><td colSpan={6} style={{textAlign:'center',color:'var(--gray-400)',padding:24}}>Nema kupaca</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {edit !== null && (
+                <Modal isOpen={true} onClose={()=>{setEdit(null);setForm({});}} title={edit==='new'?'Novi kupac':`Uredi kupca`} footer={
+                    <><button className="btn btn-outline" onClick={()=>{setEdit(null);setForm({});}}>Otkaži</button>
+                    <button className="btn btn-primary" onClick={handleSave}><i className="fas fa-save"></i> Spremi</button></>
+                }>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Tip kupca</label>
+                            <select className="form-control" value={form.tip||'fizicko'} onChange={e=>setForm({...form,tip:e.target.value})}>
+                                <option value="fizicko">Fizičko lice</option>
+                                <option value="firma">Pravno lice (firma)</option>
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Izvor</label>
+                            <select className="form-control" value={form.izvor||''} onChange={e=>setForm({...form,izvor:e.target.value})}>
+                                <option value="">-- nije bitan --</option>
+                                <option value="preporuka">Preporuka</option>
+                                <option value="walk-in">Walk-in (došao u trgovinu)</option>
+                                <option value="web">Web</option>
+                                <option value="facebook">Facebook</option>
+                                <option value="instagram">Instagram</option>
+                                <option value="google">Google ads</option>
+                                <option value="kampanja">Kampanja</option>
+                                <option value="ostalo">Ostalo</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group"><label>Ime <span style={{color:'#dc2626'}}>*</span></label><input className="form-control" value={form.ime||''} onChange={e=>setForm({...form,ime:e.target.value})} /></div>
+                        <div className="form-group"><label>Prezime</label><input className="form-control" value={form.prezime||''} onChange={e=>setForm({...form,prezime:e.target.value})} /></div>
+                    </div>
+                    {form.tip === 'firma' && (
+                        <div className="form-row">
+                            <div className="form-group"><label>Firma</label><input className="form-control" value={form.firma||''} onChange={e=>setForm({...form,firma:e.target.value})} /></div>
+                            <div className="form-group"><label>JIB / OIB</label><input className="form-control" value={form.jib||''} onChange={e=>setForm({...form,jib:e.target.value})} /></div>
+                        </div>
+                    )}
+                    <div className="form-row">
+                        <div className="form-group"><label>Telefon</label><input className="form-control" value={form.telefon||''} onChange={e=>setForm({...form,telefon:e.target.value})} placeholder="061 123 456" /></div>
+                        <div className="form-group"><label>Email</label><input className="form-control" type="email" value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})} /></div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group" style={{flex:2}}><label>Adresa</label><input className="form-control" value={form.adresa||''} onChange={e=>setForm({...form,adresa:e.target.value})} /></div>
+                        <div className="form-group"><label>Grad</label><input className="form-control" value={form.grad||''} onChange={e=>setForm({...form,grad:e.target.value})} /></div>
+                    </div>
+                    <div className="form-group"><label>Napomena</label><textarea className="form-control" value={form.napomena||''} onChange={e=>setForm({...form,napomena:e.target.value})} rows={2}></textarea></div>
+                </Modal>
+            )}
+
+            {detail && (
+                <Modal isOpen={true} onClose={()=>setDetail(null)} title={`${detail.ime} ${detail.prezime||''}${detail.firma?' — '+detail.firma:''}`} footer={
+                    <div style={{display:'flex',gap:8,justifyContent:'space-between',width:'100%'}}>
+                        <button className="btn" style={{background:'#dc2626',color:'white',border:'none'}} onClick={()=>handleDelete(detail)}><i className="fas fa-trash"></i> Obriši</button>
+                        <div style={{display:'flex',gap:8}}>
+                            <button className="btn btn-outline" onClick={()=>setDetail(null)}>Zatvori</button>
+                            <button className="btn btn-primary" onClick={()=>{setForm({...detail});setEdit(detail.id);setDetail(null);}}><i className="fas fa-edit"></i> Uredi</button>
+                        </div>
+                    </div>
+                }>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,fontSize:13,marginBottom:16}}>
+                        {detail.telefon && <div><strong>Telefon:</strong> {detail.telefon}</div>}
+                        {detail.email && <div><strong>Email:</strong> {detail.email}</div>}
+                        {detail.grad && <div><strong>Grad:</strong> {detail.grad}</div>}
+                        {detail.adresa && <div><strong>Adresa:</strong> {detail.adresa}</div>}
+                        {detail.jib && <div><strong>JIB:</strong> {detail.jib}</div>}
+                        {detail.izvor && <div><strong>Izvor:</strong> {detail.izvor}</div>}
+                    </div>
+                    {detail.napomena && <div style={{padding:10,background:'var(--bg-input)',borderRadius:8,marginBottom:12,fontSize:13}}>{detail.napomena}</div>}
+
+                    <div style={{marginBottom:16}}>
+                        <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Leadovi ({detail.leadovi?.length||0})</div>
+                        {detail.leadovi?.length === 0 ? <div style={{fontSize:12,color:'var(--gray-400)'}}>Nema povezanih leadova</div> :
+                        detail.leadovi?.map(l => (
+                            <div key={l.id} style={{display:'flex',gap:10,padding:'6px 0',borderBottom:'1px solid var(--border-color)',fontSize:12}}>
+                                <span style={{flex:1}}>{l.artikal}</span>
+                                <span style={{color:'var(--gray-400)'}}>{l.lokacija_naziv}</span>
+                                <span className="badge badge-info">{l.status}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div>
+                        <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Aktivnosti ({detail.aktivnosti?.length||0})</div>
+                        {detail.aktivnosti?.length === 0 ? <div style={{fontSize:12,color:'var(--gray-400)'}}>Nema aktivnosti</div> :
+                        detail.aktivnosti?.map(a => (
+                            <div key={a.id} style={{display:'flex',gap:10,padding:'6px 0',borderBottom:'1px solid var(--border-color)',fontSize:12}}>
+                                <span style={{minWidth:75,color:'var(--gray-400)'}}>{formatDate(a.datum)}</span>
+                                <span style={{minWidth:75,fontWeight:600,textTransform:'capitalize'}}>{a.tip}</span>
+                                <span style={{flex:1}}>{a.naslov||a.opis||'—'}</span>
+                            </div>
+                        ))}
+                    </div>
+                </Modal>
+            )}
+        </>
+    );
+}
+
+function CRMPipelineTab({ currentUser, radnici }) {
+    const [leadovi, setLeadovi] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const STAGES = [
+        { key:'otvoren', naziv:'Novi', color:'#6b7280' },
+        { key:'kontaktiran', naziv:'Kontaktiran', color:'#3b82f6' },
+        { key:'kvalifikovan', naziv:'Kvalifikovan', color:'#8b5cf6' },
+        { key:'ponuda', naziv:'Ponuda', color:'#f59e0b' },
+        { key:'pregovaranje', naziv:'Pregovaranje', color:'#ef4444' },
+        { key:'zatvoren_uspjesno', naziv:'✓ Won', color:'#059669' },
+        { key:'zatvoren_neuspjesno', naziv:'✗ Lost', color:'#9ca3af' },
+    ];
+
+    const load = () => { api('/api/leadovi').then(d => { setLeadovi(d||[]); setLoading(false); }).catch(()=>setLoading(false)); };
+    useEffect(load, []);
+
+    const moveStage = async (lead, newStatus) => {
+        const body = { status: newStatus };
+        if (newStatus === 'zatvoren_uspjesno' || newStatus === 'zatvoren_neuspjesno') {
+            body.zatvoren_at = new Date().toISOString();
+        }
+        try {
+            await api(`/api/leadovi/${lead.id}/status`, 'PUT', body);
+            await load();
+        } catch(e) { showAlert('Greška: ' + e.message, 'error'); }
+    };
+
+    if (loading) return <div style={{textAlign:'center',padding:40,color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i></div>;
+
+    return (
+        <div style={{overflowX:'auto',paddingBottom:8}}>
+            <div style={{display:'flex',gap:12,minWidth:'fit-content'}}>
+                {STAGES.map(s => {
+                    const stageLeads = leadovi.filter(l => (l.status||'otvoren') === s.key);
+                    const ukupno = stageLeads.reduce((sum,l) => sum + (Number(l.ocekivani_iznos)||0), 0);
+                    return (
+                        <div key={s.key} style={{minWidth:240,width:240,background:'var(--bg-input)',borderRadius:10,padding:10}}>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,padding:'4px 6px'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                    <span style={{width:6,height:18,borderRadius:3,background:s.color}}></span>
+                                    <strong style={{fontSize:12,textTransform:'uppercase',letterSpacing:0.5}}>{s.naziv}</strong>
+                                </div>
+                                <span style={{fontSize:11,color:'var(--gray-400)',fontWeight:600}}>{stageLeads.length}</span>
+                            </div>
+                            {ukupno > 0 && <div style={{fontSize:11,color:s.color,marginBottom:8,padding:'0 6px',fontWeight:600}}>{formatCurrency(ukupno)}</div>}
+                            <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:'60vh',overflowY:'auto'}}>
+                                {stageLeads.map(l => (
+                                    <div key={l.id} style={{background:'var(--bg-card)',padding:10,borderRadius:8,boxShadow:'0 1px 2px rgba(0,0,0,0.04)',border:'1px solid var(--border-color)',fontSize:12}}>
+                                        <div style={{fontWeight:600,marginBottom:4}}>{l.artikal}</div>
+                                        {l.ocekivani_iznos > 0 && <div style={{color:'#059669',fontSize:11,fontWeight:600,marginBottom:4}}>{formatCurrency(l.ocekivani_iznos)}</div>}
+                                        <div style={{fontSize:10,color:'var(--gray-400)',marginBottom:6}}>{l.lokacija_naziv} • {l.radnik_ime||''}</div>
+                                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                                            {STAGES.filter(s2 => s2.key !== s.key).slice(0,3).map(s2 => (
+                                                <button key={s2.key} onClick={()=>moveStage(l, s2.key)} style={{
+                                                    padding:'2px 6px',fontSize:10,borderRadius:4,border:'none',background:s2.color+'20',color:s2.color,cursor:'pointer'
+                                                }}>{s2.naziv}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                                {stageLeads.length === 0 && <div style={{textAlign:'center',color:'var(--gray-400)',fontSize:11,padding:'12px 0'}}>Prazno</div>}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function CRMAktivnostiTab({ currentUser, radnici }) {
+    const [aktivnosti, setAktivnosti] = useState([]);
+    const [showNew, setShowNew] = useState(false);
+    const [form, setForm] = useState({});
+    const [kupci, setKupci] = useState([]);
+
+    const load = () => api('/api/lead-aktivnosti').then(setAktivnosti).catch(()=>{});
+    useEffect(() => { load(); api('/api/kupci').then(setKupci).catch(()=>{}); }, []);
+
+    const handleSave = async () => {
+        if (!form.tip) return showAlert('Tip aktivnosti je obavezan', 'warning');
+        try {
+            await api('/api/lead-aktivnosti', 'POST', { ...form, radnik_id: currentUser?.id, datum: form.datum || today() });
+            await load();
+            setShowNew(false); setForm({});
+            showAlert('Aktivnost zabilježena', 'success');
+        } catch(e) { showAlert('Greška', 'error'); }
+    };
+
+    const tipIkona = { poziv:'fa-phone', email:'fa-envelope', sastanak:'fa-handshake', biljeska:'fa-sticky-note', ponuda:'fa-file-invoice-dollar', demo:'fa-laptop' };
+    const tipBoja = { poziv:'#3b82f6', email:'#8b5cf6', sastanak:'#f59e0b', biljeska:'#6b7280', ponuda:'#10b981', demo:'#ec4899' };
+
+    return (
+        <>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:8}}>
+                <h3 style={{fontSize:16}}>Sve aktivnosti ({aktivnosti.length})</h3>
+                <button className="btn btn-primary" onClick={()=>{setForm({datum:today(),tip:'poziv'});setShowNew(true);}}><i className="fas fa-plus"></i> Nova aktivnost</button>
+            </div>
+            <div className="card">
+                <div className="card-body">
+                    {aktivnosti.length === 0 ? <div style={{textAlign:'center',padding:30,color:'var(--gray-400)'}}>Nema aktivnosti</div> :
+                    aktivnosti.map(a => (
+                        <div key={a.id} style={{display:'flex',gap:12,padding:'10px 0',borderBottom:'1px solid var(--border-color)'}}>
+                            <div style={{width:36,height:36,borderRadius:'50%',background:(tipBoja[a.tip]||'#6b7280')+'20',color:tipBoja[a.tip]||'#6b7280',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                <i className={`fas ${tipIkona[a.tip]||'fa-circle'}`}></i>
+                            </div>
+                            <div style={{flex:1,minWidth:0}}>
+                                <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:2}}>
+                                    <strong style={{fontSize:13,textTransform:'capitalize'}}>{a.tip}</strong>
+                                    {a.kupac_ime && <span style={{fontSize:12,color:'var(--gray-500)'}}>• {a.kupac_ime}</span>}
+                                </div>
+                                {a.naslov && <div style={{fontSize:13,marginBottom:2}}>{a.naslov}</div>}
+                                {a.opis && <div style={{fontSize:12,color:'var(--gray-500)',marginBottom:4}}>{a.opis}</div>}
+                                <div style={{fontSize:11,color:'var(--gray-400)'}}>
+                                    {formatDate(a.datum)} • {a.radnik_ime}
+                                    {a.sljedeci_korak && <span style={{marginLeft:8,color:'var(--primary)'}}><i className="fas fa-arrow-right" style={{marginRight:3}}></i>{a.sljedeci_korak} ({a.sljedeci_datum?formatDate(a.sljedeci_datum):''})</span>}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {showNew && (
+                <Modal isOpen={true} onClose={()=>setShowNew(false)} title="Nova aktivnost" footer={
+                    <><button className="btn btn-outline" onClick={()=>setShowNew(false)}>Otkaži</button>
+                    <button className="btn btn-primary" onClick={handleSave}><i className="fas fa-save"></i> Spremi</button></>
+                }>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Tip aktivnosti</label>
+                            <select className="form-control" value={form.tip||''} onChange={e=>setForm({...form,tip:e.target.value})}>
+                                <option value="">-- Odaberi --</option>
+                                <option value="poziv">📞 Poziv</option>
+                                <option value="email">📧 Email</option>
+                                <option value="sastanak">🤝 Sastanak</option>
+                                <option value="biljeska">📝 Bilješka</option>
+                                <option value="ponuda">📄 Ponuda</option>
+                                <option value="demo">💻 Demo</option>
+                            </select>
+                        </div>
+                        <div className="form-group"><label>Datum</label><DateInput className="form-control" value={form.datum||''} onChange={e=>setForm({...form,datum:e.target.value})} /></div>
+                    </div>
+                    <div className="form-group">
+                        <label>Kupac (opcionalno)</label>
+                        <select className="form-control" value={form.kupac_id||''} onChange={e=>setForm({...form,kupac_id:e.target.value?Number(e.target.value):null})}>
+                            <option value="">-- nepovezana aktivnost --</option>
+                            {kupci.map(k => <option key={k.id} value={k.id}>{k.ime} {k.prezime||''}{k.firma?' — '+k.firma:''}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group"><label>Naslov</label><input className="form-control" value={form.naslov||''} onChange={e=>setForm({...form,naslov:e.target.value})} placeholder="npr. Prvi kontakt, demo Lenovo IdeaPad..." /></div>
+                    <div className="form-group"><label>Opis</label><textarea className="form-control" rows={3} value={form.opis||''} onChange={e=>setForm({...form,opis:e.target.value})}></textarea></div>
+                    <div className="form-row">
+                        <div className="form-group"><label>Rezultat</label>
+                            <select className="form-control" value={form.rezultat||''} onChange={e=>setForm({...form,rezultat:e.target.value})}>
+                                <option value="">-- nije bitno --</option>
+                                <option value="pozitivno">✓ Pozitivno</option>
+                                <option value="cekaj">⏳ Čekamo</option>
+                                <option value="negativno">✗ Negativno</option>
+                            </select>
+                        </div>
+                        <div className="form-group"><label>Trajanje (min)</label><input className="form-control" type="number" value={form.trajanje_min||''} onChange={e=>setForm({...form,trajanje_min:e.target.value?Number(e.target.value):null})} /></div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group" style={{flex:2}}><label><i className="fas fa-arrow-right" style={{marginRight:4,color:'var(--primary)'}}></i>Sljedeći korak</label><input className="form-control" value={form.sljedeci_korak||''} onChange={e=>setForm({...form,sljedeci_korak:e.target.value})} placeholder="npr. Poslati ponudu" /></div>
+                        <div className="form-group"><label>Datum</label><DateInput className="form-control" value={form.sljedeci_datum||''} onChange={e=>setForm({...form,sljedeci_datum:e.target.value})} /></div>
+                    </div>
+                </Modal>
+            )}
+        </>
+    );
+}
+
+// =====================================================================
 // UNIVERZALNI DOWNLOAD — bilo koja tabela, bilo koji format
 // =====================================================================
 function DownloadPage({ currentUser }) {
@@ -8826,6 +9277,12 @@ function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen
                 { key: 'dopuna_vp', naziv: 'Dopuna VP — Uvoz', icon: 'fa-ship' },
                 { key: 'leadovi_vp', naziv: 'Sales leadovi VP', icon: 'fa-bullhorn' },
                 { key: 'vp_dugovanja', naziv: 'VP Dugovanja', icon: 'fa-hand-holding-usd' },
+            ]
+        },
+        {
+            key: 'crm', naziv: 'CRM', icon: 'fa-chart-line',
+            podkategorije: [
+                { key: 'crm', naziv: 'CRM Dashboard', icon: 'fa-chart-pie' },
             ]
         },
         {
@@ -10024,6 +10481,7 @@ function App() {
         vp_dugovanja: { title: 'VP Dugovanja', icon: 'fas fa-hand-holding-usd' },
         lokacije: { title: 'Lokacije', icon: 'fas fa-store' },
         download: { title: 'Preuzimanje podataka', icon: 'fas fa-download' },
+        crm: { title: 'CRM — Kupci i Pipeline', icon: 'fas fa-chart-line' },
     };
 
     const renderPage = () => {
@@ -10052,6 +10510,7 @@ function App() {
             case 'radnici': return <RadniciPage radnici={radnici} setRadnici={setRadnici} currentUser={currentUser} />;
             case 'audit': return <AuditLogPage currentUser={currentUser} />;
             case 'download': return <DownloadPage currentUser={currentUser} />;
+            case 'crm': return <CRMPage currentUser={currentUser} radnici={radnici} />;
             case 'profil': return <ProfilPage currentUser={currentUser} radnici={radnici} />;
             case 'vodici': return <VodiciPage currentUser={currentUser} />;
             case 'vp_dugovanja': return <VPDugovanjaPage currentUser={currentUser} radnici={radnici} />;
@@ -10132,6 +10591,9 @@ function App() {
                         </div>
                         <div className={`nav-item ${page==='leadovi'?'active':''}`} onClick={()=>{setPage('leadovi');setSidebarOpen(false);}}>
                             <i className="fas fa-bullhorn"></i>Sales Leadovi
+                        </div>
+                        <div className={`nav-item ${page==='crm'?'active':''}`} onClick={()=>{setPage('crm');setSidebarOpen(false);}}>
+                            <i className="fas fa-chart-line"></i>CRM — Kupci
                         </div>
                         </>);
                     })()}
