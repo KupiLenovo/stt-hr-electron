@@ -539,10 +539,7 @@
         /* Bottom navigation for mobile */
         .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-card); border-top: 1px solid var(--border-color); z-index: 50; padding-bottom: env(safe-area-inset-bottom); }
         .mobile-bottom-nav-inner { display: flex; justify-content: space-around; padding: 6px 0; }
-        .bottom-nav-item { display: flex; flex-direction: column; align-items: center; padding: 6px 8px; cursor: pointer; color: var(--gray-400); font-size: 10px; gap: 2px; min-width: 56px; transition: color 0.15s; }
-        .bottom-nav-item i { font-size: 18px; }
-        .bottom-nav-item.active { color: var(--primary); }
-        .bottom-nav-item .nav-badge { position: absolute; top: -2px; right: -2px; width: 16px; height: 16px; border-radius: 8px; background: var(--danger); color: white; font-size: 9px; display: flex; align-items: center; justify-content: center; }
+        /* .bottom-nav-item uklonjen u v3.7.0 - JSX koristi .mobile-bottom-nav-item (definisan kasnije) */
 
         /* ---- TABLET (768px - 1024px) ---- */
         @media (max-width: 1024px) {
@@ -11429,9 +11426,11 @@ function App() {
     // O(1) lookup maps — izbjegavamo radnici.find() u svim tablicama
     const radniciMap = useMemo(() => new Map(radnici.map(r => [r.id, r])), [radnici]);
     const lokacijeMap = useMemo(() => new Map(LOKACIJE.map(l => [l.id, l])), []);
-    // Expose globally za komponente koje ne primaju prop
-    window._radniciMap = radniciMap;
-    window._lokacijeMap = lokacijeMap;
+    // Expose globally za komponente koje ne primaju prop (side-effect u useEffect, ne u render fazi)
+    useEffect(() => {
+        window._radniciMap = radniciMap;
+        window._lokacijeMap = lokacijeMap;
+    }, [radniciMap, lokacijeMap]);
 
     const loadAllData = () => {
         api('/api/radnici').then(setRadnici).catch(() => addToast('Greška: nije moguće učitati radnike','error'));
@@ -11675,35 +11674,9 @@ function App() {
         return <LoginPage radnici={radnici} onLogin={handleLogin} serverOnline={serverOnline} />;
     }
 
-    const pages = {
-        centrala: { title: 'Centrala', icon: 'fas fa-building' },
-        dashboard: { title: 'Dashboard', icon: 'fas fa-tachometer-alt' },
-        admin_evidencija: { title: 'Pregled evidencije', icon: 'fas fa-user-clock' },
-        evidencija: { title: 'Evidencija rada', icon: 'fas fa-clock' },
-        primopredaja: { title: 'Primopredaja smjena', icon: 'fas fa-exchange-alt' },
-        pazar: { title: 'Polog pazara', icon: 'fas fa-cash-register' },
-        dostava: { title: 'Dostava robe', icon: 'fas fa-truck' },
-        dopuna: { title: 'Dopuna maloprodaje', icon: 'fas fa-boxes' },
-        vozila: { title: 'Službena vozila', icon: 'fas fa-car-side' },
-        zadaci: { title: 'Poslovni zadaci', icon: 'fas fa-tasks' },
-        leadovi: { title: 'Sales Leadovi', icon: 'fas fa-bullhorn' },
-        servis: { title: 'Servisni prijem', icon: 'fas fa-tools' },
-        kasnjenja: { title: 'Kašnjenja / Izjave', icon: 'fas fa-exclamation-triangle' },
-        odmori: { title: 'Godišnji odmori', icon: 'fas fa-umbrella-beach' },
-        chat: { title: 'Chat / Komunikacija', icon: 'fas fa-comments' },
-        pravila: { title: 'Pravila i Instrukcije', icon: 'fas fa-book' },
-        dopuna_vp: { title: 'Dopuna VP — Uvoz', icon: 'fas fa-ship' },
-        izvjestaji: { title: 'Izvještaji', icon: 'fas fa-chart-bar' },
-        radnici: { title: 'Radnici', icon: 'fas fa-users-cog' },
-        audit: { title: 'Audit log', icon: 'fas fa-history' },
-        profil: { title: 'Moj profil', icon: 'fas fa-user-circle' },
-        vodici: { title: 'Vodici i tutorijali', icon: 'fas fa-book' },
-        vp_dugovanja: { title: 'VP Dugovanja', icon: 'fas fa-hand-holding-usd' },
-        lokacije: { title: 'Lokacije', icon: 'fas fa-store' },
-        download: { title: 'Preuzimanje podataka', icon: 'fas fa-download' },
-        crm: { title: 'CRM — Kupci i Pipeline', icon: 'fas fa-chart-line' },
-        partneri: { title: 'Partneri (šifrarnik)', icon: 'fas fa-address-book' },
-    };
+    // Napomena: stari `pages` rjecnik je uklonjen u v3.7.0 (audit cleanup).
+    // Svi naslovi i ikone stranica sada zive u MODULI konstanti (single source of truth
+    // za sidebar NavModuli i TopNavigation). Nista u kodu vise ne cita pages[key].
 
     const renderPage = () => {
         switch(page) {
@@ -12045,37 +12018,35 @@ function App() {
                 </div>
             )}
 
-            {/* PIN promjena modal */}
-            {showPinModal && (
-                <div className="modal-overlay" onClick={()=>setShowPinModal(false)}>
-                    <div className="modal fade-in" style={{maxWidth:380}} onClick={e=>e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3><i className="fas fa-key" style={{marginRight:8,color:'var(--primary)'}}></i>Promijeni PIN</h3>
-                            <button className="modal-close" onClick={()=>setShowPinModal(false)}>&times;</button>
+            {/* PIN promjena modal - sada koristi globalni <Modal> sa portal-om */}
+            <Modal
+                isOpen={showPinModal}
+                onClose={()=>setShowPinModal(false)}
+                title="Promijeni PIN"
+                footer={
+                    <>
+                        <button className="btn btn-outline" onClick={()=>setShowPinModal(false)}>Otkaži</button>
+                        <button className="btn btn-primary" onClick={handlePinChange} disabled={pinForm.loading||!pinForm.stari||!pinForm.novi||!pinForm.ponovi}>
+                            {pinForm.loading?<><i className="fas fa-spinner fa-spin" style={{marginRight:6}}></i>Snimam...</>:'Promijeni PIN'}
+                        </button>
+                    </>
+                }
+            >
+                <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                    {['stari','novi','ponovi'].map((field,i) => (
+                        <div key={field}>
+                            <label style={{fontSize:13,color:'var(--gray-600)',display:'block',marginBottom:4}}>
+                                {i===0?'Stari PIN':i===1?'Novi PIN (4 cifre)':'Ponovi novi PIN'}
+                            </label>
+                            <input type="password" inputMode="numeric" maxLength={4} value={pinForm[field]}
+                                onChange={e=>setPinForm(p=>({...p,[field]:e.target.value.replace(/[^0-9]/g,'').slice(0,4),err:''}))}
+                                style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid var(--gray-300)',fontSize:22,textAlign:'center',letterSpacing:8,boxSizing:'border-box'}}
+                                placeholder="••••" autoFocus={i===0} />
                         </div>
-                        <div className="modal-body" style={{display:'flex',flexDirection:'column',gap:14}}>
-                            {['stari','novi','ponovi'].map((field,i) => (
-                                <div key={field}>
-                                    <label style={{fontSize:13,color:'var(--gray-600)',display:'block',marginBottom:4}}>
-                                        {i===0?'Stari PIN':i===1?'Novi PIN (4 cifre)':'Ponovi novi PIN'}
-                                    </label>
-                                    <input type="password" inputMode="numeric" maxLength={4} value={pinForm[field]}
-                                        onChange={e=>setPinForm(p=>({...p,[field]:e.target.value.replace(/[^0-9]/g,'').slice(0,4),err:''}))}
-                                        style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid var(--gray-300)',fontSize:22,textAlign:'center',letterSpacing:8,boxSizing:'border-box'}}
-                                        placeholder="••••" autoFocus={i===0} />
-                                </div>
-                            ))}
-                            {pinForm.err && <div style={{color:'var(--danger)',fontSize:13,textAlign:'center'}}><i className="fas fa-times-circle" style={{marginRight:6}}></i>{pinForm.err}</div>}
-                        </div>
-                        <div className="modal-footer">
-                            <button className="btn btn-outline" onClick={()=>setShowPinModal(false)}>Otkaži</button>
-                            <button className="btn btn-primary" onClick={handlePinChange} disabled={pinForm.loading||!pinForm.stari||!pinForm.novi||!pinForm.ponovi}>
-                                {pinForm.loading?<><i className="fas fa-spinner fa-spin" style={{marginRight:6}}></i>Snimam...</>:'Promijeni PIN'}
-                            </button>
-                        </div>
-                    </div>
+                    ))}
+                    {pinForm.err && <div style={{color:'var(--danger)',fontSize:13,textAlign:'center'}}><i className="fas fa-times-circle" style={{marginRight:6}}></i>{pinForm.err}</div>}
                 </div>
-            )}
+            </Modal>
 
             {/* Confirm modal */}
             <ConfirmModal
@@ -13498,79 +13469,42 @@ function StaffLoyaltyPortal({ currentUser }) {
             );
         }
 
-        // DETALJI ČLANA MODAL
+        // DETALJI ČLANA MODAL — koristi globalni <Modal> (portal + window kontrole)
         function MemberDetailModal({ member, module, onClose }) {
+            const row = (label, value) => (
+                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border-color)',fontSize:13}}>
+                    <span style={{color:'var(--gray-500)'}}>{label}:</span>
+                    <span style={{fontWeight:500,color:'var(--text-primary)'}}>{value}</span>
+                </div>
+            );
             return (
-                <div className="modal-overlay" onClick={onClose}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">{member.ime}</h3>
-                            <button className="modal-close" onClick={onClose}>
-                                <i className="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <div className="modal-body">
-                            <div className="detail-item">
-                                <span className="detail-label">Telefon:</span>
-                                <span className="detail-value">{member.telefon}</span>
-                            </div>
-                            <div className="detail-item">
-                                <span className="detail-label">Serijski broj:</span>
-                                <span className="detail-value">{member.serial}</span>
-                            </div>
-                            {module === 'kupilenovo' && (
-                                <>
-                                    <div className="detail-item">
-                                        <span className="detail-label">Laptop model:</span>
-                                        <span className="detail-value">{member.laptop}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">Tier:</span>
-                                        <span className="detail-value">{member.tier}</span>
-                                    </div>
-                                </>
-                            )}
-                            {module === 'tuttocapsule' && (
-                                <>
-                                    <div className="detail-item">
-                                        <span className="detail-label">Sistem:</span>
-                                        <span className="detail-value">{member.sistem}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">Tier:</span>
-                                        <span className="detail-value">{member.tier.toUpperCase()}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">Povlastice:</span>
-                                        <span className="detail-value">{member.povlastice}</span>
-                                    </div>
-                                </>
-                            )}
-                            <div className="detail-item">
-                                <span className="detail-label">Datum registracije:</span>
-                                <span className="detail-value">{member.datumReg}</span>
-                            </div>
-                            <div className="detail-item">
-                                <span className="detail-label">Bodovi:</span>
-                                <span className="detail-value">{member.bodovi}</span>
-                            </div>
-                            {module === 'kupilenovo' && (
-                                <div className="detail-item">
-                                    <span className="detail-label">Status:</span>
-                                    <span className="detail-value">{member.status === 'aktivna' ? 'Aktivna' : 'Neaktivna'}</span>
-                                </div>
-                            )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <button className="btn btn-primary" style={{ flex: 1 }}>
+                <Modal
+                    isOpen={true}
+                    onClose={onClose}
+                    title={member.ime}
+                    footer={
+                        <>
+                            <button className="btn btn-outline" onClick={onClose}>Zatvori</button>
+                            <button className="btn btn-primary">
                                 <i className="fas fa-edit"></i> Uredi
                             </button>
-                            <button className="btn btn-secondary" style={{ flex: 1 }}>
+                            <button className="btn btn-outline">
                                 <i className="fas fa-history"></i> Istorija
                             </button>
-                        </div>
-                    </div>
-                </div>
+                        </>
+                    }
+                >
+                    {row('Telefon', member.telefon)}
+                    {row('Serijski broj', member.serial)}
+                    {module === 'kupilenovo' && row('Laptop model', member.laptop)}
+                    {module === 'kupilenovo' && row('Tier', member.tier)}
+                    {module === 'tuttocapsule' && row('Sistem', member.sistem)}
+                    {module === 'tuttocapsule' && row('Tier', member.tier.toUpperCase())}
+                    {module === 'tuttocapsule' && row('Povlastice', member.povlastice)}
+                    {row('Datum registracije', member.datumReg)}
+                    {row('Bodovi', member.bodovi)}
+                    {module === 'kupilenovo' && row('Status', member.status === 'aktivna' ? 'Aktivna' : 'Neaktivna')}
+                </Modal>
             );
         }
 
