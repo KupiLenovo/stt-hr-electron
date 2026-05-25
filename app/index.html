@@ -7071,12 +7071,30 @@ function PinPad({ radnik, onSuccess, onBack }) {
     const [hover, setHover] = useState(null);
     const [pressed, setPressed] = useState(null);
 
-    // Sound effects
+    // Sound effects — unlock-uju se na prvi user gesture
     const audioCtxRef = React.useRef(null);
+    useEffect(() => {
+        const unlock = () => {
+            try {
+                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+            } catch(e) {}
+        };
+        window.addEventListener('click', unlock);
+        window.addEventListener('touchstart', unlock);
+        window.addEventListener('keydown', unlock);
+        return () => {
+            window.removeEventListener('click', unlock);
+            window.removeEventListener('touchstart', unlock);
+            window.removeEventListener('keydown', unlock);
+        };
+    }, []);
     const playSound = (type) => {
         try {
             if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
             const ctx = audioCtxRef.current;
+            if (ctx.state === 'suspended') { try { ctx.resume(); } catch(e) {} }
+            if (ctx.state !== 'running') return;
             const osc = ctx.createOscillator(); const gain = ctx.createGain();
             osc.connect(gain); gain.connect(ctx.destination);
             if (type === 'tap') {
@@ -7384,17 +7402,40 @@ function LoginPage({ radnici: radniciProp, onLogin }) {
     }, []);
 
     // Sound effects via Web Audio API
+    // BITNO: Browser blokira AudioContext dok ne bude prve user gesture.
+    // Zato slušamo prvi klik/touch/key bilo gdje na dokumentu i tada unlock-amo audio.
     const audioCtxRef = React.useRef(null);
     const getAudioCtx = () => {
         if (!audioCtxRef.current) {
             try { audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
         }
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+            try { audioCtxRef.current.resume(); } catch(e) {}
+        }
         return audioCtxRef.current;
     };
+    // Inicijaliziraj/unlock audio na PRVI gesture (samo jednom)
+    useEffect(() => {
+        const unlock = () => {
+            const ctx = getAudioCtx();
+            if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch(e) {} }
+            window.removeEventListener('click', unlock);
+            window.removeEventListener('touchstart', unlock);
+            window.removeEventListener('keydown', unlock);
+        };
+        window.addEventListener('click', unlock, { once: false });
+        window.addEventListener('touchstart', unlock, { once: false });
+        window.addEventListener('keydown', unlock, { once: false });
+        return () => {
+            window.removeEventListener('click', unlock);
+            window.removeEventListener('touchstart', unlock);
+            window.removeEventListener('keydown', unlock);
+        };
+    }, []);
     const playSound = (type) => {
         try {
             const ctx = getAudioCtx();
-            if (!ctx) return;
+            if (!ctx || ctx.state !== 'running') return; // tihi fail dok nije unlock-ovan
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain); gain.connect(ctx.destination);
