@@ -10209,129 +10209,57 @@ function DownloadPage({ currentUser }) {
 // =====================================================================
 function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen }) {
     if (!currentUser || !page || !setPage) return null;
-    const uloga = currentUser.uloga || 'radnik';
 
-    // Definicija kategorija + podkategorija
-    const KATEGORIJE = [
-        {
-            key: 'centrala', naziv: 'Centrala', icon: 'fa-building',
-            podkategorije: [
-                { key: 'centrala', naziv: 'Pregled', icon: 'fa-home' },
-                { key: 'dashboard', naziv: 'Dashboard', icon: 'fa-tachometer-alt' },
-            ]
-        },
-        {
-            key: 'radno_vrijeme', naziv: 'Radno vrijeme', icon: 'fa-clock',
-            podkategorije: [
-                { key: 'evidencija', naziv: 'Evidencija rada', icon: 'fa-clock' },
-                { key: 'admin_evidencija', naziv: 'Pregled evidencije', icon: 'fa-user-clock', uloge: ['admin','voditelj'] },
-                { key: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fa-exchange-alt' },
-                { key: 'kasnjenja', naziv: 'Kašnjenja / Izjave', icon: 'fa-exclamation-triangle' },
-            ]
-        },
-        {
-            key: 'maloprodaja', naziv: 'Maloprodaja', icon: 'fa-store',
-            podkategorije: [
-                { key: 'pazar', naziv: 'Polog pazara', icon: 'fa-cash-register' },
-                { key: 'dopuna', naziv: 'Dopuna maloprodaje', icon: 'fa-boxes' },
-                { key: 'zadaci', naziv: 'Poslovni zadaci', icon: 'fa-tasks' },
-                { key: 'leadovi', naziv: 'Sales leadovi', icon: 'fa-bullhorn' },
-            ]
-        },
-        {
-            key: 'veleprodaja', naziv: 'Veleprodaja', icon: 'fa-truck-loading',
-            podkategorije: [
-                { key: 'dostava', naziv: 'Dostava robe', icon: 'fa-truck' },
-                { key: 'dopuna_vp', naziv: 'Dopuna VP — Uvoz', icon: 'fa-ship' },
-                { key: 'leadovi_vp', naziv: 'Sales leadovi VP', icon: 'fa-bullhorn' },
-                { key: 'vp_dugovanja', naziv: 'VP Dugovanja', icon: 'fa-hand-holding-usd' },
-            ]
-        },
-        {
-            key: 'crm', naziv: 'CRM', icon: 'fa-chart-line',
-            podkategorije: [
-                { key: 'crm', naziv: 'CRM Dashboard', icon: 'fa-chart-pie' },
-            ]
-        },
-        {
-            key: 'servis', naziv: 'Servis', icon: 'fa-tools',
-            podkategorije: [
-                { key: 'servis', naziv: 'Servisni prijem', icon: 'fa-tools' },
-            ]
-        },
-        {
-            key: 'logistika', naziv: 'Logistika', icon: 'fa-truck',
-            podkategorije: [
-                { key: 'vozila', naziv: 'Službena vozila', icon: 'fa-car-side' },
-            ]
-        },
-        {
-            key: 'loyalty', naziv: 'Loyalty', icon: 'fa-gem',
-            podkategorije: [
-                { key: 'loyalty_kupilenovo', naziv: 'Kupilenovo Care', icon: 'fa-laptop' },
-                { key: 'loyalty_tuttocapsule', naziv: 'Tutto Capsule', icon: 'fa-mug-hot' },
-                { key: 'loyalty_staff', naziv: 'Staff Portal', icon: 'fa-star' },
-            ]
-        },
-        {
-            key: 'hr', naziv: 'HR', icon: 'fa-users',
-            podkategorije: [
-                { key: 'odmori', naziv: 'Godišnji odmori', icon: 'fa-umbrella-beach' },
-                { key: 'chat', naziv: 'Chat', icon: 'fa-comments' },
-                { key: 'pravila', naziv: 'Pravila i instrukcije', icon: 'fa-book' },
-                { key: 'vodici', naziv: 'Vodici i tutorijali', icon: 'fa-graduation-cap' },
-            ]
-        },
-        {
-            key: 'admin', naziv: 'Administracija', icon: 'fa-cog',
-            uloge: ['admin','voditelj'],
-            podkategorije: [
-                { key: 'lokacije', naziv: 'Lokacije', icon: 'fa-store' },
-                { key: 'radnici', naziv: 'Radnici', icon: 'fa-users-cog', uloge: ['admin'] },
-                { key: 'izvjestaji', naziv: 'Izvještaji', icon: 'fa-chart-bar' },
-                { key: 'download', naziv: 'Preuzimanje', icon: 'fa-download' },
-                { key: 'audit', naziv: 'Audit log', icon: 'fa-history', uloge: ['admin'] },
-            ]
-        },
-    ];
+    // Koristi globalnu MODULI strukturu (single source of truth — ista kao u sidebar NavModuli)
+    // Filtriraj stavke po gate-u, zadrzi prazne module ('uskoro') kao disabled
+    const moduliZaPrikaz = MODULI.map(mod => ({
+        ...mod,
+        vidljiveStavke: mod.stavke.filter(s => _navStavkaVidljiva(s.gate, currentUser)),
+    })).filter(mod => mod.uskoro || mod.vidljiveStavke.length > 0);
 
-    // Filtriraj kategorije po ulozi
-    const dostupne = KATEGORIJE.filter(k => !k.uloge || k.uloge.includes(uloga));
-    if (dostupne.length === 0) return null;
+    if (moduliZaPrikaz.length === 0) return null;
 
-    // Pronađi koja kategorija sadrži trenutnu stranicu
-    const aktivnaKategorija = (dostupne.find(k => k.podkategorije.some(p => p.key === page)) || dostupne[0]).key;
-    const aktKat = dostupne.find(k => k.key === aktivnaKategorija);
-    const dostupnePod = (aktKat?.podkategorije || []).filter(p => !p.uloge || p.uloge.includes(uloga));
+    // Pronadji modul koji sadrzi aktivnu stranicu
+    const aktivanModul = moduliZaPrikaz.find(mod => mod.vidljiveStavke.some(s => s.page === page)) || moduliZaPrikaz[0];
+    const dostupnePod = aktivanModul.vidljiveStavke;
 
     return (
         <div className="top-nav-wrapper hide-mobile">
-            {/* Glavna kategorije */}
+            {/* Glavni moduli */}
             <div className="top-nav-main">
-                {dostupne.map(k => {
-                    const isActive = k.key === aktivnaKategorija;
+                {moduliZaPrikaz.map(mod => {
+                    const isActive = mod.id === aktivanModul.id;
+                    const prazan = !!mod.uskoro;
                     return (
-                        <div key={k.key} className={`top-nav-item ${isActive?'active':''}`}
+                        <div key={mod.id}
+                            className={`top-nav-item ${isActive?'active':''}`}
                             onClick={() => {
-                                const prvi = k.podkategorije.find(p => !p.uloge || p.uloge.includes(currentUser.uloga));
-                                if (prvi) setPage(prvi.key);
-                            }}>
-                            <i className={`fas ${k.icon}`}></i>
-                            <span>{k.naziv}</span>
+                                if (prazan) return;
+                                const prvi = mod.vidljiveStavke[0];
+                                if (prvi) setPage(prvi.page);
+                            }}
+                            style={prazan ? { opacity: 0.45, cursor: 'default' } : {}}
+                            title={prazan ? 'Uskoro' : ''}>
+                            {mod.icon && <i className={mod.icon}></i>}
+                            <span>{mod.naziv}</span>
+                            {prazan && (
+                                <span style={{fontSize:8,padding:'1px 5px',background:'var(--gray-200,#e5e7eb)',color:'var(--gray-500)',borderRadius:3,marginLeft:6,letterSpacing:0.5,fontWeight:600}}>USKORO</span>
+                            )}
                         </div>
                     );
                 })}
             </div>
-            {/* Podkategorije */}
+            {/* Podkategorije (sub-tabs) — samo ako modul ima vise od 1 stavke */}
             {dostupnePod.length > 1 && (
                 <div className="top-nav-sub">
-                    {dostupnePod.map(p => {
-                        const isActive = p.key === page;
+                    {dostupnePod.map(s => {
+                        const isActive = s.page === page;
                         return (
-                            <div key={p.key} className={`top-nav-sub-item ${isActive?'active':''}`}
-                                onClick={() => setPage(p.key)}>
-                                <i className={`fas ${p.icon}`}></i>
-                                <span>{p.naziv}</span>
+                            <div key={s.page}
+                                className={`top-nav-sub-item ${isActive?'active':''}`}
+                                onClick={() => setPage(s.page)}>
+                                {s.icon && <i className={s.icon}></i>}
+                                <span>{s.naziv}</span>
                             </div>
                         );
                     })}
