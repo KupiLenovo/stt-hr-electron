@@ -1,21 +1,24 @@
-; STT HR - Custom NSIS installer script
-; Otvara firewall port 3737 i postavlja autostart
+; STT Business Manager - Custom NSIS installer script
+; Otvara firewall port 3737 i cleanup za legacy konfiguraciju.
+; Napomena: aplikacija je sada cloud-only (v2.0+), port 3737 vise nije
+; potreban lokalno. Pravilo se i dalje cleanup-uje radi urednosti.
 
 !macro customInstall
-    ; Otvori port 3737 u Windows Firewall-u
-    DetailPrint "Konfigurišem Windows Firewall za STT HR Server..."
+    DetailPrint "Konfigurisem Windows Firewall za STT Business Manager..."
+    ; Obrisi i legacy ime ("STT HR Server" iz starijih verzija) i novo ime
     nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="STT HR Server"'
-    nsExec::ExecToLog 'netsh advfirewall firewall add rule name="STT HR Server" dir=in action=allow protocol=TCP localport=3737 description="STT HR Menadžment Server"'
-    
-    ; Postavi autostart — app se pokreće sa Windowsom (opcionalno, zakomentirano)
-    ; WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "STT HR" "$INSTDIR\STT HR.exe"
-    
-    DetailPrint "Port 3737 otvoren za STT HR Server."
+    nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="STT Business Manager"'
+    nsExec::ExecToLog 'netsh advfirewall firewall add rule name="STT Business Manager" dir=in action=allow protocol=TCP localport=3737 description="STT Business Manager - lokalni port (legacy)"'
+
+    ; Autostart sa Windowsom (opcionalno, zakomentarisano)
+    ; WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "STT Business Manager" "$INSTDIR\STT Business Manager.exe"
+
+    DetailPrint "Firewall konfigurisan."
 !macroend
 
 !macro customUnInstall
-    ; Zatvori port pri deinstalaciji
-    DetailPrint "Uklanjam firewall pravilo..."
+    DetailPrint "Uklanjam firewall pravila..."
     nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="STT HR Server"'
-    DetailPrint "Firewall pravilo uklonjeno."
+    nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="STT Business Manager"'
+    DetailPrint "Firewall pravila uklonjena."
 !macroend

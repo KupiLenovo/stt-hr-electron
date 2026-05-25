@@ -8,13 +8,13 @@
     <!-- PWA Meta Tags -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#1a56db">
-    <meta name="application-name" content="STT HR">
-    <meta name="description" content="STT.BA HR Menadžment — evidencija rada, chat, polog pazara, dostava">
+    <meta name="application-name" content="STT Business Manager">
+    <meta name="description" content="STT Business Manager — ERP sistem za maloprodaju, veleprodaju, servis, logistiku, finansije i HR">
 
     <!-- iOS / Apple -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="STT HR">
+    <meta name="apple-mobile-web-app-title" content="STT Business Manager">
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
 
     <!-- Android / Chrome -->
@@ -28,7 +28,7 @@
     <meta name="msapplication-config" content="none">
 
     <!-- Open Graph (za dijeljenje linkova) -->
-    <meta property="og:title" content="STT.BA HR Menadžment">
+    <meta property="og:title" content="STT Business Manager">
     <meta property="og:description" content="Interni HR sistem za upravljanje radnicima, smjenama i komunikacijom">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://www.stt.ba">
@@ -1022,7 +1022,7 @@ function ServerSetupPage({ onConnected }) {
                 throw fetchErr;
             }
         } catch(e) {
-            setError(`Ne mogu se spojiti na ${testUrl}. Provjerite:\n• Da li je STT HR pokrenut na glavnom PC-u?\n• Da li je IP adresa ispravna?\n• Da li ste na istoj mreži?`);
+            setError(`Ne mogu se spojiti na ${testUrl}. Provjerite:\n• Da li je STT Business Manager pokrenut na glavnom PC-u?\n• Da li je IP adresa ispravna?\n• Da li ste na istoj mreži?`);
         }
         setTesting(false);
     };
@@ -1035,7 +1035,7 @@ function ServerSetupPage({ onConnected }) {
         }}>
             <div style={{textAlign:'center', marginBottom:40}}>
                 <div style={{width:72,height:72,borderRadius:18,background:'#1a56db',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',fontSize:28,fontWeight:900,color:'white',boxShadow:'0 8px 32px rgba(26,86,219,0.4)'}}>STT</div>
-                <h1 style={{color:'white',fontSize:26,fontWeight:700,margin:0}}>HR Menadžment</h1>
+                <h1 style={{color:'white',fontSize:26,fontWeight:700,margin:0}}>Business Manager</h1>
                 <p style={{color:'rgba(255,255,255,0.5)',marginTop:6,fontSize:14}}>Postavljanje veze — prvi put</p>
             </div>
 
@@ -4104,7 +4104,7 @@ function KasnjenjaPage({ radnici, currentUser }) {
             <div class="potpis"><div class="potpis-line">Potpis nadređenog</div></div>
         </div>
         <div class="footer">
-            <p>Datum izdavanja: ${formatDate(new Date())} | STT.BA HR Menadžment Sistem</p>
+            <p>Datum izdavanja: ${formatDate(new Date())} | STT Business Manager</p>
         </div>
         </body></html>`;
         const w = window.open('', '_blank');
@@ -4971,7 +4971,7 @@ function ServisniPrijemPage({ radnici, currentUser, sendNotif }) {
 
                 {/* Footer */}
                 <div style={{marginTop:20,paddingTop:12,borderTop:'1px solid #eee',fontSize:10,color:'#999',display:'flex',justifyContent:'space-between'}}>
-                    <div>Dokument generisan iz STT.BA HR Menadžment Sistema</div>
+                    <div>Dokument generisan iz STT Business Manager-a</div>
                     <div>Nalog: {nalog.broj_naloga} | Stranica 1/1</div>
                 </div>
 
@@ -11413,7 +11413,7 @@ function App() {
             const naslovi = { dopuna: 'Nova dopuna maloprodaje', polog: 'Novi polog pazara', odmor: 'Novi zahtjev za odmor', lead: 'Novi sales lead', chat: 'Nova chat poruka', servis: 'Novi servisni prijem', kasnjenje: 'Novo kašnjenje', zadatak: 'Zadatak završen' };
             const stranice = { dopuna: 'dopuna', polog: 'pazar', odmor: 'odmori', lead: 'leadovi', chat: 'chat', servis: 'servis' };
             const poruke = { dopuna: 'Klikni da vidiš zahtjev za dopunu', polog: 'Klikni da vidiš polog pazara', odmor: 'Klikni da vidiš zahtjev za odmor', lead: 'Klikni da vidiš sales lead', chat: 'Klikni da otvoriš chat', servis: 'Klikni da vidiš servisni nalog' };
-            const naslov = naslovi[tip] || 'STT HR';
+            const naslov = naslovi[tip] || 'STT Business Manager';
             const poruka = poruke[tip] || 'Klikni da otvoriš aplikaciju';
             const stranica = stranice[tip] || 'dashboard';
             window.electronAPI.showNotification(naslov, poruka, stranica);
@@ -11458,7 +11458,7 @@ function App() {
                         <div style={{width:64,height:64,borderRadius:16,background:'#059669',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',fontSize:28,boxShadow:'0 8px 32px rgba(5,150,105,0.4)'}}>
                             <i className="fas fa-check" style={{color:'white'}}></i>
                         </div>
-                        <h1 style={{color:'white',fontSize:24,fontWeight:700,margin:0}}>STT HR uspješno instaliran!</h1>
+                        <h1 style={{color:'white',fontSize:24,fontWeight:700,margin:0}}>STT Business Manager uspješno instaliran!</h1>
                         <p style={{color:'rgba(255,255,255,0.5)',marginTop:8,fontSize:14}}>Ovaj računar je glavni server. Sačuvaj sljedeće upute.</p>
                     </div>
 
@@ -11499,7 +11499,7 @@ function App() {
                                 U router admin panelu pronađi <strong style={{color:'white'}}>Port Forwarding</strong> i dodaj pravilo:
                                 <div style={{background:'rgba(0,0,0,0.3)',borderRadius:8,padding:'12px',marginTop:8,fontSize:13}}>
                                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px 16px'}}>
-                                        <span style={{color:'rgba(255,255,255,0.4)'}}>Naziv:</span><span style={{color:'#86efac'}}>STT HR</span>
+                                        <span style={{color:'rgba(255,255,255,0.4)'}}>Naziv:</span><span style={{color:'#86efac'}}>STT Business Manager</span>
                                         <span style={{color:'rgba(255,255,255,0.4)'}}>Protocol:</span><span style={{color:'#86efac'}}>TCP</span>
                                         <span style={{color:'rgba(255,255,255,0.4)'}}>External port:</span><span style={{color:'#86efac'}}>3737</span>
                                         <span style={{color:'rgba(255,255,255,0.4)'}}>Internal IP:</span><span style={{color:'#86efac'}}>lokalna IP ovog PC-a</span>
@@ -11525,7 +11525,7 @@ function App() {
                     <div style={{background:'rgba(251,191,36,0.1)',border:'1px solid rgba(251,191,36,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:20,display:'flex',gap:10,alignItems:'flex-start'}}>
                         <i className="fas fa-exclamation-triangle" style={{color:'#fbbf24',marginTop:2,flexShrink:0}}></i>
                         <div style={{color:'rgba(255,255,255,0.7)',fontSize:13,lineHeight:1.5}}>
-                            <strong style={{color:'#fbbf24'}}>Važno:</strong> Ovaj PC mora biti <strong style={{color:'white'}}>upaljen i STT HR mora biti pokrenut</strong> da bi ostale lokacije mogle raditi. Preporučujemo da se app postavi na autostart sa Windowsom.
+                            <strong style={{color:'#fbbf24'}}>Važno:</strong> Ovaj PC mora biti <strong style={{color:'white'}}>upaljen i STT Business Manager mora biti pokrenut</strong> da bi ostale lokacije mogle raditi. Preporučujemo da se app postavi na autostart sa Windowsom.
                         </div>
                     </div>
 
@@ -11619,8 +11619,8 @@ function App() {
             {sidebarOpen && <div onClick={()=>setSidebarOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:49}} className="mobile-only"></div>}
             <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
                 <div className="sidebar-header">
-                    <h1>STT.BA</h1>
-                    <p>HR Menadžment Sistem</p>
+                    <h1>STT Business Manager</h1>
+                    <p>STT d.o.o. Sarajevo</p>
                 </div>
                 <NavModuli
                     page={page}
@@ -11684,7 +11684,7 @@ function App() {
                 <div className="topbar">
                     <div style={{display:'flex',alignItems:'center',gap:12}}>
                         <button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><i className="fas fa-bars"></i></button>
-                        <h2 className="topbar-title"><span style={{fontSize:18,fontWeight:700,color:'var(--primary)'}}>STT</span> <span style={{fontSize:13,color:'var(--gray-400)',fontWeight:500,marginLeft:6}}>HR & ERP</span></h2>
+                        <h2 className="topbar-title"><span style={{fontSize:18,fontWeight:700,color:'var(--primary)'}}>STT</span> <span style={{fontSize:13,color:'var(--gray-400)',fontWeight:500,marginLeft:6}}>Business Manager</span></h2>
                     </div>
                     <div className="topbar-right">
                         <span onClick={() => setSetupDone(false)} title="Promijeni server" style={{cursor:'pointer',fontSize:11, padding:'3px 8px', borderRadius:20, background: serverOnline ? '#d1fae5' : '#fee2e2', color: serverOnline ? '#065f46' : '#991b1b'}}>
@@ -11826,7 +11826,7 @@ function App() {
                 {showDebug && (
                     <div style={{position:'fixed',bottom:0,left:0,right:0,height:280,background:'#0a0a0a',color:'#00ff88',fontFamily:'monospace',fontSize:11,zIndex:99999,display:'flex',flexDirection:'column',borderTop:'2px solid #00ff88'}}>
                         <div style={{padding:'6px 12px',borderBottom:'1px solid #1a1a1a',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#111'}}>
-                            <span style={{fontWeight:700,fontSize:13}}>STT HR Debug Console — Ctrl+Shift+D za zatvaranje</span>
+                            <span style={{fontWeight:700,fontSize:13}}>STT Business Manager Debug Console — Ctrl+Shift+D za zatvaranje</span>
                             <div style={{display:'flex',gap:8}}>
                                 <span style={{color:'#666',fontSize:10}}>Server: {API_URL}</span>
                                 <span style={{color:'#666',fontSize:10}}>Radnik: {currentUser?.ime} {currentUser?.prezime}</span>
@@ -14920,7 +14920,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
           <i class="fas fa-download"></i>
         </div>
         <div>
-          <div style="font-weight:700;font-size:14px;">Instaliraj STT HR</div>
+          <div style="font-weight:700;font-size:14px;">Instaliraj STT Business Manager</div>
           <div style="font-size:12px;opacity:0.8;">Brži pristup sa početnog ekrana</div>
         </div>
       </div>

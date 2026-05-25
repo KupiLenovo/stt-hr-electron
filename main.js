@@ -162,7 +162,7 @@ function buildMenu() {
                 dialog.showMessageBox(mainWindow, {
                     type: 'info',
                     title: 'Server Info',
-                    message: 'STT HR - Cloud Server',
+                    message: 'STT Business Manager - Cloud Server',
                     detail: `Status: Aktivan\nServer: ${CLOUD_SERVER_IP}:${CLOUD_SERVER_PORT}\nLokacija: DigitalOcean Frankfurt\n\nSvi racunari se spajaju na ovaj cloud server.`
                 });
             }},
