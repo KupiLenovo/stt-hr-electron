@@ -1406,43 +1406,51 @@ function Modal({ isOpen, onClose, title, children, footer }) {
     const minimize = () => setMinimized(true);
     const restore = () => setMinimized(false);
 
+    // Portal: render-uj direktno u document.body da pobjegnemo svih stacking context-a
+    // (.app-layout, .main-content, .page-content svaki ima position:relative + z-index:1
+    // sto zarobljava modal unutar svog konteksta i topbar/top-nav ga pokriva)
+    const portalTarget = (typeof document !== 'undefined') ? document.body : null;
+    if (!portalTarget) return null;
+
+    let content;
     if (minimized) {
-        return (
+        content = (
             <div className="modal-minimized-bar" onClick={restore} title="Vrati prozor">
                 <i className="fas fa-window-maximize app-icon"></i>
                 <span className="title">{title || 'Prozor'}</span>
                 <i className="fas fa-chevron-up restore-icon"></i>
             </div>
         );
+    } else {
+        const modalStyle = maximized ? {} : { transform: `translate(${pos.x}px, ${pos.y}px)` };
+        const overlayClick = maximized ? undefined : onClose;
+        content = (
+            <div className="modal-overlay" onClick={overlayClick}>
+                <div className={`modal fade-in${maximized ? ' maximized' : ''}`}
+                     style={modalStyle}
+                     onClick={e => e.stopPropagation()}>
+                    <div className={`modal-header${maximized ? '' : ' draggable'}`} onMouseDown={startDrag}>
+                        <h3>{title}</h3>
+                        <div className="modal-window-controls">
+                            <button className="modal-win-btn" data-act="min" title="Minimizuj" onClick={minimize}>
+                                <i className="fas fa-window-minimize"></i>
+                            </button>
+                            <button className="modal-win-btn" data-act="max" title={maximized ? 'Vrati' : 'Maksimizuj'} onClick={toggleMaximize}>
+                                <i className={`fas ${maximized ? 'fa-window-restore' : 'fa-window-maximize'}`}></i>
+                            </button>
+                            <button className="modal-win-btn modal-win-close" data-act="close" title="Zatvori" onClick={onClose}>
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="modal-body">{children}</div>
+                    {footer && <div className="modal-footer">{footer}</div>}
+                </div>
+            </div>
+        );
     }
 
-    const modalStyle = maximized ? {} : { transform: `translate(${pos.x}px, ${pos.y}px)` };
-    const overlayClick = maximized ? undefined : onClose;
-
-    return (
-        <div className="modal-overlay" onClick={overlayClick}>
-            <div className={`modal fade-in${maximized ? ' maximized' : ''}`}
-                 style={modalStyle}
-                 onClick={e => e.stopPropagation()}>
-                <div className={`modal-header${maximized ? '' : ' draggable'}`} onMouseDown={startDrag}>
-                    <h3>{title}</h3>
-                    <div className="modal-window-controls">
-                        <button className="modal-win-btn" data-act="min" title="Minimizuj" onClick={minimize}>
-                            <i className="fas fa-window-minimize"></i>
-                        </button>
-                        <button className="modal-win-btn" data-act="max" title={maximized ? 'Vrati' : 'Maksimizuj'} onClick={toggleMaximize}>
-                            <i className={`fas ${maximized ? 'fa-window-restore' : 'fa-window-maximize'}`}></i>
-                        </button>
-                        <button className="modal-win-btn modal-win-close" data-act="close" title="Zatvori" onClick={onClose}>
-                            <i className="fas fa-times"></i>
-                        </button>
-                    </div>
-                </div>
-                <div className="modal-body">{children}</div>
-                {footer && <div className="modal-footer">{footer}</div>}
-            </div>
-        </div>
-    );
+    return ReactDOM.createPortal(content, portalTarget);
 }
 
 // --- Dashboard Page ---
