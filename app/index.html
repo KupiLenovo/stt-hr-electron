@@ -10512,6 +10512,241 @@ function CjenovniciPage({ currentUser }) {
 }
 
 // =====================================================================
+// SKLADISTA (Sifrarnik) — CRUD nad /api/v1/skladista
+// =====================================================================
+function SkladistaPage({ currentUser }) {
+    const URL_API = '/api/v1/skladista';
+    const uloga = currentUser && currentUser.uloga;
+    const canEdit = uloga === 'admin' || uloga === 'voditelj';
+    const canDelete = uloga === 'admin';
+    const TIPOVI = { maloprodaja: 'Maloprodaja', veleprodaja: 'Veleprodaja' };
+    const PRAZAN = { sifra: '', naziv: '', tip: 'maloprodaja', lokacija_id: '', pdv_broj: '', fiskalni_aktivan: 0, napomena: '' };
+
+    const [lista, setLista] = useState([]);
+    const [lokacijeApi, setLokacijeApi] = useState([]);
+    const [ucitavanje, setUcitavanje] = useState(true);
+    const [pretraga, setPretraga] = useState('');
+    const [filterTip, setFilterTip] = useState('svi');
+    const [prikaziNeaktivne, setPrikaziNeaktivne] = useState(false);
+    const [modalOtvoren, setModalOtvoren] = useState(false);
+    const [uredjivanje, setUredjivanje] = useState(null);
+    const [form, setForm] = useState(PRAZAN);
+    const [snimanje, setSnimanje] = useState(false);
+    const [formGreska, setFormGreska] = useState(null);
+
+    const ucitajSve = async () => {
+        setUcitavanje(true);
+        try {
+            const [s, l] = await Promise.all([
+                api(URL_API),
+                api('/api/lokacije'),
+            ]);
+            setLista(Array.isArray(s) ? s : []);
+            setLokacijeApi(Array.isArray(l) ? l : []);
+        } catch (e) { showAlert('Greška pri učitavanju skladišta.', 'error'); }
+        finally { setUcitavanje(false); }
+    };
+    useEffect(() => { ucitajSve(); }, []);
+
+    const lokacijaIme = (id) => { const l = lokacijeApi.find(x => x.id === id); return l ? l.naziv : '—'; };
+
+    const filtrirani = useMemo(() => {
+        const q = pretraga.trim().toLowerCase();
+        return lista.filter(s => {
+            if (!prikaziNeaktivne && !s.aktivan) return false;
+            if (filterTip !== 'svi' && s.tip !== filterTip) return false;
+            if (!q) return true;
+            return [s.sifra, s.naziv, s.pdv_broj].some(v => v && String(v).toLowerCase().includes(q));
+        });
+    }, [lista, pretraga, filterTip, prikaziNeaktivne]);
+
+    const otvoriNovi = () => { setUredjivanje(null); setForm(PRAZAN); setFormGreska(null); setModalOtvoren(true); };
+    const otvoriUredi = (s) => {
+        setUredjivanje(s);
+        setForm({
+            sifra: s.sifra || '', naziv: s.naziv || '', tip: s.tip || 'maloprodaja',
+            lokacija_id: s.lokacija_id || '', pdv_broj: s.pdv_broj || '',
+            fiskalni_aktivan: s.fiskalni_aktivan ? 1 : 0, napomena: s.napomena || ''
+        });
+        setFormGreska(null); setModalOtvoren(true);
+    };
+
+    const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    const snimi = async () => {
+        if (!form.naziv.trim()) { setFormGreska('Naziv je obavezan.'); return; }
+        if (!uredjivanje && !form.sifra.trim()) { setFormGreska('Šifra je obavezna za novo skladište.'); return; }
+        if (!['maloprodaja','veleprodaja'].includes(form.tip)) { setFormGreska('Neispravan tip.'); return; }
+        setSnimanje(true); setFormGreska(null);
+        const clean = (v) => { const s = (v == null ? '' : String(v)).trim(); return s === '' ? null : s; };
+        const payload = {
+            naziv: form.naziv.trim(),
+            tip: form.tip,
+            lokacija_id: form.lokacija_id ? Number(form.lokacija_id) : null,
+            pdv_broj: clean(form.pdv_broj),
+            fiskalni_aktivan: form.fiskalni_aktivan ? 1 : 0,
+            napomena: clean(form.napomena),
+            requester_id: currentUser ? currentUser.id : null,
+        };
+        if (!uredjivanje) payload.sifra = form.sifra.trim();
+        try {
+            const odg = uredjivanje
+                ? await api(`${URL_API}/${uredjivanje.id}`, 'PUT', payload)
+                : await api(URL_API, 'POST', payload);
+            if (odg && odg.error) throw new Error(odg.error);
+            setModalOtvoren(false);
+            await ucitajSve();
+            showAlert(uredjivanje ? 'Skladište ažurirano.' : 'Skladište kreirano.', 'success');
+        } catch (e) {
+            setFormGreska('Greška pri snimanju' + (e?.message ? ': ' + e.message : '.'));
+        } finally { setSnimanje(false); }
+    };
+
+    const deaktiviraj = async (s) => {
+        if (!await askConfirm(`Deaktivirati skladište "${s.sifra} - ${s.naziv}"?`)) return;
+        try {
+            const rid = currentUser ? encodeURIComponent(currentUser.id) : '';
+            const odg = await api(`${URL_API}/${s.id}?requester_id=${rid}`, 'DELETE');
+            if (odg && odg.error) throw new Error(odg.error);
+            await ucitajSve();
+            showAlert('Skladište deaktivirano.', 'success');
+        } catch (e) { showAlert('Greška pri deaktivaciji' + (e?.message ? ': ' + e.message : '.'), 'error'); }
+    };
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{fontSize:13,color:'var(--gray-500)'}}>
+                    <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                    Obračunske jedinice (prodavnice/skladišta). Cjenovnici i fiskalizacija idu po skladištu.
+                </div>
+                {canEdit && (
+                    <button className="btn btn-primary" onClick={otvoriNovi}>
+                        <i className="fas fa-plus"></i> Novo skladište
+                    </button>
+                )}
+            </div>
+
+            <div className="card" style={{marginBottom:12}}>
+                <div className="card-body" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'center'}}>
+                    <input type="text" className="form-control" style={{flex:'1 1 240px',minWidth:200}}
+                        placeholder="Pretraga (šifra, naziv, PDV broj)..."
+                        value={pretraga} onChange={e => setPretraga(e.target.value)} />
+                    <div style={{display:'flex',gap:4}}>
+                        {[['svi','Svi'],['maloprodaja','Maloprodaja'],['veleprodaja','Veleprodaja']].map(([val,lbl]) => (
+                            <button key={val} onClick={() => setFilterTip(val)}
+                                className={'btn btn-sm ' + (filterTip === val ? 'btn-primary' : 'btn-outline')}>{lbl}</button>
+                        ))}
+                    </div>
+                    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'var(--text-primary)',cursor:'pointer',userSelect:'none'}}>
+                        <input type="checkbox" checked={prikaziNeaktivne} onChange={e => setPrikaziNeaktivne(e.target.checked)} />
+                        Prikaži neaktivna
+                    </label>
+                    <div style={{marginLeft:'auto',fontSize:12,color:'var(--gray-400)'}}>{filtrirani.length} skladišta</div>
+                </div>
+            </div>
+
+            <div className="card">
+                <div style={{overflowX:'auto'}}>
+                    {ucitavanje ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>
+                    ) : filtrirani.length === 0 ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
+                            <i className="fas fa-inbox" style={{fontSize:24,opacity:0.4,marginBottom:8,display:'block'}}></i>
+                            Nema skladišta za prikaz.
+                        </div>
+                    ) : (
+                        <table style={{width:'100%'}}>
+                            <thead><tr>
+                                <th>Šifra</th><th>Naziv</th><th>Tip</th><th>Lokacija</th><th>PDV broj</th><th>Fiskal</th><th>Status</th>
+                                <th style={{textAlign:'right'}}>Akcije</th>
+                            </tr></thead>
+                            <tbody>
+                                {filtrirani.map(s => (
+                                    <tr key={s.id} style={!s.aktivan ? {opacity:0.5} : {}}>
+                                        <td style={{fontFamily:'monospace',fontWeight:600,color:'var(--primary)'}}>{s.sifra}</td>
+                                        <td style={{fontWeight:500}}>{s.naziv}</td>
+                                        <td>
+                                            {s.tip === 'maloprodaja'
+                                                ? <span style={{fontSize:10,padding:'2px 6px',borderRadius:8,background:'#d1fae5',color:'#065f46',fontWeight:600}}>Maloprodaja</span>
+                                                : <span style={{fontSize:10,padding:'2px 6px',borderRadius:8,background:'#fef3c7',color:'#92400e',fontWeight:600}}>Veleprodaja</span>}
+                                        </td>
+                                        <td style={{fontSize:12,color:'var(--gray-600)'}}>{s.lokacija_id ? lokacijaIme(s.lokacija_id) : '—'}</td>
+                                        <td style={{fontSize:12,fontFamily:'monospace',color:'var(--gray-500)'}}>{s.pdv_broj || '—'}</td>
+                                        <td>{s.fiskalni_aktivan ? <i className="fas fa-check-circle" style={{color:'#059669'}}></i> : <i className="fas fa-times-circle" style={{color:'var(--gray-300)'}}></i>}</td>
+                                        <td>{s.aktivan ? <span style={{fontSize:10,padding:'2px 6px',borderRadius:8,background:'#d1fae5',color:'#065f46',fontWeight:600}}>AKTIVNO</span> : <span style={{fontSize:10,padding:'2px 6px',borderRadius:8,background:'#fee2e2',color:'#991b1b',fontWeight:600}}>NEAKTIVNO</span>}</td>
+                                        <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                                            {canEdit && <button className="btn btn-sm btn-outline" onClick={()=>otvoriUredi(s)} style={{marginRight:4}}><i className="fas fa-edit"></i> Uredi</button>}
+                                            {canDelete && !!s.aktivan && <button className="btn btn-sm" onClick={()=>deaktiviraj(s)} style={{background:'#fee2e2',color:'#991b1b',border:'none'}}><i className="fas fa-ban"></i> Deaktiviraj</button>}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+
+            {modalOtvoren && (
+                <Modal isOpen={true} onClose={()=>!snimanje && setModalOtvoren(false)}
+                    title={uredjivanje ? `Uredi skladište #${uredjivanje.id}` : 'Novo skladište'}
+                    footer={<>
+                        <button className="btn btn-outline" onClick={()=>setModalOtvoren(false)} disabled={snimanje}>Odustani</button>
+                        <button className="btn btn-primary" onClick={snimi} disabled={snimanje}>
+                            {snimanje ? <><i className="fas fa-spinner fa-spin"></i> Snimanje...</> : <><i className="fas fa-save"></i> {uredjivanje ? 'Sačuvaj' : 'Kreiraj'}</>}
+                        </button>
+                    </>}>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Šifra <span style={{color:'#dc2626'}}>*</span></label>
+                            <input className="form-control" value={form.sifra} onChange={e=>setField('sifra',e.target.value)}
+                                disabled={!!uredjivanje} placeholder={uredjivanje ? '' : 'npr. 1, 2, 4, 10'}
+                                style={uredjivanje ? {background:'var(--gray-100)',color:'var(--gray-500)'} : {}} />
+                        </div>
+                        <div className="form-group" style={{flex:3}}>
+                            <label>Naziv <span style={{color:'#dc2626'}}>*</span></label>
+                            <input className="form-control" value={form.naziv} onChange={e=>setField('naziv',e.target.value)} autoFocus={!uredjivanje} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Tip</label>
+                            <select className="form-control" value={form.tip} onChange={e=>setField('tip',e.target.value)}>
+                                {Object.entries(TIPOVI).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group" style={{flex:2}}>
+                            <label>Lokacija (opcionalno)</label>
+                            <select className="form-control" value={form.lokacija_id} onChange={e=>setField('lokacija_id',e.target.value)}>
+                                <option value="">— bez lokacije —</option>
+                                {lokacijeApi.filter(l=>l.aktivan).map(l => <option key={l.id} value={l.id}>{l.naziv}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>PDV broj (za fiskalizaciju)</label>
+                            <input className="form-control" value={form.pdv_broj} onChange={e=>setField('pdv_broj',e.target.value)} />
+                        </div>
+                        <div className="form-group" style={{flex:'0 0 200px'}}>
+                            <label style={{display:'flex',alignItems:'center',gap:8,marginTop:24,cursor:'pointer',userSelect:'none'}}>
+                                <input type="checkbox" checked={!!form.fiskalni_aktivan} onChange={e=>setField('fiskalni_aktivan',e.target.checked?1:0)} />
+                                <span>Fiskalizacija aktivna</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label>Napomena</label>
+                        <textarea className="form-control" rows={2} value={form.napomena} onChange={e=>setField('napomena',e.target.value)} />
+                    </div>
+                    {formGreska && <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{formGreska}</div>}
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+// =====================================================================
 // CRM — Kupci + Pipeline + Aktivnosti + Dashboard
 // =====================================================================
 function CRMPage({ currentUser, radnici }) {
@@ -11937,6 +12172,7 @@ const MODULI = [
         { page: 'grupe_artikala', naziv: 'Grupe artikala', icon: 'fas fa-layer-group' },
         { page: 'tarife',         naziv: 'Tarife',         icon: 'fas fa-percent' },
         { page: 'cjenovnici',     naziv: 'Cjenovnik',      icon: 'fas fa-tags' },
+        { page: 'skladista',      naziv: 'Skladišta',      icon: 'fas fa-warehouse' },
         { page: 'lokacije',       naziv: 'Lokacije',       icon: 'fas fa-store' },
     ]},
     { id: 'm_alati', naziv: 'Alati', icon: 'fas fa-toolbox', stavke: [
@@ -12630,6 +12866,7 @@ function App() {
             case 'grupe_artikala': return <GrupeArtikalaPage currentUser={currentUser} />;
             case 'tarife': return <TarifePage currentUser={currentUser} />;
             case 'cjenovnici': return <CjenovniciPage currentUser={currentUser} />;
+            case 'skladista': return <SkladistaPage currentUser={currentUser} />;
             case 'loyalty_kupilenovo': return <LoyaltyPage program="kupilenovo" currentUser={currentUser} />;
             case 'loyalty_tuttocapsule': return <LoyaltyPage program="tuttocapsule" currentUser={currentUser} />;
             case 'loyalty_staff': return <LoyaltyPage program="staff" currentUser={currentUser} />;
