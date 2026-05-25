@@ -537,9 +537,7 @@
         .mobile-overlay.show { display: block; }
 
         /* Bottom navigation for mobile */
-        .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-card); border-top: 1px solid var(--border-color); z-index: 50; padding-bottom: env(safe-area-inset-bottom); }
-        .mobile-bottom-nav-inner { display: flex; justify-content: space-around; padding: 6px 0; }
-        /* .bottom-nav-item uklonjen u v3.7.0 - JSX koristi .mobile-bottom-nav-item (definisan kasnije) */
+        /* .mobile-bottom-nav* i .bottom-nav-item uklonjeni u v3.7.1 - footer nav skroz uklonjen */
 
         /* ---- TABLET (768px - 1024px) ---- */
         @media (max-width: 1024px) {
@@ -554,11 +552,10 @@
             /* Sidebar — slide-in drawer */
             .sidebar { transform: translateX(-100%); width: 280px; position: fixed; z-index: 50; box-shadow: 4px 0 24px rgba(0,0,0,0.2); }
             .sidebar.open { transform: translateX(0); }
-            .main-content { margin-left: 0; padding-bottom: 72px; }
+            .main-content { margin-left: 0; padding-bottom: env(safe-area-inset-bottom, 16px); }
 
             /* Show mobile controls */
             .mobile-menu-btn { display: block; }
-            .mobile-bottom-nav { display: block; }
 
             /* Topbar */
             .topbar { padding: 10px 16px; position: sticky; top: 0; z-index: 40; }
@@ -747,7 +744,6 @@
 
         /* ============== MOBILE-FIRST RESPONSIVE ============== */
         .mobile-only { display: none; }
-        .mobile-bottom-nav { display: none; }
         .mobile-menu-btn { display: none; }
 
         @media (max-width: 900px) {
@@ -762,7 +758,7 @@
             /* Sidebar na mobile — overlay */
             .sidebar { transform: translateX(-100%); transition: transform 0.3s; box-shadow: 4px 0 15px rgba(0,0,0,0.15); }
             .sidebar.open { transform: translateX(0); }
-            .main-content { margin-left: 0 !important; padding-bottom: 80px; }
+            .main-content { margin-left: 0 !important; padding-bottom: env(safe-area-inset-bottom, 16px); }
 
             /* Topbar — kompaktan */
             .topbar { padding: 10px 12px !important; gap: 8px; }
@@ -807,9 +803,9 @@
             .card-body { padding: 14px !important; }
             .card-header h3 { font-size: 14px !important; }
 
-            /* FAB na mobile — pomijeren iznad bottom nav-a */
-            .fab-wrapper { bottom: 84px !important; right: 16px !important; }
-            .chat-bubble { bottom: 84px !important; left: 16px !important; width: 50px !important; height: 50px !important; font-size: 20px !important; }
+            /* FAB i chat bubble na mobile (v3.7.1: bottom nav je uklonjen, pa pomak je manji) */
+            .fab-wrapper { bottom: 20px !important; right: 16px !important; }
+            .chat-bubble { bottom: 20px !important; left: 16px !important; width: 50px !important; height: 50px !important; font-size: 20px !important; }
 
             /* Topbar dropdowns (Pametni podsjetnici, Live presence) — full width na mobile */
             .topbar-dropdown {
@@ -895,23 +891,9 @@
             .sidebar { width: 88vw !important; max-width: 320px; }
         }
 
-            /* Bottom navigation */
-            .mobile-bottom-nav {
-                display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
-                background: var(--bg-card); border-top: 1px solid var(--border-color);
-                z-index: 80; padding: 6px 0 calc(env(safe-area-inset-bottom) + 6px);
-                box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
-            }
-            .mobile-bottom-nav-item {
-                flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-                gap: 3px; padding: 6px 4px; cursor: pointer; color: var(--gray-500); transition: color 0.15s;
-                border: none; background: transparent; min-height: 50px;
-            }
-            .mobile-bottom-nav-item.active { color: var(--primary); }
-            .mobile-bottom-nav-item i { font-size: 18px; }
-            .mobile-bottom-nav-item span { font-size: 10px; font-weight: 500; }
-            .mobile-bottom-nav-item.active span { font-weight: 600; }
-        }
+        /* (Bivsi .mobile-bottom-nav* media wrapper uklonjen u v3.7.1 - footer nav skroz uklonjen.
+           Sidebar hamburger meni je dovoljan na mobile-u.) */
+
         @media (max-width: 480px) {
             .stats-grid { grid-template-columns: 1fr 1fr !important; }
             .stat-card { padding: 10px !important; }
@@ -921,7 +903,7 @@
 
         /* Print */
         @media print {
-            .sidebar, .topbar, .mobile-bottom-nav, .mobile-menu-btn { display: none !important; }
+            .sidebar, .topbar, .mobile-menu-btn { display: none !important; }
             .main-content { margin-left: 0; padding-bottom: 0; }
             .page-content { padding: 0; max-width: 100%; }
             .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
@@ -5354,7 +5336,7 @@ function ServisniPrijemPage({ radnici, currentUser, sendNotif }) {
                     </button>
                 </div>
                 {renderPrint(nalog)}
-                <style>{`@media print { .no-print, .sidebar, .app-header, .mobile-bottom-nav { display: none !important; } #print-area { margin: 0; padding: 16px; } .main-content { margin: 0; padding: 0; } }`}</style>
+                <style>{`@media print { .no-print, .sidebar, .app-header { display: none !important; } #print-area { margin: 0; padding: 16px; } .main-content { margin: 0; padding: 0; } }`}</style>
             </div>
         );
     }
@@ -10574,31 +10556,9 @@ function ChatBubble({ currentUser, page, setPage }) {
 }
 
 // =====================================================================
-// MOBILE BOTTOM NAVIGATION
+// (Bivsi MobileBottomNav uklonjen u v3.7.1 - dvije nav trake na mobile su bile redundantne;
+//  na mobile se sidebar hamburger meni i topbar nav potpuno snalaze.)
 // =====================================================================
-function MobileBottomNav({ page, setPage, currentUser, setSidebarOpen }) {
-    if (!currentUser) return null;
-    const lok = LOKACIJE.find(l => l.id === currentUser.lokacija_id);
-    const isMP = lok?.tip === 'maloprodaja';
-    const items = [
-        { key: 'centrala', icon: 'fa-home', label: 'Početna' },
-        { key: 'evidencija', icon: 'fa-clock', label: 'Sat' },
-        ...(isMP ? [{ key: 'pazar', icon: 'fa-cash-register', label: 'Polog' }] : [{ key: 'zadaci', icon: 'fa-tasks', label: 'Zadaci' }]),
-        { key: 'profil', icon: 'fa-user-circle', label: 'Profil' },
-        { key: '__menu__', icon: 'fa-bars', label: 'Meni' },
-    ];
-    return (
-        <div className="mobile-bottom-nav">
-            {items.map(it => (
-                <button key={it.key} className={`mobile-bottom-nav-item ${page===it.key?'active':''}`}
-                    onClick={() => { if (it.key === '__menu__') setSidebarOpen(true); else setPage(it.key); }}>
-                    <i className={`fas ${it.icon}`}></i>
-                    <span>{it.label}</span>
-                </button>
-            ))}
-        </div>
-    );
-}
 
 // =====================================================================
 // VODICI / KNOWLEDGE BASE
@@ -11957,24 +11917,6 @@ function App() {
                 </div>
             </div>
 
-            {/* Mobile Bottom Navigation */}
-            <div className="mobile-bottom-nav">
-                <div className="mobile-bottom-nav-inner">
-                    {[
-                        { key: 'centrala', icon: 'fa-building', label: 'Centrala' },
-                        { key: 'evidencija', icon: 'fa-clock', label: 'Dolazak' },
-                        { key: 'chat', icon: 'fa-comments', label: 'Chat' },
-                        { key: 'pazar', icon: 'fa-cash-register', label: 'Pazar' },
-                        { key: 'dashboard', icon: 'fa-th-large', label: 'Više' },
-                    ].map(item => (
-                        <div key={item.key} className={`bottom-nav-item ${page===item.key?'active':''}`} onClick={()=>setPage(item.key)}>
-                            <i className={`fas ${item.icon}`}></i>
-                            <span>{item.label}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
             {/* Globalna pretraga (Ctrl+K) */}
             <GlobalSearch isOpen={showSearch} onClose={()=>setShowSearch(false)} radnici={radnici} primopredaje={primopredaje} polozi={polozi} evidencije={evidencije} setPage={setPage} currentUser={currentUser} />
 
@@ -11983,9 +11925,6 @@ function App() {
 
             {/* Chat Bubble (Messenger-style) */}
             <ChatBubble currentUser={currentUser} page={page} setPage={setPage} />
-
-            {/* Mobile bottom navigation */}
-            <MobileBottomNav page={page} setPage={setPage} currentUser={currentUser} setSidebarOpen={setSidebarOpen} />
 
             {/* Evidencija blocker — radnici se moraju prijaviti */}
             <EvidencijaBlocker currentUser={currentUser} evidencije={evidencije} page={page} setPage={setPage} onLogout={handleLogout} />
