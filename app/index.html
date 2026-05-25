@@ -804,8 +804,16 @@ async function api(path, method, body) {
     try {
         const res = await fetch(API_URL + path, opts);
         if (!res.ok) {
-            addDebug('error', `${method} ${path} → HTTP ${res.status}`);
-            throw new Error('HTTP ' + res.status);
+            // Pokušaj uzeti error poruku iz server response-a
+            let errorMsg = 'HTTP ' + res.status;
+            try {
+                const errJson = await res.json();
+                if (errJson?.error) errorMsg = errJson.error;
+            } catch(_) {}
+            addDebug('error', `${method} ${path} → ${errorMsg}`);
+            const err = new Error(errorMsg);
+            err.status = res.status;
+            throw err;
         }
         addDebug('ok', `${method} ${path}`);
         return res.json();
@@ -2753,7 +2761,7 @@ function DopunaVPPage({ radnici, currentUser }) {
 
     const handleDelete = async (id) => {
         if (!await askConfirm('Obrisati ovu stavku sa liste?', true)) return;
-        await api(`/api/dopuna-vp/${id}`, 'DELETE').catch(()=>{});
+        await api(`/api/dopuna-vp/${id}`, 'DELETE', { requester_id: currentUser?.id }).catch(()=>{});
         await refreshStavke();
     };
 
@@ -8176,14 +8184,14 @@ function VPDugovanjaPage({ currentUser, radnici }) {
 
     const handleDelete = async (id) => {
         if (!await askConfirm('Sigurno obrisati ovo dugovanje sa svim uplatama?')) return;
-        try { await api(`/api/vp-dugovanja/${id}`, 'DELETE'); await load(); setDetalji(null); showAlert('Obrisano.', 'success'); }
+        try { await api(`/api/vp-dugovanja/${id}`, 'DELETE', { requester_id: currentUser?.id }); await load(); setDetalji(null); showAlert('Obrisano.', 'success'); }
         catch(e) { showAlert('Greška.', 'error'); }
     };
 
     const handleObrisiUplatu = async (uplataId) => {
         if (!await askConfirm('Obrisati ovu uplatu?')) return;
         try {
-            await api(`/api/vp-dugovanja/uplata/${uplataId}`, 'DELETE');
+            await api(`/api/vp-dugovanja/uplata/${uplataId}`, 'DELETE', { requester_id: currentUser?.id });
             await load();
             if (detalji) await otvoriDetalje(detalji.id);
             showAlert('Uplata obrisana.', 'success');
@@ -9970,7 +9978,7 @@ function VodiciPage({ currentUser }) {
     };
     const handleDelete = async (id) => {
         if (!await askConfirm('Sigurno obrisati ovaj vodič?')) return;
-        try { await api(`/api/vodici/${id}`, 'DELETE'); await load(); setAktVodic(null); showAlert('Obrisano.', 'success'); }
+        try { await api(`/api/vodici/${id}`, 'DELETE', { requester_id: currentUser?.id }); await load(); setAktVodic(null); showAlert('Obrisano.', 'success'); }
         catch(e) { showAlert('Greška.', 'error'); }
     };
     const otvoriVodic = async (v) => {
@@ -11467,7 +11475,7 @@ function LoyaltyBaza({ program, currentUser }) {
 
     const handleDelete = async (c) => {
         if (!await askConfirm(`Obrisati ${c.ime} ${c.prezime} iz baze?`, true)) return;
-        await api(`/api/loyalty/clanovi/${c.id}`, 'DELETE').catch(()=>{});
+        await api(`/api/loyalty/clanovi/${c.id}`, 'DELETE', { requester_id: currentUser?.id }).catch(()=>{});
         await refresh();
     };
 
