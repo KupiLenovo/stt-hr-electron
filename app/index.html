@@ -9034,6 +9034,422 @@ function LokacijaEditModal({ form, setForm, edit, onClose, onSave }) {
 }
 
 // =====================================================================
+// PARTNERI (Sifrarnik) — CRUD nad /api/v1/partneri
+// =====================================================================
+function PartneriPage({ currentUser }) {
+    const PARTNERI_URL = '/api/v1/partneri';
+    const uloga = currentUser && currentUser.uloga;
+    const canEdit = uloga === 'admin' || uloga === 'voditelj';
+    const canDelete = uloga === 'admin';
+    const TIP_LICA = { pravno: 'Pravno lice', fizicko: 'Fizičko lice', zaposleni: 'Zaposleni' };
+    const PRAZAN = {
+        sifra: '', naziv: '', tip_lica: 'pravno', je_kupac: 1, je_dobavljac: 0,
+        jib_jmb: '', adresa: '', grad: '', postanski_broj: '',
+        telefon: '', mobitel: '', fax: '', email: '', web: '',
+        direktor: '', kontakt_osoba: '', web_partner: 0, web_lozinka: '',
+        kod_kartice: '', rang: '', datum_rodjenja: '', upozorenje: '', napomena: '',
+    };
+
+    const [lista, setLista] = useState([]);
+    const [ucitavanje, setUcitavanje] = useState(true);
+    const [pretraga, setPretraga] = useState('');
+    const [filterTip, setFilterTip] = useState('svi'); // svi | kupci | dobavljaci
+    const [prikaziNeaktivne, setPrikaziNeaktivne] = useState(false);
+    const [modalOtvoren, setModalOtvoren] = useState(false);
+    const [uredjivanje, setUredjivanje] = useState(null); // null = novi
+    const [form, setForm] = useState(PRAZAN);
+    const [snimanje, setSnimanje] = useState(false);
+    const [formGreska, setFormGreska] = useState(null);
+
+    const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    const ucitaj = async () => {
+        setUcitavanje(true);
+        try {
+            const data = await api(PARTNERI_URL);
+            setLista(Array.isArray(data) ? data : []);
+        } catch (e) {
+            showAlert('Greška pri učitavanju partnera.', 'error');
+        } finally {
+            setUcitavanje(false);
+        }
+    };
+    useEffect(() => { ucitaj(); }, []);
+
+    const filtrirani = useMemo(() => {
+        const q = pretraga.trim().toLowerCase();
+        return lista.filter(p => {
+            if (!prikaziNeaktivne && !p.aktivan) return false;
+            if (filterTip === 'kupci' && !p.je_kupac) return false;
+            if (filterTip === 'dobavljaci' && !p.je_dobavljac) return false;
+            if (!q) return true;
+            return [p.sifra, p.naziv, p.jib_jmb, p.telefon, p.mobitel, p.email, p.grad]
+                .some(v => v && String(v).toLowerCase().includes(q));
+        });
+    }, [lista, pretraga, filterTip, prikaziNeaktivne]);
+
+    const otvoriNovi = () => {
+        setUredjivanje(null);
+        setForm(PRAZAN);
+        setFormGreska(null);
+        setModalOtvoren(true);
+    };
+    const otvoriUredi = (p) => {
+        const norm = {};
+        Object.keys(PRAZAN).forEach(k => { norm[k] = (p[k] == null) ? PRAZAN[k] : p[k]; });
+        norm.je_kupac = p.je_kupac ? 1 : 0;
+        norm.je_dobavljac = p.je_dobavljac ? 1 : 0;
+        norm.web_partner = p.web_partner ? 1 : 0;
+        setUredjivanje(p);
+        setForm(norm);
+        setFormGreska(null);
+        setModalOtvoren(true);
+    };
+
+    const snimi = async () => {
+        if (!form.naziv.trim()) { setFormGreska('Naziv je obavezan.'); return; }
+        if (!['pravno','fizicko','zaposleni'].includes(form.tip_lica)) { setFormGreska('Neispravan tip lica.'); return; }
+        setSnimanje(true);
+        setFormGreska(null);
+        const clean = (v) => { const s = (v == null ? '' : String(v)).trim(); return s === '' ? null : s; };
+        const payload = {
+            naziv: form.naziv.trim(),
+            tip_lica: form.tip_lica,
+            je_kupac: form.je_kupac ? 1 : 0,
+            je_dobavljac: form.je_dobavljac ? 1 : 0,
+            jib_jmb: clean(form.jib_jmb), adresa: clean(form.adresa), grad: clean(form.grad),
+            postanski_broj: clean(form.postanski_broj),
+            telefon: clean(form.telefon), mobitel: clean(form.mobitel), fax: clean(form.fax),
+            email: clean(form.email), web: clean(form.web),
+            direktor: clean(form.direktor), kontakt_osoba: clean(form.kontakt_osoba),
+            web_partner: form.web_partner ? 1 : 0,
+            web_lozinka: form.web_partner ? clean(form.web_lozinka) : null,
+            kod_kartice: clean(form.kod_kartice), rang: clean(form.rang),
+            datum_rodjenja: clean(form.datum_rodjenja),
+            upozorenje: clean(form.upozorenje), napomena: clean(form.napomena),
+            requester_id: currentUser ? currentUser.id : null,
+        };
+        if (!uredjivanje) {
+            const s = clean(form.sifra);
+            if (s) payload.sifra = s; // prazno → server auto-generise
+            payload.kreirao_id = currentUser ? currentUser.id : null;
+        }
+        try {
+            const odg = uredjivanje
+                ? await api(PARTNERI_URL + '/' + uredjivanje.id, 'PUT', payload)
+                : await api(PARTNERI_URL, 'POST', payload);
+            if (odg && odg.error) throw new Error(odg.error);
+            setModalOtvoren(false);
+            await ucitaj();
+            showAlert(uredjivanje ? 'Partner ažuriran.' : 'Partner kreiran.', 'success');
+        } catch (e) {
+            setFormGreska('Greška pri snimanju' + (e && e.message ? (': ' + e.message) : '.'));
+        } finally {
+            setSnimanje(false);
+        }
+    };
+
+    const deaktiviraj = async (p) => {
+        if (!await askConfirm(`Deaktivirati partnera "${p.naziv}"? Partner ostaje u bazi (soft-delete).`)) return;
+        try {
+            const rid = currentUser ? encodeURIComponent(currentUser.id) : '';
+            const odg = await api(`${PARTNERI_URL}/${p.id}?requester_id=${rid}`, 'DELETE');
+            if (odg && odg.error) throw new Error(odg.error);
+            await ucitaj();
+            showAlert('Partner deaktiviran.', 'success');
+        } catch (e) {
+            showAlert('Greška pri deaktivaciji' + (e && e.message ? (': ' + e.message) : '.'), 'error');
+        }
+    };
+
+    const ulogaBadge = (p) => (
+        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+            {!!p.je_kupac && <span style={{fontSize:10,padding:'2px 6px',borderRadius:8,background:'#d1fae5',color:'#065f46',fontWeight:600}}>Kupac</span>}
+            {!!p.je_dobavljac && <span style={{fontSize:10,padding:'2px 6px',borderRadius:8,background:'#fef3c7',color:'#92400e',fontWeight:600}}>Dobavljač</span>}
+            {!p.je_kupac && !p.je_dobavljac && <span style={{fontSize:10,padding:'2px 6px',borderRadius:8,background:'var(--gray-100)',color:'var(--gray-500)'}}>—</span>}
+        </div>
+    );
+
+    return (
+        <div className="fade-in">
+            {/* Zaglavlje + akcija */}
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{fontSize:13,color:'var(--gray-500)'}}>
+                    <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                    Jedinstveni šifrarnik partnera (kupci, dobavljači, zaposleni). Šifra se može unijeti ručno ili je server auto-generiše.
+                </div>
+                {canEdit && (
+                    <button className="btn btn-primary" onClick={otvoriNovi}>
+                        <i className="fas fa-plus"></i> Novi partner
+                    </button>
+                )}
+            </div>
+
+            {/* Toolbar: pretraga + filteri */}
+            <div className="card" style={{marginBottom:12}}>
+                <div className="card-body" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'center'}}>
+                    <div style={{flex:'1 1 240px',minWidth:200}}>
+                        <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Pretraga (naziv, šifra, JIB/JMB, telefon, email, grad)..."
+                            value={pretraga}
+                            onChange={e => setPretraga(e.target.value)}
+                        />
+                    </div>
+                    <div style={{display:'flex',gap:4}}>
+                        {[['svi','Svi'],['kupci','Kupci'],['dobavljaci','Dobavljači']].map(([val,lbl]) => (
+                            <button
+                                key={val}
+                                onClick={() => setFilterTip(val)}
+                                className={'btn btn-sm ' + (filterTip === val ? 'btn-primary' : 'btn-outline')}
+                            >
+                                {lbl}
+                            </button>
+                        ))}
+                    </div>
+                    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'var(--text-primary)',cursor:'pointer',userSelect:'none'}}>
+                        <input type="checkbox" checked={prikaziNeaktivne} onChange={e => setPrikaziNeaktivne(e.target.checked)} />
+                        Prikaži neaktivne
+                    </label>
+                    <div style={{marginLeft:'auto',fontSize:12,color:'var(--gray-400)'}}>
+                        {filtrirani.length} {filtrirani.length === 1 ? 'partner' : 'partnera'}
+                    </div>
+                </div>
+            </div>
+
+            {/* Lista */}
+            <div className="card">
+                <div style={{overflowX:'auto'}}>
+                    {ucitavanje ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}>
+                            <i className="fas fa-spinner fa-spin"></i> Učitavanje...
+                        </div>
+                    ) : filtrirani.length === 0 ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
+                            <i className="fas fa-inbox" style={{fontSize:24,opacity:0.4,marginBottom:8,display:'block'}}></i>
+                            {pretraga || filterTip !== 'svi' ? 'Nema partnera koji odgovaraju filteru.' : 'Nema partnera. Kreiraj prvog.'}
+                        </div>
+                    ) : (
+                        <table style={{width:'100%'}}>
+                            <thead>
+                                <tr>
+                                    <th>Šifra</th>
+                                    <th>Naziv</th>
+                                    <th>Tip lica</th>
+                                    <th>Uloga</th>
+                                    <th>Kontakt</th>
+                                    <th>Grad</th>
+                                    <th style={{textAlign:'right'}}>Akcije</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtrirani.map(p => (
+                                    <tr key={p.id} style={!p.aktivan ? {opacity:0.5} : {}}>
+                                        <td style={{fontFamily:'monospace',fontSize:12,color:'var(--gray-500)'}}>{p.sifra}</td>
+                                        <td style={{fontWeight:500}}>
+                                            {p.naziv}
+                                            {!p.aktivan && <span style={{marginLeft:6,fontSize:10,color:'#dc2626',fontWeight:600}}>(NEAKTIVAN)</span>}
+                                        </td>
+                                        <td>{TIP_LICA[p.tip_lica] || p.tip_lica}</td>
+                                        <td>{ulogaBadge(p)}</td>
+                                        <td style={{fontSize:12,color:'var(--gray-600)'}}>
+                                            {p.mobitel || p.telefon || p.email || '—'}
+                                        </td>
+                                        <td style={{fontSize:12,color:'var(--gray-600)'}}>{p.grad || '—'}</td>
+                                        <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                                            {canEdit && (
+                                                <button className="btn btn-sm btn-outline" onClick={() => otvoriUredi(p)} style={{marginRight:4}}>
+                                                    <i className="fas fa-edit"></i> Uredi
+                                                </button>
+                                            )}
+                                            {canDelete && !!p.aktivan && (
+                                                <button className="btn btn-sm" onClick={() => deaktiviraj(p)} style={{background:'#fee2e2',color:'#991b1b',border:'none'}}>
+                                                    <i className="fas fa-ban"></i> Deaktiviraj
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+
+            {/* Modal: novi/uredi */}
+            {modalOtvoren && (
+                <Modal
+                    isOpen={true}
+                    onClose={() => !snimanje && setModalOtvoren(false)}
+                    title={uredjivanje ? `Uredi partnera #${uredjivanje.id}` : 'Novi partner'}
+                    footer={
+                        <>
+                            <button className="btn btn-outline" onClick={() => setModalOtvoren(false)} disabled={snimanje}>Odustani</button>
+                            <button className="btn btn-primary" onClick={snimi} disabled={snimanje}>
+                                {snimanje ? <><i className="fas fa-spinner fa-spin"></i> Snimanje...</> : <><i className="fas fa-save"></i> {uredjivanje ? 'Sačuvaj izmjene' : 'Kreiraj partnera'}</>}
+                            </button>
+                        </>
+                    }
+                >
+                    {/* Sekcija: Osnovno */}
+                    <div style={{fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1,marginBottom:8}}>Osnovno</div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Šifra</label>
+                            <input
+                                className="form-control"
+                                value={form.sifra}
+                                onChange={e => setField('sifra', e.target.value)}
+                                disabled={!!uredjivanje}
+                                placeholder={uredjivanje ? '' : '(prazno → auto-generisano)'}
+                                style={uredjivanje ? {background:'var(--gray-100)',color:'var(--gray-500)'} : {}}
+                            />
+                        </div>
+                        <div className="form-group" style={{flex:2}}>
+                            <label>Naziv <span style={{color:'#dc2626'}}>*</span></label>
+                            <input
+                                className="form-control"
+                                value={form.naziv}
+                                onChange={e => setField('naziv', e.target.value)}
+                                autoFocus={!uredjivanje}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Tip lica</label>
+                            <select className="form-control" value={form.tip_lica} onChange={e => setField('tip_lica', e.target.value)}>
+                                <option value="pravno">Pravno lice</option>
+                                <option value="fizicko">Fizičko lice</option>
+                                <option value="zaposleni">Zaposleni</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:0,cursor:'pointer',userSelect:'none'}}>
+                                <input type="checkbox" checked={!!form.je_kupac} onChange={e => setField('je_kupac', e.target.checked ? 1 : 0)} />
+                                <span>Partner je <strong>kupac</strong></span>
+                            </label>
+                        </div>
+                        <div className="form-group">
+                            <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:0,cursor:'pointer',userSelect:'none'}}>
+                                <input type="checkbox" checked={!!form.je_dobavljac} onChange={e => setField('je_dobavljac', e.target.checked ? 1 : 0)} />
+                                <span>Partner je <strong>dobavljač</strong></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Sekcija: Identifikacija i kontakt */}
+                    <div style={{fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1,margin:'14px 0 8px'}}>Identifikacija i kontakt</div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>JIB / JMB</label>
+                            <input className="form-control" value={form.jib_jmb} onChange={e => setField('jib_jmb', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Kod kartice</label>
+                            <input className="form-control" value={form.kod_kartice} onChange={e => setField('kod_kartice', e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group" style={{flex:2}}>
+                            <label>Adresa</label>
+                            <input className="form-control" value={form.adresa} onChange={e => setField('adresa', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Grad</label>
+                            <input className="form-control" value={form.grad} onChange={e => setField('grad', e.target.value)} />
+                        </div>
+                        <div className="form-group" style={{flex:'0 0 120px'}}>
+                            <label>Poštanski broj</label>
+                            <input className="form-control" value={form.postanski_broj} onChange={e => setField('postanski_broj', e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Telefon</label>
+                            <input className="form-control" value={form.telefon} onChange={e => setField('telefon', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Mobitel</label>
+                            <input className="form-control" value={form.mobitel} onChange={e => setField('mobitel', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Fax</label>
+                            <input className="form-control" value={form.fax} onChange={e => setField('fax', e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Email</label>
+                            <input type="email" className="form-control" value={form.email} onChange={e => setField('email', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Web</label>
+                            <input className="form-control" value={form.web} onChange={e => setField('web', e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Direktor</label>
+                            <input className="form-control" value={form.direktor} onChange={e => setField('direktor', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Kontakt osoba</label>
+                            <input className="form-control" value={form.kontakt_osoba} onChange={e => setField('kontakt_osoba', e.target.value)} />
+                        </div>
+                    </div>
+
+                    {/* Sekcija: Web pristup */}
+                    <div style={{fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1,margin:'14px 0 8px'}}>Web pristup</div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:0,cursor:'pointer',userSelect:'none'}}>
+                                <input type="checkbox" checked={!!form.web_partner} onChange={e => setField('web_partner', e.target.checked ? 1 : 0)} />
+                                <span>Web partner (može se logirati)</span>
+                            </label>
+                        </div>
+                        {!!form.web_partner && (
+                            <div className="form-group">
+                                <label>Web lozinka</label>
+                                <input className="form-control" value={form.web_lozinka} onChange={e => setField('web_lozinka', e.target.value)} placeholder="(unesi novu ili ostavi)" />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Sekcija: Ostalo */}
+                    <div style={{fontSize:11,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:1,margin:'14px 0 8px'}}>Ostalo</div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Rang</label>
+                            <input className="form-control" value={form.rang} onChange={e => setField('rang', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Datum rođenja</label>
+                            <input type="date" className="form-control" value={form.datum_rodjenja} onChange={e => setField('datum_rodjenja', e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label>Upozorenje</label>
+                        <input className="form-control" value={form.upozorenje} onChange={e => setField('upozorenje', e.target.value)} placeholder="Vidljivo kad se partner odabere u dokumentima" />
+                    </div>
+                    <div className="form-group">
+                        <label>Napomena</label>
+                        <textarea className="form-control" rows={2} value={form.napomena} onChange={e => setField('napomena', e.target.value)} />
+                    </div>
+
+                    {formGreska && (
+                        <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}>
+                            <i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{formGreska}
+                        </div>
+                    )}
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+// =====================================================================
 // CRM — Kupci + Pipeline + Aktivnosti + Dashboard
 // =====================================================================
 function CRMPage({ currentUser, radnici }) {
@@ -10503,6 +10919,200 @@ class ErrorBoundary extends React.Component {
     }
 }
 
+// =====================================================================
+// NAVIGACIJA — 12 MODULA (skelet)
+// Izvor istine za sidebar. Page komponente se ne diraju.
+// Badge logika i Primopredaja pulsing su izvedeni u NavModuli render funkciji.
+// =====================================================================
+const MODULI = [
+    { id: 'm_dashboard', naziv: 'Dashboard', icon: 'fas fa-tachometer-alt', stavke: [
+        { page: 'centrala',  naziv: 'Centrala',  icon: 'fas fa-building' },
+        { page: 'dashboard', naziv: 'Dashboard', icon: 'fas fa-tachometer-alt' },
+    ]},
+    { id: 'm_veleprodaja', naziv: 'Veleprodaja', icon: 'fas fa-warehouse', uskoro: true, stavke: [] },
+    { id: 'm_maloprodaja', naziv: 'Maloprodaja', icon: 'fas fa-store', stavke: [
+        { page: 'pazar',        naziv: 'Polog pazara',        icon: 'fas fa-cash-register' },
+        { page: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fas fa-exchange-alt' },
+    ]},
+    { id: 'm_web', naziv: 'Web', icon: 'fas fa-globe', uskoro: true, stavke: [] },
+    { id: 'm_servis', naziv: 'Servis', icon: 'fas fa-tools', stavke: [
+        { page: 'servis', naziv: 'Servisni prijem', icon: 'fas fa-tools' },
+    ]},
+    { id: 'm_logistika', naziv: 'Logistika', icon: 'fas fa-truck', stavke: [
+        { page: 'dostava',   naziv: 'Dostava robe',        icon: 'fas fa-truck' },
+        { page: 'dopuna',    naziv: 'Dopuna maloprodaje',  icon: 'fas fa-boxes' },
+        { page: 'dopuna_vp', naziv: 'Dopuna VP — Uvoz',    icon: 'fas fa-ship' },
+        { page: 'vozila',    naziv: 'Službena vozila',     icon: 'fas fa-car-side' },
+    ]},
+    { id: 'm_finansije', naziv: 'Finansije', icon: 'fas fa-coins', stavke: [
+        { page: 'vp_dugovanja', naziv: 'VP Dugovanja', icon: 'fas fa-hand-holding-usd' },
+    ]},
+    { id: 'm_hr', naziv: 'HR', icon: 'fas fa-users', stavke: [
+        { page: 'evidencija',        naziv: 'Evidencija rada',     icon: 'fas fa-clock' },
+        { page: 'admin_evidencija',  naziv: 'Pregled evidencije',  icon: 'fas fa-user-clock', gate: 'admin_voditelj' },
+        { page: 'odmori',            naziv: 'Godišnji odmori',     icon: 'fas fa-umbrella-beach' },
+        { page: 'kasnjenja',         naziv: 'Kašnjenja / Izjave',  icon: 'fas fa-exclamation-triangle' },
+        { page: 'radnici',           naziv: 'Radnici',             icon: 'fas fa-users-cog', gate: 'admin' },
+        { page: 'profil',            naziv: 'Moj profil',          icon: 'fas fa-user-circle' },
+    ]},
+    { id: 'm_crm', naziv: 'CRM', icon: 'fas fa-chart-line', stavke: [
+        { page: 'crm',                  naziv: 'CRM — Kupci',           icon: 'fas fa-chart-line' },
+        { page: 'leadovi',              naziv: 'Sales Leadovi (MP)',    icon: 'fas fa-bullhorn' },
+        { page: 'leadovi_vp',           naziv: 'Sales Leadovi (VP)',    icon: 'fas fa-bullhorn' },
+        { page: 'loyalty_kupilenovo',   naziv: 'Kupilenovo Care Club',  icon: 'fas fa-laptop' },
+        { page: 'loyalty_tuttocapsule', naziv: 'Tutto Capsule Loyalty', icon: 'fas fa-mug-hot' },
+        { page: 'loyalty_staff',        naziv: 'Staff Portal',          icon: 'fas fa-star' },
+    ]},
+    { id: 'm_sifrarnici', naziv: 'Šifrarnici', icon: 'fas fa-folder-open', stavke: [
+        { page: 'partneri', naziv: 'Partneri', icon: 'fas fa-address-book' },
+        { page: 'lokacije', naziv: 'Lokacije', icon: 'fas fa-store' },
+    ]},
+    { id: 'm_alati', naziv: 'Alati', icon: 'fas fa-toolbox', stavke: [
+        { page: 'izvjestaji', naziv: 'Izvještaji',          icon: 'fas fa-chart-bar', gate: 'admin_voditelj' },
+        { page: 'vodici',     naziv: 'Vodici i tutorijali', icon: 'fas fa-book' },
+        { page: 'chat',       naziv: 'Chat / Komunikacija', icon: 'fas fa-comments' },
+        { page: 'zadaci',     naziv: 'Zadaci (svi)',        icon: 'fas fa-tasks' },
+        { page: 'zadaci_mp',  naziv: 'Zadaci MP',           icon: 'fas fa-tasks' },
+        { page: 'zadaci_vp',  naziv: 'Zadaci VP',           icon: 'fas fa-tasks' },
+    ]},
+    { id: 'm_administracija', naziv: 'Administracija', icon: 'fas fa-cog', stavke: [
+        { page: 'pravila',  naziv: 'Pravila i Instrukcije', icon: 'fas fa-book' },
+        { page: 'audit',    naziv: 'Audit log',             icon: 'fas fa-history', gate: 'admin' },
+        { page: 'download', naziv: 'Preuzimanje podataka',  icon: 'fas fa-download' },
+    ]},
+];
+
+// Provjera vidljivosti stavke prema postojecim gate-ovima (1:1 iz starog sidebar-a)
+function _navStavkaVidljiva(gate, currentUser) {
+    if (!gate) return true;
+    const u = currentUser && currentUser.uloga;
+    if (gate === 'admin') return u === 'admin';
+    if (gate === 'admin_voditelj') return u === 'admin' || u === 'voditelj';
+    return true;
+}
+
+function NavModuli({ page, setPage, currentUser, primopredaje, polozi, zahtjeviDopune, zahtjeviOdmora, seenIds, setSidebarOpen }) {
+    // Pre-racunaj badge brojeve (premjesteni iz starog sidebar-a 1:1)
+    const seenDopune = new Set(seenIds['dopuna'] || []);
+    const seenPazar = new Set(seenIds['pazar'] || []);
+    const nepotvrdjeniPazar = polozi ? polozi.filter(p => p.status === 'pripremljen' && !seenPazar.has(p.id)).length : 0;
+    const noveDopune = zahtjeviDopune ? zahtjeviDopune.filter(z => (z.status === 'na_cekanju' || z.status === 'novi') && !seenDopune.has(z.id)).length : 0;
+    const odmoriPending = zahtjeviOdmora ? zahtjeviOdmora.filter(z => z.status === 'na_cekanju').length : 0;
+
+    // Mapiraj page → badge broj
+    const badgeFor = (p) => {
+        if (p === 'pazar') return nepotvrdjeniPazar;
+        if (p === 'dopuna') return noveDopune;
+        if (p === 'odmori') return odmoriPending;
+        return 0;
+    };
+
+    // Primopredaja: pulsing border + dvonivo badge (myPending crveni, lokPending zuti)
+    const danas = today();
+    const myPending = primopredaje && currentUser ? primopredaje.filter(p => p.preuzima_id === currentUser.id && !p.potvrdjeno && p.status !== 'problem' && p.datum >= danas).length : 0;
+    const lokPending = primopredaje && currentUser ? primopredaje.filter(p => p.lokacija_id === currentUser.lokacija_id && !p.potvrdjeno && p.status === 'u_toku' && p.datum === danas).length : 0;
+    const primopredajaBadge = myPending || lokPending;
+
+    // Auto-otvoreni modul koji sadrzi aktivnu page
+    const aktivanModulId = useMemo(() => {
+        const m = MODULI.find(mod => mod.stavke.some(s => s.page === page));
+        return m ? m.id : 'm_dashboard';
+    }, [page]);
+    const [otvoreni, setOtvoreni] = useState(() => ({ [aktivanModulId]: true }));
+    useEffect(() => {
+        setOtvoreni(prev => (prev[aktivanModulId] ? prev : { ...prev, [aktivanModulId]: true }));
+    }, [aktivanModulId]);
+    const toggle = (id) => setOtvoreni(prev => ({ ...prev, [id]: !prev[id] }));
+
+    return (
+        <>
+            {MODULI.map(mod => {
+                const vidljiveStavke = mod.stavke.filter(s => _navStavkaVidljiva(s.gate, currentUser));
+                const prazan = !!mod.uskoro;
+                const open = !!otvoreni[mod.id] && !prazan;
+                // Modul agregat badge (suma badge-ova svih vidljivih stavki + primopredaja)
+                let modulBadge = 0;
+                vidljiveStavke.forEach(s => {
+                    modulBadge += badgeFor(s.page);
+                    if (s.page === 'primopredaja') modulBadge += primopredajaBadge;
+                });
+                // Sakrij modul ako nema niti jedne vidljive stavke i nije "Uskoro"
+                if (!prazan && vidljiveStavke.length === 0) return null;
+                return (
+                    <div key={mod.id} className="nav-section">
+                        <div
+                            className="nav-section-title"
+                            onClick={() => !prazan && toggle(mod.id)}
+                            style={{
+                                display:'flex',
+                                alignItems:'center',
+                                justifyContent:'space-between',
+                                cursor: prazan ? 'default' : 'pointer',
+                                userSelect:'none',
+                                paddingRight: 16,
+                                color: prazan ? 'var(--gray-400)' : undefined,
+                            }}
+                            title={prazan ? 'Uskoro' : (open ? 'Sakrij' : 'Prikazi')}
+                        >
+                            <span style={{display:'flex',alignItems:'center',gap:8}}>
+                                {mod.icon && <i className={mod.icon} style={{fontSize:11,width:14,opacity:0.7}}></i>}
+                                <span>{mod.naziv}</span>
+                            </span>
+                            <span style={{display:'flex',alignItems:'center',gap:6}}>
+                                {prazan ? (
+                                    <span style={{fontSize:9,padding:'2px 6px',background:'var(--gray-200,#e5e7eb)',color:'var(--gray-500)',borderRadius:4,letterSpacing:0.5}}>USKORO</span>
+                                ) : (
+                                    <>
+                                        {modulBadge > 0 && (
+                                            <span style={{background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{modulBadge}</span>
+                                        )}
+                                        <i className={`fas fa-chevron-${open ? 'down' : 'right'}`} style={{fontSize:9,opacity:0.5}}></i>
+                                    </>
+                                )}
+                            </span>
+                        </div>
+                        {open && vidljiveStavke.map(s => {
+                            // Primopredaja: poseban render (pulsing border + dvonivo badge)
+                            if (s.page === 'primopredaja') {
+                                return (
+                                    <div
+                                        key={s.page}
+                                        className={`nav-item ${page === 'primopredaja' ? 'active' : ''}`}
+                                        onClick={() => { setPage('primopredaja'); setSidebarOpen(false); }}
+                                        style={primopredajaBadge > 0 ? { borderLeft: '3px solid #f59e0b' } : {}}
+                                    >
+                                        <i className="fas fa-exchange-alt"></i>
+                                        <span style={{flex:1}}>{s.naziv}</span>
+                                        {primopredajaBadge > 0 && (
+                                            <span style={{background: myPending > 0 ? '#dc2626' : '#f59e0b', color:'white', borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700, minWidth:18, textAlign:'center', animation:'pulse 2s infinite'}}>
+                                                {primopredajaBadge}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            const b = badgeFor(s.page);
+                            return (
+                                <div
+                                    key={s.page}
+                                    className={`nav-item ${page === s.page ? 'active' : ''}`}
+                                    onClick={() => { setPage(s.page); setSidebarOpen(false); }}
+                                >
+                                    <i className={s.icon}></i>
+                                    <span style={{flex:1}}>{s.naziv}</span>
+                                    {b > 0 && (
+                                        <span style={{marginLeft:'auto',background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{b}</span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })}
+        </>
+    );
+}
+
 function App() {
     const [page, setPage] = useState('centrala');
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -11033,6 +11643,7 @@ function App() {
         lokacije: { title: 'Lokacije', icon: 'fas fa-store' },
         download: { title: 'Preuzimanje podataka', icon: 'fas fa-download' },
         crm: { title: 'CRM — Kupci i Pipeline', icon: 'fas fa-chart-line' },
+        partneri: { title: 'Partneri (šifrarnik)', icon: 'fas fa-address-book' },
     };
 
     const renderPage = () => {
@@ -11066,6 +11677,7 @@ function App() {
             case 'vodici': return <VodiciPage currentUser={currentUser} />;
             case 'vp_dugovanja': return <VPDugovanjaPage currentUser={currentUser} radnici={radnici} />;
             case 'lokacije': return <LokacijePage currentUser={currentUser} />;
+            case 'partneri': return <PartneriPage currentUser={currentUser} />;
             case 'loyalty_kupilenovo': return <LoyaltyPage program="kupilenovo" currentUser={currentUser} />;
             case 'loyalty_tuttocapsule': return <LoyaltyPage program="tuttocapsule" currentUser={currentUser} />;
             case 'loyalty_staff': return <LoyaltyPage program="staff" currentUser={currentUser} />;
@@ -11082,153 +11694,17 @@ function App() {
                     <h1>STT.BA</h1>
                     <p>HR Menadžment Sistem</p>
                 </div>
-                                <div className="nav-section">
-                    <div className="nav-section-title">Centrala</div>
-                    {['centrala','dashboard'].map(key => (
-                        <div key={key} className={`nav-item ${page===key?'active':''}`} onClick={()=>{setPage(key);setSidebarOpen(false);}}>
-                            <i className={pages[key].icon}></i>{pages[key].title}
-                        </div>
-                    ))}
-                </div>
-
-                <div className="nav-section">
-                    <div className="nav-section-title">Radno vrijeme</div>
-                    <div className={`nav-item ${page==='evidencija'?'active':''}`} onClick={()=>{setPage('evidencija');setSidebarOpen(false);}}>
-                        <i className="fas fa-clock"></i>Evidencija rada
-                    </div>
-                    {(currentUser.uloga==='admin'||currentUser.uloga==='voditelj') && (
-                        <div className={`nav-item ${page==='admin_evidencija'?'active':''}`} onClick={()=>{setPage('admin_evidencija');setSidebarOpen(false);}}>
-                            <i className="fas fa-user-clock"></i>Pregled evidencije
-                        </div>
-                    )}
-                    {(()=>{
-                        const danas = today();
-                        const myPending = primopredaje ? primopredaje.filter(p => p.preuzima_id === currentUser.id && !p.potvrdjeno && p.status !== 'problem' && p.datum >= danas).length : 0;
-                        const lokPending = primopredaje ? primopredaje.filter(p => p.lokacija_id === currentUser.lokacija_id && !p.potvrdjeno && p.status === 'u_toku' && p.datum === danas).length : 0;
-                        const badge = myPending || lokPending;
-                        return (
-                            <div className={`nav-item ${page==='primopredaja'?'active':''}`} onClick={()=>{setPage('primopredaja');setSidebarOpen(false);}}
-                                style={badge>0?{borderLeft:'3px solid #f59e0b'}:{}}>
-                                <i className="fas fa-exchange-alt"></i>
-                                <span style={{flex:1}}>Primopredaja smjena</span>
-                                {badge > 0 && <span style={{background:myPending>0?'#dc2626':'#f59e0b',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700,minWidth:18,textAlign:'center',animation:'pulse 2s infinite'}}>{badge}</span>}
-                            </div>
-                        );
-                    })()}
-                </div>
-
-                <div className="nav-section">
-                    {(()=>{
-                        const seenDopune = new Set(seenIds['dopuna'] || []);
-                        const seenPazar = new Set(seenIds['pazar'] || []);
-                        const noveNarudzbe = zahtjeviDopune ? zahtjeviDopune.filter(z => (z.status==='na_cekanju'||z.status==='novi') && !seenDopune.has(z.id)).length : 0;
-                        const nepotvrdjeni = polozi.filter(p => p.status==='pripremljen' && !seenPazar.has(p.id)).length;
-                        const mpBadge = noveNarudzbe + nepotvrdjeni;
-                        return (<>
-                        <div className="nav-section-title" style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingRight:16}}>
-                            <span>Maloprodaja</span>
-                            {mpBadge>0&&<span style={{background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{mpBadge}</span>}
-                        </div>
-                        <div className={`nav-item ${page==='pazar'?'active':''}`} onClick={()=>{setPage('pazar');setSidebarOpen(false);}}>
-                            <i className="fas fa-cash-register"></i>Polog pazara
-                            {nepotvrdjeni>0&&<span style={{marginLeft:'auto',background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{nepotvrdjeni}</span>}
-                        </div>
-                        <div className={`nav-item ${page==='dopuna'?'active':''}`} onClick={()=>{setPage('dopuna');setSidebarOpen(false);}}>
-                            <i className="fas fa-boxes"></i>Dopuna maloprodaje
-                            {noveNarudzbe>0&&<span style={{marginLeft:'auto',background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{noveNarudzbe}</span>}
-                        </div>
-                        <div className={`nav-item ${page==='zadaci_mp'?'active':''}`} onClick={()=>{setPage('zadaci_mp');setSidebarOpen(false);}}>
-                            <i className="fas fa-tasks"></i>Poslovni zadaci
-                        </div>
-                        <div className={`nav-item ${page==='leadovi'?'active':''}`} onClick={()=>{setPage('leadovi');setSidebarOpen(false);}}>
-                            <i className="fas fa-bullhorn"></i>Sales Leadovi
-                        </div>
-                        <div className={`nav-item ${page==='crm'?'active':''}`} onClick={()=>{setPage('crm');setSidebarOpen(false);}}>
-                            <i className="fas fa-chart-line"></i>CRM — Kupci
-                        </div>
-                        </>);
-                    })()}
-                </div>
-
-                <div className="nav-section">
-                    <div className="nav-section-title">Veleprodaja</div>
-                    <div className={`nav-item ${page==='dostava'?'active':''}`} onClick={()=>{setPage('dostava');setSidebarOpen(false);}}>
-                        <i className="fas fa-truck"></i>Dostava robe
-                    </div>
-                    <div className={`nav-item ${page==='dopuna_vp'?'active':''}`} onClick={()=>{setPage('dopuna_vp');setSidebarOpen(false);}}>
-                        <i className="fas fa-ship"></i>Dopuna VP — Uvoz
-                    </div>
-                    <div className={`nav-item ${page==='zadaci_vp'?'active':''}`} onClick={()=>{setPage('zadaci_vp');setSidebarOpen(false);}}>
-                        <i className="fas fa-tasks"></i>Poslovni zadaci
-                    </div>
-                    <div className={`nav-item ${page==='leadovi_vp'?'active':''}`} onClick={()=>{setPage('leadovi_vp');setSidebarOpen(false);}}>
-                        <i className="fas fa-bullhorn"></i>Sales Leadovi
-                    </div>
-                    <div className={`nav-item ${page==='vp_dugovanja'?'active':''}`} onClick={()=>{setPage('vp_dugovanja');setSidebarOpen(false);}}>
-                        <i className="fas fa-hand-holding-usd"></i>VP Dugovanja
-                    </div>
-                </div>
-
-                <div className="nav-section">
-                    <div className="nav-section-title">Logistika</div>
-                    <div className={`nav-item ${page==='vozila'?'active':''}`} onClick={()=>{setPage('vozila');setSidebarOpen(false);}}>
-                        <i className="fas fa-car-side"></i>Službena vozila
-                    </div>
-                </div>
-
-                <div className="nav-section">
-                    <div className="nav-section-title">Loyalty Program</div>
-                    <div className={`nav-item ${page==='loyalty_kupilenovo'?'active':''}`} onClick={()=>{setPage('loyalty_kupilenovo');setSidebarOpen(false);}}>
-                        <i className="fas fa-laptop"></i>Kupilenovo Care Club
-                    </div>
-                    <div className={`nav-item ${page==='loyalty_tuttocapsule'?'active':''}`} onClick={()=>{setPage('loyalty_tuttocapsule');setSidebarOpen(false);}}>
-                        <i className="fas fa-mug-hot"></i>Tutto Capsule Loyalty
-                    </div>
-                    <div className={`nav-item ${page==='loyalty_staff'?'active':''}`} onClick={()=>{setPage('loyalty_staff');setSidebarOpen(false);}}>
-                        <i className="fas fa-star"></i>Staff Portal
-                    </div>
-                </div>
-
-                <div className="nav-section">
-                    <div className="nav-section-title">Servis</div>
-                    <div className={`nav-item ${page==='servis'?'active':''}`} onClick={()=>{setPage('servis');setSidebarOpen(false);}}>
-                        <i className="fas fa-tools"></i>Servisni prijem
-                    </div>
-                </div>
-
-                <div className="nav-section">
-                    {(()=>{
-                        const odmoriBadge = zahtjeviOdmora ? zahtjeviOdmora.filter(z=>z.status==='na_cekanju').length : 0;
-                        return (<>
-                        <div className="nav-section-title" style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingRight:16}}>
-                            <span>HR</span>
-                            {odmoriBadge>0&&<span style={{background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{odmoriBadge}</span>}
-                        </div>
-                        {['kasnjenja','odmori','chat','pravila','vodici'].map(key => (
-                            <div key={key} className={`nav-item ${page===key?'active':''}`} onClick={()=>{setPage(key);setSidebarOpen(false);}}>
-                                <i className={pages[key].icon}></i>{pages[key].title}
-                                {key==='odmori'&&odmoriBadge>0&&<span style={{marginLeft:'auto',background:'#dc2626',color:'white',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{odmoriBadge}</span>}
-                            </div>
-                        ))}
-                        {(currentUser.uloga==='admin'||currentUser.uloga==='voditelj') && (
-                            <div className={`nav-item ${page==='izvjestaji'?'active':''}`} onClick={()=>{setPage('izvjestaji');setSidebarOpen(false);}}>
-                                <i className="fas fa-chart-bar"></i>Izvještaji
-                            </div>
-                        )}
-                        {currentUser.uloga==='admin' && (
-                            <div className={`nav-item ${page==='radnici'?'active':''}`} onClick={()=>{setPage('radnici');setSidebarOpen(false);}}>
-                                <i className="fas fa-users-cog"></i>Radnici
-                            </div>
-                        )}
-                        <div className={`nav-item ${page==='lokacije'?'active':''}`} onClick={()=>{setPage('lokacije');setSidebarOpen(false);}}>
-                            <i className="fas fa-store"></i>Lokacije
-                        </div>
-                        <div className={`nav-item ${page==='download'?'active':''}`} onClick={()=>{setPage('download');setSidebarOpen(false);}}>
-                            <i className="fas fa-download"></i>Preuzimanje
-                        </div>
-                        </>);
-                    })()}
-                </div>
+                <NavModuli
+                    page={page}
+                    setPage={setPage}
+                    currentUser={currentUser}
+                    primopredaje={primopredaje}
+                    polozi={polozi}
+                    zahtjeviDopune={zahtjeviDopune}
+                    zahtjeviOdmora={zahtjeviOdmora}
+                    seenIds={seenIds}
+                    setSidebarOpen={setSidebarOpen}
+                />
 
                 <div style={{padding:20,borderTop:'1px solid var(--gray-700)',marginTop:'auto'}}>
                     <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
