@@ -1,7 +1,7 @@
 {
   "name": "stt-hr",
-  "version": "3.2.0",
-  "description": "STT.BA HR Menadzment Sistem",
+  "version": "3.3.0",
+  "description": "STT Business Manager — kompletan poslovni sistem za STT d.o.o. Sarajevo",
   "main": "main.js",
   "author": "STT d.o.o. Sarajevo",
   "private": true,
@@ -15,8 +15,8 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "ba.stt.hr",
-    "productName": "STT HR",
+    "appId": "ba.stt.business",
+    "productName": "STT Business Manager",
     "copyright": "(c) 2026 STT d.o.o. Sarajevo",
     "directories": {
       "output": "dist"
@@ -42,7 +42,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "STT HR",
+      "shortcutName": "STT Business Manager",
       "language": "1050",
       "license": null,
       "include": "installer.nsh"

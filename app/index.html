@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>STT.BA - HR Menadžment</title>
+    <title>STT Business Manager</title>
 
     <!-- PWA Meta Tags -->
     <link rel="manifest" href="/manifest.json">
@@ -7010,8 +7010,47 @@ function LoginPage({ radnici, onLogin }) {
     const [selRadnik, setSelRadnik] = useState(null);
     const [hover, setHover] = useState(null);
 
+    // Sound effects via Web Audio API
+    const audioCtxRef = React.useRef(null);
+    const getAudioCtx = () => {
+        if (!audioCtxRef.current) {
+            try { audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+        }
+        return audioCtxRef.current;
+    };
+    const playSound = (type) => {
+        try {
+            const ctx = getAudioCtx();
+            if (!ctx) return;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            if (type === 'hover') {
+                osc.frequency.value = 880;
+                gain.gain.setValueAtTime(0.04, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.08);
+            } else if (type === 'click') {
+                osc.frequency.setValueAtTime(1200, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.2);
+            } else if (type === 'back') {
+                osc.frequency.setValueAtTime(600, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.08, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.15);
+            }
+        } catch(e) {}
+    };
+
     if (selRadnik) {
-        return <PinPad radnik={selRadnik} onSuccess={onLogin} onBack={() => setSelRadnik(null)} />;
+        return <PinPad radnik={selRadnik} onSuccess={onLogin} onBack={() => { playSound('back'); setSelRadnik(null); }} />;
     }
 
     const aktivneLokacije = LOKACIJE.filter(l => l.aktivan !== false);
@@ -7023,110 +7062,185 @@ function LoginPage({ radnici, onLogin }) {
     const pozdrav = sati < 10 ? 'Dobro jutro' : sati < 18 ? 'Dobar dan' : 'Dobro veče';
 
     return (
-        <div style={{
-            minHeight: '100vh', background: 'linear-gradient(135deg, #1e3a5f 0%, #0f2035 100%)',
+        <div className="login-page" style={{
+            minHeight: '100vh',
+            background: 'linear-gradient(135deg, #DEECF9 0%, #FFFFFF 45%, #C7E0F4 100%)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            padding: '24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+            padding: '24px', fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif',
+            position: 'relative', overflow: 'hidden'
         }}>
+            {/* Animated background blobs */}
+            <div className="bg-blob blob-1"></div>
+            <div className="bg-blob blob-2"></div>
+            <div className="bg-blob blob-3"></div>
+
             {/* Logo / Header */}
-            <div style={{textAlign:'center', marginBottom: 40}}>
+            <div style={{textAlign:'center', marginBottom: 36, zIndex: 2, position: 'relative'}}>
                 <div style={{
-                    width: 72, height: 72, borderRadius: 18, background: '#1a56db',
+                    width: 80, height: 80, borderRadius: 20,
+                    background: 'linear-gradient(135deg, #0078D4 0%, #00BCF2 100%)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    margin: '0 auto 16px', fontSize: 28, fontWeight: 900, color: 'white',
-                    boxShadow: '0 8px 32px rgba(26,86,219,0.4)'
+                    margin: '0 auto 16px', fontSize: 30, fontWeight: 900, color: 'white',
+                    boxShadow: '0 12px 40px rgba(0,120,212,0.35), inset 0 1px 0 rgba(255,255,255,0.4)',
+                    letterSpacing: 1
                 }}>STT</div>
-                <h1 style={{color:'white', fontSize: 26, fontWeight: 700, margin: 0}}>HR Menadžment</h1>
-                <p style={{color:'rgba(255,255,255,0.5)', marginTop: 6, fontSize: 14}}>{pozdrav}! Odaberite lokaciju i prijavite se.</p>
+                <h1 style={{color:'#1a3a5c', fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: -0.5}}>
+                    Business <span style={{color:'#0078D4'}}>Manager</span>
+                </h1>
+                <p style={{color:'#5a6c80', marginTop: 8, fontSize: 14}}>{pozdrav}! {selLokacija ? 'Odaberite svoj profil' : 'Odaberite radno mjesto'}.</p>
             </div>
 
             {!selLokacija ? (
-                /* Odabir lokacije */
-                <div style={{width: '100%', maxWidth: 480}}>
-                    <p style={{color:'rgba(255,255,255,0.6)', fontSize: 13, textAlign:'center', marginBottom: 16, textTransform:'uppercase', letterSpacing:1}}>Odaberite lokaciju</p>
-                    <div style={{display:'flex', flexDirection:'column', gap: 10}}>
-                        {aktivneLokacije.map(lok => (
-                            <div key={lok.id}
-                                onClick={() => setSelLokacija(lok.id)}
-                                onMouseEnter={() => setHover(lok.id)}
-                                onMouseLeave={() => setHover(null)}
-                                style={{
-                                    background: hover === lok.id ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.08)',
-                                    border: '1px solid rgba(255,255,255,0.12)',
-                                    borderRadius: 12, padding: '14px 20px', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', gap: 14,
-                                    transition: 'all 0.15s'
-                                }}>
-                                <div style={{
-                                    width: 40, height: 40, borderRadius: 10,
-                                    background: lok.tip === 'sjediste' ? '#1a56db' : lok.tip === 'veleprodaja' ? '#059669' : '#7c3aed',
-                                    display:'flex', alignItems:'center', justifyContent:'center', flexShrink: 0
-                                }}>
-                                    <i className={`fas ${lok.tip === 'sjediste' ? 'fa-building' : lok.tip === 'veleprodaja' ? 'fa-warehouse' : 'fa-store'}`}
-                                       style={{color:'white', fontSize: 16}}></i>
+                /* Odabir lokacije — GRID glass tiles */
+                <div style={{width: '100%', maxWidth: 920, zIndex: 2, position: 'relative'}}>
+                    <div className="glass-grid" style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                        gap: 16
+                    }}>
+                        {aktivneLokacije.map(lok => {
+                            const isHovered = hover === lok.id;
+                            const gradient = lok.tip === 'sjediste' ? 'linear-gradient(135deg,#0078D4,#005A9E)'
+                                : lok.tip === 'veleprodaja' ? 'linear-gradient(135deg,#107C10,#0B5C0B)'
+                                : 'linear-gradient(135deg,#8764B8,#5C2D91)';
+                            const icon = lok.tip === 'sjediste' ? 'fa-building'
+                                : lok.tip === 'veleprodaja' ? 'fa-warehouse'
+                                : 'fa-store';
+                            return (
+                                <div key={lok.id}
+                                    onClick={() => { playSound('click'); setSelLokacija(lok.id); }}
+                                    onMouseEnter={() => { setHover(lok.id); playSound('hover'); }}
+                                    onMouseLeave={() => setHover(null)}
+                                    className="glass-tile"
+                                    style={{
+                                        background: 'rgba(255,255,255,0.65)',
+                                        backdropFilter: 'blur(20px) saturate(180%)',
+                                        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                                        border: '1px solid rgba(255,255,255,0.7)',
+                                        borderRadius: 18, padding: '24px 20px', cursor: 'pointer',
+                                        display: 'flex', flexDirection: 'column', gap: 14,
+                                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                                        transform: isHovered ? 'translateY(-6px) scale(1.02)' : 'translateY(0)',
+                                        boxShadow: isHovered
+                                            ? '0 20px 50px rgba(0,120,212,0.25), 0 0 0 1px rgba(0,120,212,0.15)'
+                                            : '0 8px 24px rgba(0,120,212,0.12), 0 1px 0 rgba(255,255,255,0.5) inset',
+                                        position: 'relative', overflow: 'hidden'
+                                    }}>
+                                    {/* Shimmer overlay on hover */}
+                                    {isHovered && <div className="shimmer"></div>}
+                                    {/* Icon */}
+                                    <div style={{
+                                        width: 56, height: 56, borderRadius: 14,
+                                        background: gradient,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
+                                    }}>
+                                        <i className={`fas ${icon}`} style={{color: 'white', fontSize: 22}}></i>
+                                    </div>
+                                    {/* Naziv */}
+                                    <div>
+                                        <div style={{color: '#1a3a5c', fontWeight: 700, fontSize: 17, lineHeight: 1.3}}>{lok.naziv}</div>
+                                        <div style={{color: '#5a6c80', fontSize: 12, marginTop: 4, display:'flex',alignItems:'center',gap:5}}>
+                                            <i className="fas fa-map-marker-alt" style={{fontSize:10}}></i>{lok.adresa}
+                                        </div>
+                                        {lok.radno_vrijeme && (
+                                            <div style={{color: '#7a8ca0', fontSize: 11, marginTop: 4, display:'flex',alignItems:'center',gap:5}}>
+                                                <i className="fas fa-clock" style={{fontSize:10}}></i>{lok.radno_vrijeme}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Arrow */}
+                                    <div style={{
+                                        marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                        paddingTop: 12, borderTop: '1px solid rgba(0,120,212,0.1)'
+                                    }}>
+                                        <span style={{
+                                            fontSize: 11, color: '#0078D4', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5
+                                        }}>Otvori</span>
+                                        <i className="fas fa-arrow-right" style={{color: '#0078D4', fontSize: 13, transition: 'transform 0.2s', transform: isHovered ? 'translateX(4px)' : 'translateX(0)'}}></i>
+                                    </div>
                                 </div>
-                                <div style={{flex:1}}>
-                                    <div style={{color:'white', fontWeight: 600, fontSize: 15}}>{lok.naziv}</div>
-                                    <div style={{color:'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 2}}>{lok.adresa}</div>
-                                </div>
-                                <i className="fas fa-chevron-right" style={{color:'rgba(255,255,255,0.3)', fontSize: 14}}></i>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             ) : (
-                /* Odabir radnika */
-                <div style={{width: '100%', maxWidth: 480}}>
-                    <div style={{display:'flex', alignItems:'center', gap: 12, marginBottom: 20}}>
-                        <button onClick={() => setSelLokacija(null)} style={{
-                            background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8,
-                            color: 'white', padding: '8px 12px', cursor: 'pointer', fontSize: 14
+                /* Odabir radnika — glass tiles */
+                <div style={{width: '100%', maxWidth: 920, zIndex: 2, position: 'relative'}}>
+                    <div style={{display:'flex', alignItems:'center', gap: 12, marginBottom: 24, justifyContent:'center'}}>
+                        <button onClick={() => { playSound('back'); setSelLokacija(null); }} style={{
+                            background: 'rgba(255,255,255,0.7)',
+                            backdropFilter: 'blur(10px)',
+                            border: '1px solid rgba(255,255,255,0.6)',
+                            borderRadius: 10,
+                            color: '#0078D4', padding: '8px 14px', cursor: 'pointer', fontSize: 13,
+                            fontWeight: 600, display:'flex', alignItems:'center', gap:8,
+                            boxShadow: '0 4px 12px rgba(0,120,212,0.1)'
                         }}>
-                            <i className="fas fa-arrow-left"></i>
+                            <i className="fas fa-arrow-left"></i> Lokacija
                         </button>
-                        <div>
-                            <div style={{color:'white', fontWeight:600, fontSize:15}}>
+                        <div style={{
+                            background: 'rgba(255,255,255,0.7)',
+                            backdropFilter: 'blur(10px)',
+                            border: '1px solid rgba(255,255,255,0.6)',
+                            borderRadius: 10, padding: '8px 16px',
+                            boxShadow: '0 4px 12px rgba(0,120,212,0.1)'
+                        }}>
+                            <div style={{color:'#1a3a5c', fontWeight:600, fontSize:14}}>
                                 {LOKACIJE.find(l=>l.id===selLokacija)?.naziv}
                             </div>
-                            <div style={{color:'rgba(255,255,255,0.45)', fontSize:12}}>Ko ste vi?</div>
                         </div>
                     </div>
 
                     {radniciLokacije.length === 0 ? (
-                        <div style={{textAlign:'center', color:'rgba(255,255,255,0.4)', padding: 40}}>
-                            <i className="fas fa-user-slash" style={{fontSize:32, marginBottom:12, display:'block'}}></i>
+                        <div style={{
+                            textAlign:'center', color:'#5a6c80', padding: 40,
+                            background:'rgba(255,255,255,0.6)', backdropFilter:'blur(10px)',
+                            borderRadius:18, border:'1px solid rgba(255,255,255,0.5)'
+                        }}>
+                            <i className="fas fa-user-slash" style={{fontSize:36, marginBottom:12, display:'block', color:'#8a9bb0'}}></i>
                             Nema aktivnih radnika na ovoj lokaciji
                         </div>
                     ) : (
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:14}}>
                             {radniciLokacije.map(r => {
                                 const initials = `${r.ime[0]}${r.prezime?.[0]||''}`;
                                 const pozicija = getPozicija(r.pozicija_id);
-                                const boje = ['#1a56db','#059669','#7c3aed','#dc2626','#d97706','#0891b2'];
+                                const boje = ['#0078D4','#107C10','#8764B8','#D13438','#CA5010','#038387'];
                                 const boja = boje[r.id % boje.length];
+                                const isHovered = hover === r.id;
                                 return (
                                     <div key={r.id}
-                                        onClick={() => setSelRadnik(r)}
-                                        onMouseEnter={() => setHover(r.id)}
+                                        onClick={() => { playSound('click'); setSelRadnik(r); }}
+                                        onMouseEnter={() => { setHover(r.id); playSound('hover'); }}
                                         onMouseLeave={() => setHover(null)}
+                                        className="glass-tile"
                                         style={{
-                                            background: hover === r.id ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
-                                            border: `1px solid ${hover === r.id ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                                            borderRadius: 14, padding: '18px 14px', cursor: 'pointer',
-                                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-                                            transition: 'all 0.15s', textAlign:'center'
+                                            background: 'rgba(255,255,255,0.7)',
+                                            backdropFilter: 'blur(20px) saturate(180%)',
+                                            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                                            border: '1px solid rgba(255,255,255,0.7)',
+                                            borderRadius: 16, padding: '22px 16px', cursor: 'pointer',
+                                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+                                            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                                            transform: isHovered ? 'translateY(-6px) scale(1.04)' : 'translateY(0)',
+                                            boxShadow: isHovered
+                                                ? `0 16px 40px ${boja}40, 0 0 0 2px ${boja}`
+                                                : '0 6px 20px rgba(0,120,212,0.1)',
+                                            textAlign:'center', position:'relative', overflow:'hidden'
                                         }}>
+                                        {isHovered && <div className="shimmer"></div>}
                                         <div style={{
-                                            width: 54, height: 54, borderRadius: '50%',
-                                            background: boja, display:'flex', alignItems:'center',
-                                            justifyContent:'center', fontSize: 20, fontWeight: 700,
-                                            color: 'white', boxShadow: `0 4px 12px ${boja}66`
+                                            width: 64, height: 64, borderRadius: '50%',
+                                            background: `linear-gradient(135deg, ${boja}, ${boja}cc)`,
+                                            display:'flex', alignItems:'center', justifyContent:'center',
+                                            fontSize: 22, fontWeight: 700,
+                                            color: 'white', boxShadow: `0 8px 20px ${boja}55, inset 0 1px 0 rgba(255,255,255,0.3)`
                                         }}>{initials}</div>
                                         <div>
-                                            <div style={{color:'white', fontWeight:600, fontSize:14}}>{r.ime}</div>
-                                            <div style={{color:'white', fontWeight:500, fontSize:13}}>{r.prezime}</div>
-                                            <div style={{color:'rgba(255,255,255,0.4)', fontSize:11, marginTop:3}}>
-                                                {pozicija?.naziv} {r.uloga==='admin'?'· Admin':r.uloga==='voditelj'?'· Voditelj':''}
+                                            <div style={{color:'#1a3a5c', fontWeight:700, fontSize:14}}>{r.ime} {r.prezime}</div>
+                                            <div style={{color:'#5a6c80', fontSize:11, marginTop:4}}>
+                                                {pozicija?.naziv}{r.uloga==='admin'?' · Admin':r.uloga==='voditelj'?' · Voditelj':''}
                                             </div>
                                         </div>
                                     </div>
@@ -7138,13 +7252,27 @@ function LoginPage({ radnici, onLogin }) {
             )}
 
             {/* Footer */}
-            <div style={{marginTop: 48, textAlign:'center'}}>
-                <button onClick={() => { saveServerIP(''); window.location.reload(); }} 
-                    style={{background:'none',border:'1px solid rgba(255,255,255,0.15)',color:'rgba(255,255,255,0.4)',borderRadius:8,padding:'6px 16px',fontSize:12,cursor:'pointer',marginBottom:8}}>
+            <div style={{marginTop: 48, textAlign:'center', zIndex:2, position:'relative'}}>
+                {window.electronAPI && <button onClick={() => { saveServerIP(''); window.location.reload(); }}
+                    style={{background:'rgba(255,255,255,0.5)',backdropFilter:'blur(10px)',border:'1px solid rgba(255,255,255,0.5)',color:'#5a6c80',borderRadius:8,padding:'6px 14px',fontSize:11,cursor:'pointer',marginBottom:10}}>
                     <i className="fas fa-server" style={{marginRight:6}}></i>Promijeni server
-                </button>
-                <div style={{color:'rgba(255,255,255,0.15)', fontSize:11}}>STT d.o.o. Sarajevo · HR Sistem v1.0</div>
+                </button>}
+                <div style={{color:'#7a8ca0', fontSize:11}}>STT d.o.o. Sarajevo · Business Manager</div>
             </div>
+
+            {/* CSS animations */}
+            <style>{`
+                .bg-blob { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.4; pointer-events: none; animation: float 20s ease-in-out infinite; z-index: 1; }
+                .blob-1 { width: 500px; height: 500px; background: #0078D4; top: -150px; left: -100px; animation-delay: 0s; }
+                .blob-2 { width: 400px; height: 400px; background: #00BCF2; bottom: -100px; right: -100px; animation-delay: -7s; }
+                .blob-3 { width: 350px; height: 350px; background: #8764B8; top: 40%; right: 20%; opacity: 0.25; animation-delay: -14s; }
+                @keyframes float { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(40px,-30px) scale(1.1); } 66% { transform: translate(-30px,40px) scale(0.9); } }
+                .shimmer { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.5) 50%, transparent 70%); animation: shimmerMove 1.2s ease-out; pointer-events: none; }
+                @keyframes shimmerMove { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+                @media (max-width: 600px) {
+                    .glass-grid { grid-template-columns: 1fr !important; }
+                }
+            `}</style>
         </div>
     );
 }
@@ -10350,13 +10478,13 @@ function App() {
         setShowSessionWarn(false);
     };
 
-    // Korak 1: Setup (prvi put)
-    if (!setupDone) {
+    // Korak 1: Setup (samo Electron — web ide direktno na LoginPage)
+    if (window.electronAPI && !setupDone) {
         return <ServerSetupPage onConnected={handleSetupConnected} />;
     }
 
-    // Korak 1b: Uputstvo za port forwarding (samo na STUP PC-u, samo u Electron app-u)
-    if (showInstallGuide && window.electronAPI) {
+    // Korak 1b: Install guide ISKLJUCEN (nije potreban — server je već u cloud-u)
+    if (false && showInstallGuide && window.electronAPI) {
         return (
             <div style={{
                 minHeight:'100vh', background:'linear-gradient(135deg, #1e3a5f 0%, #0f2035 100%)',

@@ -105,8 +105,8 @@ function createWindow() {
         height: 900,
         minWidth: 800,
         minHeight: 600,
-        title: 'STT HR Menadzment',
-        backgroundColor: '#f9fafb',
+        title: 'STT Business Manager',
+        backgroundColor: '#DEECF9',
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
