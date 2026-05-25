@@ -116,7 +116,7 @@
             66% { transform: translate(-40px, 50px) scale(0.9); }
         }
         /* Forsiraj sve elemente iznad bg blob-ova */
-        .app-layout, .main-content, .topbar, .top-nav-wrapper, .modal-overlay, .session-overlay { position: relative; z-index: 1; }
+        .app-layout, .main-content, .topbar, .top-nav-wrapper { position: relative; z-index: 1; }
 
         /* Native scrollbar — slim, light */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -351,31 +351,41 @@
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
             display: flex; align-items: center; justify-content: center;
-            z-index: 100;
+            z-index: 10050;  /* iznad svega: topbar/40, top-nav/39, session/10000 */
         }
         .modal {
-            background: rgba(255, 255, 255, 0.96);
+            background: rgba(255, 255, 255, 0.98);
             backdrop-filter: var(--glass-blur);
             -webkit-backdrop-filter: var(--glass-blur);
             color: var(--text-primary);
             border-radius: var(--radius-lg);
-            width: 90%; max-width: 600px; max-height: 85vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 120, 212, 0.20), 0 0 0 1px rgba(255,255,255,0.4) inset;
-            border: 1px solid rgba(255, 255, 255, 0.7);
+            width: 90%; max-width: 700px; max-height: 88vh;
+            box-shadow: 0 20px 60px rgba(0, 120, 212, 0.30), 0 0 0 1px rgba(255,255,255,0.5) inset;
+            border: 1px solid rgba(0, 120, 212, 0.25);
+            /* Flex column tako da samo body scroll-uje, header+footer su uvijek vidljivi */
+            display: flex; flex-direction: column;
+            overflow: hidden;
         }
         .modal-header {
-            padding: 10px 12px 10px 20px; border-bottom: 1px solid var(--border-color);
+            padding: 8px 10px 8px 16px;
+            border-bottom: 1px solid var(--border-color);
             display: flex; justify-content: space-between; align-items: center;
-            position: sticky; top: 0; z-index: 10;
-            background: linear-gradient(180deg, rgba(0,120,212,0.06), rgba(255,255,255,0.95));
-            backdrop-filter: var(--glass-blur);
-            -webkit-backdrop-filter: var(--glass-blur);
+            background: linear-gradient(180deg, rgba(0,120,212,0.10), rgba(0,120,212,0.04));
             border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-            min-height: 44px;
+            min-height: 42px;
+            flex-shrink: 0;
         }
-        .modal-header h3 { font-size: 15px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.2px; margin: 0; }
-        .modal-header h3::before { content: ''; display: inline-block; width: 10px; height: 10px; background: var(--primary); border-radius: 50%; margin-right: 8px; vertical-align: middle; box-shadow: 0 0 0 2px rgba(0,120,212,0.18); }
+        .modal-header h3 {
+            font-size: 14px; font-weight: 600; color: var(--text-primary);
+            letter-spacing: -0.2px; margin: 0;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .modal-header h3::before {
+            content: ''; display: inline-block; width: 10px; height: 10px;
+            background: var(--primary); border-radius: 50%;
+            box-shadow: 0 0 0 2px rgba(0,120,212,0.18);
+            flex-shrink: 0;
+        }
         .modal.maximized .modal-header { border-radius: 0; }
         .modal-close {
             cursor: pointer; font-size: 22px; color: var(--text-muted);
@@ -384,12 +394,18 @@
             transition: all 0.15s;
         }
         .modal-close:hover { background: rgba(0, 120, 212, 0.08); color: var(--primary); }
-        .modal-body { padding: 24px; }
+        .modal-body {
+            padding: 20px 24px;
+            flex: 1 1 auto;
+            overflow-y: auto;
+            min-height: 0;  /* required za flex+overflow */
+        }
         .modal-footer {
-            padding: 16px 24px; border-top: 1px solid var(--border-color);
+            padding: 12px 20px; border-top: 1px solid var(--border-color);
             display: flex; justify-content: flex-end; gap: 8px;
-            background: rgba(248, 249, 251, 0.5);
+            background: rgba(248, 249, 251, 0.6);
             border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+            flex-shrink: 0;
         }
         /* Modal window controls (mini/max/close) — desktop only */
         .modal-window-controls { display: flex; gap: 4px; align-items: center; -webkit-app-region: no-drag; }
