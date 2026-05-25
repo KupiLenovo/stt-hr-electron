@@ -7178,24 +7178,35 @@ function PinPad({ radnik, onSuccess, onBack }) {
     );
 }
 
-function LoginPage({ radnici, onLogin }) {
+function LoginPage({ radnici: radniciProp, onLogin }) {
     const [selLokacija, setSelLokacija] = useState(null);
     const [selRadnik, setSelRadnik] = useState(null);
     const [hover, setHover] = useState(null);
-    // Fetch lokacije sa servera (uvijek svjeze, da nove iz admin panela budu dostupne)
-    const [lokacije, setLokacije] = useState(LOKACIJE); // fallback na hardkodirano
+    // Fetch lokacije + radnici sa servera (uvijek svjeze, admin promjene odmah vidljive)
+    const [lokacije, setLokacije] = useState(LOKACIJE); // fallback
+    const [radnici, setRadnici] = useState(radniciProp || []); // fallback na prop
     useEffect(() => {
         api('/api/lokacije').then(data => {
             if (Array.isArray(data) && data.length > 0) {
-                // Spoji server podatke sa hardkodiranim defaults (npr. GPS, tip ikone)
                 const merged = data.map(serverLok => {
                     const hardcoded = LOKACIJE.find(l => l.id === serverLok.id) || {};
-                    return { ...hardcoded, ...serverLok }; // server polja imaju prioritet
+                    return { ...hardcoded, ...serverLok };
                 });
                 setLokacije(merged);
             }
         }).catch(() => {});
+        api('/api/radnici').then(data => {
+            if (Array.isArray(data) && data.length > 0) setRadnici(data);
+        }).catch(() => {});
     }, []);
+    // Refetch radnika kad se lokacija odabere (osigurati najnoviji raspored)
+    useEffect(() => {
+        if (selLokacija) {
+            api('/api/radnici').then(data => {
+                if (Array.isArray(data) && data.length > 0) setRadnici(data);
+            }).catch(() => {});
+        }
+    }, [selLokacija]);
 
     // Sound effects via Web Audio API
     const audioCtxRef = React.useRef(null);
