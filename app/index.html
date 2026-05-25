@@ -7182,6 +7182,20 @@ function LoginPage({ radnici, onLogin }) {
     const [selLokacija, setSelLokacija] = useState(null);
     const [selRadnik, setSelRadnik] = useState(null);
     const [hover, setHover] = useState(null);
+    // Fetch lokacije sa servera (uvijek svjeze, da nove iz admin panela budu dostupne)
+    const [lokacije, setLokacije] = useState(LOKACIJE); // fallback na hardkodirano
+    useEffect(() => {
+        api('/api/lokacije').then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+                // Spoji server podatke sa hardkodiranim defaults (npr. GPS, tip ikone)
+                const merged = data.map(serverLok => {
+                    const hardcoded = LOKACIJE.find(l => l.id === serverLok.id) || {};
+                    return { ...hardcoded, ...serverLok }; // server polja imaju prioritet
+                });
+                setLokacije(merged);
+            }
+        }).catch(() => {});
+    }, []);
 
     // Sound effects via Web Audio API
     const audioCtxRef = React.useRef(null);
@@ -7226,7 +7240,7 @@ function LoginPage({ radnici, onLogin }) {
         return <PinPad radnik={selRadnik} onSuccess={onLogin} onBack={() => { playSound('back'); setSelRadnik(null); }} />;
     }
 
-    const aktivneLokacije = LOKACIJE.filter(l => l.aktivan !== false);
+    const aktivneLokacije = lokacije.filter(l => l.aktivan !== false && l.aktivan !== 0);
     const radniciLokacije = selLokacija
         ? radnici.filter(r => r.lokacija_id === selLokacija && r.aktivan)
         : [];
@@ -7360,7 +7374,7 @@ function LoginPage({ radnici, onLogin }) {
                             boxShadow: '0 4px 12px rgba(0,120,212,0.1)'
                         }}>
                             <div style={{color:'#1a3a5c', fontWeight:600, fontSize:14}}>
-                                {LOKACIJE.find(l=>l.id===selLokacija)?.naziv}
+                                {lokacije.find(l=>l.id===selLokacija)?.naziv}
                             </div>
                         </div>
                     </div>
