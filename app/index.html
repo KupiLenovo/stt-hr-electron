@@ -1103,6 +1103,13 @@ function saveServerIP(ip) {
 const savedIP = getSavedServerIP();
 let API_URL = savedIP ? `http://${savedIP}:${DEFAULT_PORT}` : `http://${CLOUD_SERVER_IP}:${DEFAULT_PORT}`;
 
+// JWT — Faza 1.5 Korak 1: cuvamo token izdani na loginu.
+// Modul-level varijabla (ne localStorage) da preživi navigaciju ali ne i refresh.
+// api() helper salje 'Authorization: Bearer <token>' ako postoji.
+let authToken = null;
+function setAuthToken(t) { authToken = t || null; }
+function getAuthToken() { return authToken; }
+
 const _debugLog = [];
 function addDebug(tip, poruka) {
     _debugLog.unshift({ id: Date.now(), tip, poruka, vrijeme: new Date().toLocaleTimeString('bs-BA') });
@@ -1112,7 +1119,9 @@ function addDebug(tip, poruka) {
 
 async function api(path, method, body) {
     method = method || 'GET';
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    const opts = { method, headers };
     if (body) opts.body = JSON.stringify(body);
     try {
         const res = await fetch(API_URL + path, opts);
@@ -7385,6 +7394,8 @@ function PinPad({ radnik, onSuccess, onBack }) {
         try {
             const res = await api('/api/auth/pin', 'POST', { radnik_id: radnik.id, pin });
             if (res.ok) {
+                // JWT Korak 1: server vraca potpisani token nakon uspjesnog PIN-a
+                if (res.token) setAuthToken(res.token);
                 playSound('success');
                 if (res.privremeni) { setShowChangePin(true); setPin(''); }
                 else { setTimeout(() => onSuccess(radnik), 200); }
@@ -7402,7 +7413,10 @@ function PinPad({ radnik, onSuccess, onBack }) {
         if (noviPin !== noviPin2) { setError('PIN-ovi se ne podudaraju'); return; }
         setLoading(true);
         try {
-            await api('/api/auth/pin/postavi', 'POST', { radnik_id: radnik.id, novi_pin: noviPin });
+            // staro: nema stari_pin (default 0000 fallback); server sad zahtijeva stari_pin (sigurnost),
+            // koristimo 0000 kao default za privremeni PIN tok (ovo je samo pri prvom logiranju)
+            const res = await api('/api/auth/pin/postavi', 'POST', { radnik_id: radnik.id, stari_pin: '0000', novi_pin: noviPin });
+            if (res?.token) setAuthToken(res.token);  // fresh token nakon promjene PIN-a
             playSound('success');
             onSuccess(radnik);
         } catch(e) { setError('Greška pri postavljanju PIN-a.'); }
@@ -8089,7 +8103,8 @@ function ProfilPage({ currentUser, radnici }) {
         if (pinForm.novi !== pinForm.ponovi) { setPinForm(p=>({...p, err:'PIN-ovi se ne podudaraju'})); return; }
         setPinForm(p=>({...p, loading:true, err:''}));
         try {
-            await api('/api/auth/pin/postavi', 'POST', { radnik_id: currentUser.id, stari_pin: pinForm.stari, novi_pin: pinForm.novi });
+            const r = await api('/api/auth/pin/postavi', 'POST', { radnik_id: currentUser.id, stari_pin: pinForm.stari, novi_pin: pinForm.novi });
+            if (r?.token) setAuthToken(r.token);  // fresh token nakon promjene PIN-a
             setShowPin(false);
             setPinForm({ stari:'', novi:'', ponovi:'', err:'', loading:false });
             showAlert('PIN uspjesno promijenjen!', 'success');
@@ -14244,7 +14259,8 @@ function App() {
         if (pinForm.novi !== pinForm.ponovi) { setPinForm(p=>({...p,err:'PIN-ovi se ne podudaraju'})); return; }
         setPinForm(p=>({...p,loading:true,err:''}));
         try {
-            await api('/api/auth/pin/postavi','POST',{radnik_id:currentUser.id,stari_pin:pinForm.stari,novi_pin:pinForm.novi});
+            const r = await api('/api/auth/pin/postavi','POST',{radnik_id:currentUser.id,stari_pin:pinForm.stari,novi_pin:pinForm.novi});
+            if (r?.token) setAuthToken(r.token);  // fresh token nakon promjene PIN-a
             setShowPinModal(false);
             setPinForm({stari:'',novi:'',ponovi:'',err:'',loading:false});
             addToast('PIN uspješno promijenjen','success');
@@ -14559,6 +14575,7 @@ function App() {
 
     const handleLogout = () => {
         if (currentUser) addAudit('odjava', '', currentUser.ime);
+        setAuthToken(null);  // JWT Korak 1: ocisti token pri odjavi
         setCurrentUser(null);
         setSidebarOpen(false);
         setShowSessionWarn(false);
