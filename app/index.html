@@ -3914,7 +3914,9 @@ function IzvjestajiPage({ radnici, currentUser }) {
             const endpoint = format === 'excel' ? '/api/izvjestaj/excel' : '/api/izvjestaj/pdf';
             const url = `${API_URL}${endpoint}?${params}`;
 
-            const response = await fetch(url);
+            // JWT Korak 3: salji Bearer header rucno jer fetch ne ide kroz api() helper
+            const tok = getAuthToken();
+            const response = await fetch(url, tok ? { headers: { Authorization: `Bearer ${tok}` } } : {});
             if (!response.ok) throw new Error('Server greška');
 
             const blob = await response.blob();
@@ -5382,7 +5384,9 @@ function ServisniPrijemPage({ radnici, currentUser, sendNotif }) {
     const handleDownloadPDF = async (id) => {
         try {
             const url = `${API_URL}/api/servis/${id}/pdf`;
-            const response = await fetch(url);
+            // JWT Korak 3: Bearer header rucno
+            const tok = getAuthToken();
+            const response = await fetch(url, tok ? { headers: { Authorization: `Bearer ${tok}` } } : {});
             const blob = await response.blob();
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
@@ -5395,7 +5399,9 @@ function ServisniPrijemPage({ radnici, currentUser, sendNotif }) {
 
     const handleExportExcel = async () => {
         try {
-            const response = await fetch(`${API_URL}/api/servis/export/excel`);
+            // JWT Korak 3: Bearer header rucno
+            const tok = getAuthToken();
+            const response = await fetch(`${API_URL}/api/servis/export/excel`, tok ? { headers: { Authorization: `Bearer ${tok}` } } : {});
             const blob = await response.blob();
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
