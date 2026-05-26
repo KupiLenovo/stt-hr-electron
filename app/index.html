@@ -749,6 +749,77 @@
             .top-nav-sub-item { padding: 5px 10px !important; font-size: 11px !important; }
         }
 
+        /* === Sub-tab grupisane: 4 dugmeta + dropdown panel (samo za Sifrarnici) === */
+        .top-nav-sub-grouped { position: relative; gap: 6px 8px; }
+        .top-nav-grupa-btn {
+            border: 1px solid var(--border-color);
+            background: rgba(255,255,255,0.85);
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .top-nav-grupa-btn.open {
+            background: linear-gradient(135deg, rgba(0,120,212,0.10) 0%, rgba(0,120,212,0.18) 100%);
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+        .top-nav-grupa-btn.active:not(.open) {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(0,120,212,0.05);
+        }
+        .top-nav-grupa-dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            min-width: 220px;
+            max-width: 320px;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,120,212,0.10);
+            padding: 6px;
+            z-index: 200;  /* iznad sadrzaja, ispod Modala (10050) */
+            display: flex; flex-direction: column;
+            gap: 2px;
+            animation: dropdownFadeIn 0.12s ease-out;
+        }
+        @keyframes dropdownFadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .top-nav-grupa-stavka {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 12px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font: inherit;
+            font-size: 13px;
+            color: var(--text-primary);
+            text-align: left;
+            border-radius: 6px;
+            transition: background 0.12s, color 0.12s;
+            white-space: nowrap;
+        }
+        .top-nav-grupa-stavka i { font-size: 12px; opacity: 0.7; width: 16px; text-align: center; }
+        .top-nav-grupa-stavka:hover {
+            background: rgba(0, 120, 212, 0.08);
+            color: var(--primary);
+        }
+        .top-nav-grupa-stavka:hover i { opacity: 1; }
+        .top-nav-grupa-stavka.active {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            font-weight: 600;
+        }
+        .top-nav-grupa-stavka.active i { opacity: 1; }
+        /* Na uskim ekranima dropdown alignira desno ako blizu desne ivice (defensive) */
+        @media (max-width: 768px) {
+            .top-nav-grupa-dropdown { min-width: 180px; }
+        }
+
         /* Sidebar — sakrij na desktop, ostavi za mobile */
         @media (min-width: 901px) {
             .sidebar { display: none !important; }
@@ -12836,6 +12907,22 @@ function DownloadPage({ currentUser }) {
 // TOP NAVIGATION — Corporate dual-row navigacija
 // =====================================================================
 function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen }) {
+    // Hooks moraju biti PRIJE ranog return-a (React pravila)
+    const [otvorenaGrupa, setOtvorenaGrupa] = useState(null);
+    const wrapperRef = useRef(null);
+
+    // Click-outside listener (zatvara otvoreni dropdown)
+    useEffect(() => {
+        if (!otvorenaGrupa) return;
+        const handler = (e) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+                setOtvorenaGrupa(null);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [otvorenaGrupa]);
+
     if (!currentUser || !page || !setPage) return null;
 
     // Koristi globalnu MODULI strukturu (single source of truth — ista kao u sidebar NavModuli)
@@ -12851,6 +12938,91 @@ function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen
     const aktivanModul = moduliZaPrikaz.find(mod => mod.vidljiveStavke.some(s => s.page === page)) || moduliZaPrikaz[0];
     const dostupnePod = aktivanModul.vidljiveStavke;
 
+    // === Grouped sub-render (samo ako modul ima subGrupe, npr. Sifrarnici 19 stavki) ===
+    const renderGroupedSub = () => {
+        // Map page_key -> puna stavka (za ikone i naziv)
+        const stavkaMap = new Map(dostupnePod.map(s => [s.page, s]));
+        // Skup grupisanih page_key-eva (za detekciju "ostatka" koji nije u nijednoj grupi)
+        const sviGrupisaniKeys = new Set(aktivanModul.subGrupe.flatMap(g => g.page_keys));
+        // Stavke koje nisu u nijednoj subGrupi (defensive fallback - ne smije se desiti ali ako se desi prikazi ih)
+        const ostatak = dostupnePod.filter(s => !sviGrupisaniKeys.has(s.page));
+
+        const handleClickStavka = (pageKey) => {
+            setPage(pageKey);
+            setOtvorenaGrupa(null);
+        };
+
+        return (
+            <div className="top-nav-sub top-nav-sub-grouped" ref={wrapperRef}>
+                {aktivanModul.subGrupe.map(g => {
+                    const grupne_stavke = g.page_keys
+                        .map(k => stavkaMap.get(k))
+                        .filter(Boolean);  // samo postojece + vidljive (filter gate ranije)
+                    if (grupne_stavke.length === 0) return null;
+                    const grupaSadrziAktivnu = grupne_stavke.some(s => s.page === page);
+                    const isOpen = otvorenaGrupa === g.id;
+                    return (
+                        <div key={g.id} className="top-nav-grupa-wrapper" style={{position:'relative'}}>
+                            <button
+                                type="button"
+                                className={`top-nav-sub-item top-nav-grupa-btn ${grupaSadrziAktivnu ? 'active' : ''} ${isOpen ? 'open' : ''}`}
+                                onClick={(e) => { e.stopPropagation(); setOtvorenaGrupa(isOpen ? null : g.id); }}
+                            >
+                                {g.icon && <i className={g.icon}></i>}
+                                <span>{g.naziv}</span>
+                                <i className={`fas fa-chevron-${isOpen ? 'up' : 'down'}`} style={{fontSize:9,marginLeft:4,opacity:0.7}}></i>
+                            </button>
+                            {isOpen && (
+                                <div className="top-nav-grupa-dropdown" onClick={(e) => e.stopPropagation()}>
+                                    {grupne_stavke.map(s => {
+                                        const isActiveItem = s.page === page;
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={s.page}
+                                                className={`top-nav-grupa-stavka ${isActiveItem ? 'active' : ''}`}
+                                                onClick={() => handleClickStavka(s.page)}
+                                            >
+                                                {s.icon && <i className={s.icon}></i>}
+                                                <span>{s.naziv}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+                {/* Defensive: stavke modula koje nisu spomenute u subGrupe — prikazi kao fallback */}
+                {ostatak.map(s => (
+                    <div key={s.page}
+                        className={`top-nav-sub-item ${s.page === page ? 'active' : ''}`}
+                        onClick={() => setPage(s.page)}>
+                        {s.icon && <i className={s.icon}></i>}
+                        <span>{s.naziv}</span>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    // === Standard flat sub-render (za module bez subGrupe) ===
+    const renderFlatSub = () => (
+        <div className="top-nav-sub">
+            {dostupnePod.map(s => {
+                const isActive = s.page === page;
+                return (
+                    <div key={s.page}
+                        className={`top-nav-sub-item ${isActive?'active':''}`}
+                        onClick={() => setPage(s.page)}>
+                        {s.icon && <i className={s.icon}></i>}
+                        <span>{s.naziv}</span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+
     return (
         <div className="top-nav-wrapper hide-mobile">
             {/* Glavni moduli */}
@@ -12863,6 +13035,7 @@ function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen
                             className={`top-nav-item ${isActive?'active':''}`}
                             onClick={() => {
                                 if (prazan) return;
+                                setOtvorenaGrupa(null);  // pri promjeni modula, zatvori sve dropdownove
                                 const prvi = mod.vidljiveStavke[0];
                                 if (prvi) setPage(prvi.page);
                             }}
@@ -12877,21 +13050,11 @@ function TopNavigation({ page, setPage, currentUser, sidebarOpen, setSidebarOpen
                     );
                 })}
             </div>
-            {/* Podkategorije (sub-tabs) — samo ako modul ima vise od 1 stavke */}
+            {/* Podkategorije: grouped (ako modul ima subGrupe) ili flat */}
             {dostupnePod.length > 1 && (
-                <div className="top-nav-sub">
-                    {dostupnePod.map(s => {
-                        const isActive = s.page === page;
-                        return (
-                            <div key={s.page}
-                                className={`top-nav-sub-item ${isActive?'active':''}`}
-                                onClick={() => setPage(s.page)}>
-                                {s.icon && <i className={s.icon}></i>}
-                                <span>{s.naziv}</span>
-                            </div>
-                        );
-                    })}
-                </div>
+                aktivanModul.subGrupe && aktivanModul.subGrupe.length > 0
+                    ? renderGroupedSub()
+                    : renderFlatSub()
             )}
         </div>
     );
@@ -13497,7 +13660,11 @@ const MODULI = [
         { page: 'loyalty_tuttocapsule', naziv: 'Tutto Capsule Loyalty', icon: 'fas fa-mug-hot' },
         { page: 'loyalty_staff',        naziv: 'Staff Portal',          icon: 'fas fa-star' },
     ]},
-    { id: 'm_sifrarnici', naziv: 'Šifrarnici', icon: 'fas fa-folder-open', stavke: [
+    { id: 'm_sifrarnici', naziv: 'Šifrarnici', icon: 'fas fa-folder-open',
+      // 'stavke' = flat lista koristi sidebar NavModuli i sve drugo sto trazi stavke modula.
+      // 'subGrupe' = samo TopNavigation koristi za grupisan dropdown render (4 grupe).
+      // Page_keys u subGrupama moraju biti subset stavke[].page (svaki page_key mora postojati).
+      stavke: [
         { page: 'partneri',                 naziv: 'Partneri',           icon: 'fas fa-address-book' },
         { page: 'artikli',                  naziv: 'Artikli',            icon: 'fas fa-box' },
         { page: 'grupe_artikala',           naziv: 'Grupe artikala',     icon: 'fas fa-layer-group' },
@@ -13517,7 +13684,18 @@ const MODULI = [
         { page: 'vrste_naloga',             naziv: 'Vrste naloga',       icon: 'fas fa-file-invoice' },
         { page: 'skladista',                naziv: 'Skladišta',          icon: 'fas fa-warehouse' },
         { page: 'lokacije',                 naziv: 'Lokacije',           icon: 'fas fa-store' },
-    ]},
+      ],
+      subGrupe: [
+        { id: 'g_katalog',    naziv: 'Katalog',    icon: 'fas fa-box',
+          page_keys: ['partneri','artikli','grupe_artikala','tarife','cjenovnici'] },
+        { id: 'g_geografija', naziv: 'Geografija', icon: 'fas fa-map-marked-alt',
+          page_keys: ['drzave','kantoni','opcine'] },
+        { id: 'g_finansije',  naziv: 'Finansije',  icon: 'fas fa-coins',
+          page_keys: ['kontni_plan','vrste_naloga','valute','kursna_lista','carinske_tarife'] },
+        { id: 'g_operativa',  naziv: 'Operativa',  icon: 'fas fa-warehouse',
+          page_keys: ['nacini_placanja','napomene','vrste_zavisnih_troskova','vauceri','skladista','lokacije'] },
+      ]
+    },
     { id: 'm_alati', naziv: 'Alati', icon: 'fas fa-toolbox', stavke: [
         { page: 'izvjestaji', naziv: 'Izvještaji',          icon: 'fas fa-chart-bar', gate: 'admin_voditelj' },
         { page: 'vodici',     naziv: 'Vodici i tutorijali', icon: 'fas fa-book' },
