@@ -820,6 +820,43 @@
             .top-nav-grupa-dropdown { min-width: 180px; }
         }
 
+        /* === ExportButton dropdown (univerzalni Excel/PDF export) === */
+        .export-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            min-width: 180px;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            padding: 4px;
+            z-index: 200;
+            display: flex; flex-direction: column;
+            gap: 2px;
+            animation: dropdownFadeIn 0.12s ease-out;
+        }
+        .export-menu button {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 12px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font: inherit;
+            font-size: 13px;
+            color: var(--text-primary);
+            text-align: left;
+            border-radius: 6px;
+            transition: background 0.12s, color 0.12s;
+            white-space: nowrap;
+        }
+        .export-menu button i { font-size: 14px; width: 18px; text-align: center; }
+        .export-menu button:hover { background: rgba(0,120,212,0.08); color: var(--primary); }
+        .export-menu .ico-xlsx { color: #1d6f42; }   /* Excel zeleni */
+        .export-menu .ico-pdf  { color: #d93025; }   /* PDF crveni */
+
         /* Sidebar — sakrij na desktop, ostavi za mobile */
         @media (min-width: 901px) {
             .sidebar { display: none !important; }
@@ -9386,11 +9423,14 @@ function PartneriPage({ currentUser }) {
                     <i className="fas fa-info-circle" style={{marginRight:6}}></i>
                     Jedinstveni šifrarnik partnera (kupci, dobavljači, zaposleni). Šifra se može unijeti ručno ili je server auto-generiše.
                 </div>
-                {canEdit && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> Novi partner
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="partneri" naslov="Partneri" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> Novi partner
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Toolbar: pretraga + filteri */}
@@ -9743,11 +9783,14 @@ function TarifePage({ currentUser }) {
                     <i className="fas fa-info-circle" style={{marginRight:6}}></i>
                     Šifrarnik PDV stopa. Bosnia: <strong>E</strong> = 17%. Dodaj <strong>A</strong>/<strong>K</strong> ovdje čim se zna njihova stopa.
                 </div>
-                {canEdit && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> Nova tarifa
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="tarife" naslov="Tarife" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> Nova tarifa
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{marginBottom:12}}>
@@ -9919,11 +9962,14 @@ function GrupeArtikalaPage({ currentUser }) {
                     <i className="fas fa-info-circle" style={{marginRight:6}}></i>
                     Grupe za kategorizaciju artikala. Hijerarhija je opciona (nadgrupa) — trenutno ravne, pripremljeno za buduće stablo.
                 </div>
-                {canEdit && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> Nova grupa
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="grupe_artikala" naslov="Grupe artikala" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> Nova grupa
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{marginBottom:12}}>
@@ -10138,11 +10184,14 @@ function ArtikliPage({ currentUser }) {
                     <i className="fas fa-info-circle" style={{marginRight:6}}></i>
                     Master šifrarnik artikala/usluga. Cijene se uređuju u <strong>Cjenovniku</strong> (po skladištu).
                 </div>
-                {canEdit && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> Novi artikal
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="artikli" naslov="Artikli" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> Novi artikal
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{marginBottom:12}}>
@@ -10456,11 +10505,14 @@ function CjenovniciPage({ currentUser }) {
                     <i className="fas fa-info-circle" style={{marginRight:6}}></i>
                     Cijene po skladištu (nabavna + maloprodajna/veleprodajna sa i bez PDV-a). Marža je izvedena.
                 </div>
-                {canEdit && skladisteId && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> Nova cijena
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    {skladisteId && <ExportButton tabela="cjenovnici" naslov="Cjenovnik" />}
+                    {canEdit && skladisteId && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> Nova cijena
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{marginBottom:12}}>
@@ -10606,10 +10658,56 @@ function CjenovniciPage({ currentUser }) {
 // Slozene (Kantoni/Opcine sa join-om, KursnaLista, Vauceri) su zasebne komponente.
 // =====================================================================
 
+// =====================================================================
+// EXPORT BUTTON — univerzalni Excel/PDF export trenutne tablice
+// Backend: GET /api/v1/export/:tabela?format=xlsx|pdf (whitelist tablica)
+// =====================================================================
+function ExportButton({ tabela, naslov }) {
+    const [open, setOpen] = useState(false);
+    const wrapperRef = useRef(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    const izvezi = (format) => {
+        setOpen(false);
+        // Auth: trenutno GET rute su otvorene (requester_id nije potreban za /export).
+        // Kad dođe JWT (Faza 1.5), zamijeniti window.open sa fetch+blob da nosi Authorization header.
+        const url = `${API_URL}/api/v1/export/${tabela}?format=${format}`;
+        window.open(url, '_blank');
+    };
+
+    return (
+        <div ref={wrapperRef} style={{position:'relative', display:'inline-block'}}>
+            <button className="btn btn-outline btn-sm" onClick={()=>setOpen(o=>!o)} title={`Izvezi ${naslov||tabela}`}>
+                <i className="fas fa-file-export"></i> Izvezi <i className="fas fa-chevron-down" style={{fontSize:10,marginLeft:2,opacity:0.7}}></i>
+            </button>
+            {open && (
+                <div className="export-menu">
+                    <button onClick={()=>izvezi('xlsx')}>
+                        <i className="fas fa-file-excel ico-xlsx"></i>
+                        <span>Excel (.xlsx)</span>
+                    </button>
+                    <button onClick={()=>izvezi('pdf')}>
+                        <i className="fas fa-file-pdf ico-pdf"></i>
+                        <span>PDF</span>
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // Generic CRUD za "lite" sifrarnike sa polima: sifra (opciono), naziv (obavezno) + 1 dodatno polje (opciono).
 // Konfig: { naslov, opis, endpoint, polja: [{key, label, tip, options?, required?}], kolone: [{key, label, render?}] }
 function SifrarnikLite({ currentUser, config }) {
-    const { naslov, opis, endpoint, polja, kolone, ikona } = config;
+    const { naslov, opis, endpoint, polja, kolone, ikona, tabela } = config;
     const uloga = currentUser && currentUser.uloga;
     const canEdit = uloga === 'admin' || uloga === 'voditelj';
     const canDelete = uloga === 'admin';
@@ -10703,11 +10801,14 @@ function SifrarnikLite({ currentUser, config }) {
                     {ikona && <i className={ikona} style={{marginRight:6}}></i>}
                     {opis}
                 </div>
-                {canEdit && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> {naslov.startsWith('Vauc') ? 'Novi vaučer' : `Novi/Nova ${naslov.toLowerCase().replace(/i$/, '')}`}
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    {tabela && <ExportButton tabela={tabela} naslov={naslov} />}
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> {naslov.startsWith('Vauc') ? 'Novi vaučer' : `Novi/Nova ${naslov.toLowerCase().replace(/i$/, '')}`}
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{marginBottom:12}}>
@@ -10802,6 +10903,7 @@ function NaciniPlacanjaPage({ currentUser }) {
         naslov: 'Načini plaćanja',
         opis: 'Načini plaćanja na fakturi/računu (gotovina, kartica, virman, ostalo). Konto vezuje za buduće auto-knjiženje (pasivno).',
         ikona: 'fas fa-money-bill-wave',
+        tabela: 'nacini_placanja',
         endpoint: '/api/v1/nacini_placanja',
         polja: [
             { key: 'sifra', label: 'Šifra', tip: 'text', placeholder: 'npr. GOT' },
@@ -10868,7 +10970,10 @@ function DrzavePage({ currentUser }) {
         <div className="fade-in">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <div style={{fontSize:13,color:'var(--gray-500)'}}><i className="fas fa-flag" style={{marginRight:6}}></i>Države — koristi se na adresama partnera i lokacija. Za BiH čuvamo i federalne poreske račune (PIO, zdravstvo, nezaposlenost).</div>
-                {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Nova država</button>}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="drzave" naslov="Drzave" />
+                    {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Nova država</button>}
+                </div>
             </div>
             <div className="card" style={{marginBottom:12}}><div className="card-body" style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                 <input type="text" className="form-control" style={{flex:'1 1 240px'}} placeholder="Pretraga (šifra, naziv)..." value={pretraga} onChange={e=>setPretraga(e.target.value)} />
@@ -10915,6 +11020,7 @@ function ValutePage({ currentUser }) {
         naslov: 'Valute',
         opis: 'Valute koje se koriste u sistemu. Kursevi se uređuju u Kursnoj listi.',
         ikona: 'fas fa-coins',
+        tabela: 'valute',
         endpoint: '/api/v1/valute',
         polja: [
             { key: 'sifra', label: 'Šifra (ISO)', tip: 'text', required: true, placeholder: 'BAM, EUR, USD', disabledOnEdit: true },
@@ -10931,6 +11037,7 @@ function NapomenePage({ currentUser }) {
         naslov: 'Napomene',
         opis: 'Predefinisani tekstovi napomena za dokumente/fakture.',
         ikona: 'fas fa-sticky-note',
+        tabela: 'napomene',
         endpoint: '/api/v1/napomene',
         polja: [
             { key: 'sifra', label: 'Šifra', tip: 'text' },
@@ -10949,6 +11056,7 @@ function ZavisniTroskoviPage({ currentUser }) {
         naslov: 'Vrste zavisnih troškova',
         opis: 'Tipovi zavisnih troškova nabavke (transport, carina, špedicija, osiguranje...) sa načinom raspodjele.',
         ikona: 'fas fa-truck-loading',
+        tabela: 'vrste_zavisnih_troskova',
         endpoint: '/api/v1/vrste_zavisnih_troskova',
         polja: [
             { key: 'sifra', label: 'Šifra', tip: 'text' },
@@ -11013,7 +11121,10 @@ function CarinskeTarifePage({ currentUser }) {
         <div className="fade-in">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <div style={{fontSize:13,color:'var(--gray-500)'}}><i className="fas fa-passport" style={{marginRight:6}}></i>Carinske tarife (tarifni broj + stopa carine u %).</div>
-                {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Nova tarifa</button>}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="carinske_tarife" naslov="Carinske tarife" />
+                    {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Nova tarifa</button>}
+                </div>
             </div>
             <div className="card" style={{marginBottom:12}}><div className="card-body" style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                 <input type="text" className="form-control" style={{flex:'1 1 240px'}} placeholder="Pretraga (šifra, naziv)..." value={pretraga} onChange={e=>setPretraga(e.target.value)} />
@@ -11127,7 +11238,10 @@ function KantoniPage({ currentUser }) {
         <div className="fade-in">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <div style={{fontSize:13,color:'var(--gray-500)'}}><i className="fas fa-map" style={{marginRight:6}}></i>Kantoni / entiteti — administrativne jedinice. Sa poreskim računima za obračun plata (kantonalni zdravstveni, nezaposlenost, invalidnine, komora).</div>
-                {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Novi kanton</button>}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="kantoni" naslov="Kantoni" />
+                    {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Novi kanton</button>}
+                </div>
             </div>
             <div className="card" style={{marginBottom:12}}><div className="card-body" style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                 <input type="text" className="form-control" style={{flex:'1 1 240px'}} placeholder="Pretraga..." value={pretraga} onChange={e=>setPretraga(e.target.value)} />
@@ -11270,7 +11384,10 @@ function OpcinePage({ currentUser }) {
         <div className="fade-in">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <div style={{fontSize:13,color:'var(--gray-500)'}}><i className="fas fa-map-marker-alt" style={{marginRight:6}}></i>Općine — pripadaju kantonu/entitetu. Šifra općine, pozivni broj i račun poreza na dohodak (gdje postoji).</div>
-                {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Nova općina</button>}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="opcine" naslov="Opcine" />
+                    {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Nova općina</button>}
+                </div>
             </div>
             <div className="card" style={{marginBottom:12}}><div className="card-body" style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                 <input type="text" className="form-control" style={{flex:'1 1 200px',minWidth:180}} placeholder="Pretraga (naziv, šifra, poštanski)..." value={pretraga} onChange={e=>setPretraga(e.target.value)} />
@@ -11408,7 +11525,10 @@ function KursnaListaPage({ currentUser }) {
         <div className="fade-in">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <div style={{fontSize:13,color:'var(--gray-500)'}}><i className="fas fa-exchange-alt" style={{marginRight:6}}></i>Kursna lista po valuti. Kurs se čuva sa 6 decimala (npr. EUR = 1,955830).</div>
-                {canEdit && valutaId && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Novi kurs</button>}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="kursna_lista" naslov="Kursna lista" />
+                    {canEdit && valutaId && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Novi kurs</button>}
+                </div>
             </div>
             <div className="card" style={{marginBottom:12}}><div className="card-body" style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                 <label style={{fontSize:13,fontWeight:600,color:'var(--gray-600)'}}>Valuta:</label>
@@ -11537,7 +11657,10 @@ function VauceriPage({ currentUser }) {
         <div className="fade-in">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <div style={{fontSize:13,color:'var(--gray-500)'}}><i className="fas fa-ticket-alt" style={{marginRight:6}}></i>Vaučeri / kuponi — jedinstveni kod, vrijednost u iznosu (KM) ili procentu (%).</div>
-                {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Novi vaučer</button>}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="vauceri" naslov="Vauceri" />
+                    {canEdit && <button className="btn btn-primary" onClick={otvoriNovi}><i className="fas fa-plus"></i> Novi vaučer</button>}
+                </div>
             </div>
             <div className="card" style={{marginBottom:12}}><div className="card-body" style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                 <input type="text" className="form-control" style={{flex:'1 1 240px'}} placeholder="Pretraga (kod, naziv, partner)..." value={pretraga} onChange={e=>setPretraga(e.target.value)} />
@@ -11817,11 +11940,14 @@ function KontniPlanPage({ currentUser }) {
                     <i className="fas fa-book" style={{marginRight:6}}></i>
                     Zvanični kontni plan (~2778 konta). Hijerarhija po dužini šifre (klasa → grupa → sintetika → analitika).
                 </div>
-                {canEdit && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> Novi konto
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="kontni_plan" naslov="Kontni plan" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> Novi konto
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{marginBottom:12}}>
@@ -11999,11 +12125,14 @@ function VrsteNalogaPage({ currentUser }) {
                     <i className="fas fa-file-invoice" style={{marginRight:6}}></i>
                     Vrste knjigovodstvenih naloga (npr. AKZI - akciza, BLPO - blagajna polog, AMOR - amortizacija). Sistemske se ne brišu.
                 </div>
-                {canEdit && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> Nova vrsta naloga
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="vrste_naloga" naslov="Vrste naloga" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> Nova vrsta naloga
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{marginBottom:12}}>
@@ -12212,11 +12341,14 @@ function SkladistaPage({ currentUser }) {
                     <i className="fas fa-info-circle" style={{marginRight:6}}></i>
                     Obračunske jedinice (prodavnice/skladišta). Cjenovnici i fiskalizacija idu po skladištu.
                 </div>
-                {canEdit && (
-                    <button className="btn btn-primary" onClick={otvoriNovi}>
-                        <i className="fas fa-plus"></i> Novo skladište
-                    </button>
-                )}
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="skladista" naslov="Skladista" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={otvoriNovi}>
+                            <i className="fas fa-plus"></i> Novo skladište
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{marginBottom:12}}>
