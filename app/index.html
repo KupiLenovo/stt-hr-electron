@@ -10671,6 +10671,491 @@ function CjenovniciPage({ currentUser }) {
 }
 
 // =====================================================================
+// FAZA 2 — ZALIHE (append-only ledger)
+// 3 taba: Stanje (agregat SUM), Istorija (raw ledger), Novo kretanje (form)
+// Nikada NE UPDATE/DELETE - korekcije idu kroz novi 'korekcija_plus'/'korekcija_minus' red.
+// Backend postavlja predznak po tip_prometa - mi saljemo pozitivnu kolicinu + tip.
+// =====================================================================
+const ZALIHE_TIPOVI = [
+    { kod: 'prijem',          naziv: 'Prijem od dobavljaca',  predznak: '+', boja: '#059669' },
+    { kod: 'izdaja',          naziv: 'Izdaja (prodaja)',      predznak: '-', boja: '#dc2626' },
+    { kod: 'prenos_out',      naziv: 'Prenos - izlaz',        predznak: '-', boja: '#dc2626' },
+    { kod: 'prenos_in',       naziv: 'Prenos - ulaz',         predznak: '+', boja: '#059669' },
+    { kod: 'popis_plus',      naziv: 'Popis - visak',         predznak: '+', boja: '#059669' },
+    { kod: 'popis_minus',     naziv: 'Popis - manjak',        predznak: '-', boja: '#dc2626' },
+    { kod: 'pocetno_stanje',  naziv: 'Pocetno stanje',        predznak: '+', boja: '#0891b2' },
+    { kod: 'korekcija_plus',  naziv: 'Korekcija (+)',         predznak: '+', boja: '#7c3aed' },
+    { kod: 'korekcija_minus', naziv: 'Korekcija (-)',         predznak: '-', boja: '#7c3aed' },
+];
+const ZALIHE_TIPOVI_DIREKTNI = ['prijem','izdaja','popis_plus','popis_minus','pocetno_stanje','korekcija_plus','korekcija_minus']; // bez prenosa
+
+function _zaliheTipMeta(kod) {
+    return ZALIHE_TIPOVI.find(t => t.kod === kod) || { kod, naziv: kod, predznak: '?', boja: '#6b7280' };
+}
+
+function ZalihePage({ currentUser }) {
+    const uloga = currentUser && currentUser.uloga;
+    const canEdit = uloga === 'admin' || uloga === 'voditelj';
+
+    const [tab, setTab] = useState('stanje'); // 'stanje' | 'istorija' | 'novo'
+
+    // Zajednicki podaci
+    const [skladista, setSkladista] = useState([]);
+    const [artikli, setArtikli] = useState([]);
+    const [partneri, setPartneri] = useState([]);
+
+    // Stanje tab
+    const [stanje, setStanje] = useState([]);
+    const [stanjeLoad, setStanjeLoad] = useState(true);
+    const [stFiltSkladiste, setStFiltSkladiste] = useState('');
+    const [stPretraga, setStPretraga] = useState('');
+    const [stPrikaziNule, setStPrikaziNule] = useState(false);
+
+    // Istorija tab
+    const [istorija, setIstorija] = useState([]);
+    const [istorijaLoad, setIstorijaLoad] = useState(false);
+    const [isFiltSkladiste, setIsFiltSkladiste] = useState('');
+    const [isFiltArtikal, setIsFiltArtikal] = useState('');
+    const [isFiltTip, setIsFiltTip] = useState('');
+    const [isFiltOd, setIsFiltOd] = useState('');
+    const [isFiltDo, setIsFiltDo] = useState('');
+
+    // Novo kretanje tab (form)
+    const PRAZAN_FORM = {
+        mod: 'direktno',           // 'direktno' (jedan red) | 'prenos' (dva reda)
+        tip_prometa: 'prijem',
+        skladiste_id: '',
+        iz_skladiste_id: '',
+        u_skladiste_id: '',
+        artikal_id: '',
+        kolicina: '',
+        datum: today(),
+        vezni_dokument: '',
+        opis: '',
+        partner_id: '',
+    };
+    const [form, setForm] = useState(PRAZAN_FORM);
+    const [snimanje, setSnimanje] = useState(false);
+    const [formGreska, setFormGreska] = useState(null);
+    const [formInfo, setFormInfo] = useState(null);
+
+    // Inicijalno: ucitaj skladista, artikle (samo non-usluga + aktivni), partnere
+    useEffect(() => {
+        (async () => {
+            try {
+                const [sk, ar, pa] = await Promise.all([
+                    api('/api/v1/skladista'),
+                    api('/api/v1/artikli'),
+                    api('/api/v1/partneri').catch(() => []),
+                ]);
+                setSkladista((Array.isArray(sk) ? sk : []).filter(s => s.aktivan));
+                setArtikli((Array.isArray(ar) ? ar : []).filter(a => a.aktivan && a.vrsta !== 'usluga'));
+                setPartneri(Array.isArray(pa) ? pa : []);
+            } catch (e) { showAlert('Greska pri ucitavanju sifarnika.', 'error'); }
+        })();
+    }, []);
+
+    // Stanje: ucitaj cijelo stanje (po skladistu ako je odabrano)
+    const ucitajStanje = async () => {
+        setStanjeLoad(true);
+        try {
+            const q = stFiltSkladiste ? `?skladiste_id=${encodeURIComponent(stFiltSkladiste)}&samo_nenula=${stPrikaziNule ? 0 : 1}` : `?samo_nenula=${stPrikaziNule ? 0 : 1}`;
+            const d = await api('/api/v1/zalihe/stanje' + q);
+            setStanje(Array.isArray(d) ? d : []);
+        } catch (e) { showAlert('Greska pri ucitavanju stanja.', 'error'); setStanje([]); }
+        finally { setStanjeLoad(false); }
+    };
+    useEffect(() => { if (tab === 'stanje') ucitajStanje(); }, [tab, stFiltSkladiste, stPrikaziNule]);
+
+    const stanjeFiltrirano = useMemo(() => {
+        const q = stPretraga.trim().toLowerCase();
+        if (!q) return stanje;
+        return stanje.filter(r => [r.artikal_sifra, r.artikal_naziv, r.skladiste_sifra, r.skladiste_naziv]
+            .some(v => v && String(v).toLowerCase().includes(q)));
+    }, [stanje, stPretraga]);
+
+    // Istorija: ucitaj prema filterima
+    const ucitajIstoriju = async () => {
+        setIstorijaLoad(true);
+        try {
+            const params = new URLSearchParams();
+            if (isFiltSkladiste) params.set('skladiste_id', isFiltSkladiste);
+            if (isFiltArtikal)   params.set('artikal_id', isFiltArtikal);
+            if (isFiltTip)       params.set('tip_prometa', isFiltTip);
+            if (isFiltOd)        params.set('datum_od', isFiltOd);
+            if (isFiltDo)        params.set('datum_do', isFiltDo);
+            params.set('limit', '1000');
+            const d = await api('/api/v1/zalihe/promet?' + params.toString());
+            setIstorija(Array.isArray(d) ? d : []);
+        } catch (e) { showAlert('Greska pri ucitavanju istorije.', 'error'); setIstorija([]); }
+        finally { setIstorijaLoad(false); }
+    };
+    useEffect(() => { if (tab === 'istorija') ucitajIstoriju(); }, [tab]);
+
+    // Novo kretanje submit
+    const snimiKretanje = async () => {
+        setFormGreska(null); setFormInfo(null);
+        if (!form.artikal_id) { setFormGreska('Artikal je obavezan.'); return; }
+        const kol = Number(String(form.kolicina).replace(',','.'));
+        if (!Number.isFinite(kol) || kol <= 0) { setFormGreska('Kolicina mora biti pozitivan broj.'); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(form.datum)) { setFormGreska('Datum mora biti YYYY-MM-DD.'); return; }
+
+        setSnimanje(true);
+        try {
+            if (form.mod === 'prenos') {
+                if (!form.iz_skladiste_id) { setFormGreska('Izvor (skladiste) je obavezan.'); setSnimanje(false); return; }
+                if (!form.u_skladiste_id)  { setFormGreska('Odrediste (skladiste) je obavezno.'); setSnimanje(false); return; }
+                if (form.iz_skladiste_id === form.u_skladiste_id) { setFormGreska('Izvor i odrediste moraju biti razlicita.'); setSnimanje(false); return; }
+                const odg = await api('/api/v1/zalihe/prenos', 'POST', {
+                    iz_skladiste_id: Number(form.iz_skladiste_id),
+                    u_skladiste_id: Number(form.u_skladiste_id),
+                    artikal_id: Number(form.artikal_id),
+                    kolicina: kol,
+                    datum: form.datum,
+                    vezni_dokument: form.vezni_dokument || null,
+                    opis: form.opis || null,
+                });
+                if (odg && odg.error) throw new Error(odg.error);
+                const msg = `Prenos kreiran. Saldo izvora: ${odg.iz_stanje}, odrediste: ${odg.u_stanje}.`;
+                setFormInfo(odg.upozorenje ? msg + ' UPOZORENJE: ' + odg.upozorenje : msg);
+                showAlert('Prenos upisan.', odg.upozorenje ? 'warning' : 'success');
+            } else {
+                if (!form.skladiste_id) { setFormGreska('Skladiste je obavezno.'); setSnimanje(false); return; }
+                if (!ZALIHE_TIPOVI_DIREKTNI.includes(form.tip_prometa)) {
+                    setFormGreska('Za prenos prebaci mod na "Prenos".'); setSnimanje(false); return;
+                }
+                const odg = await api('/api/v1/zalihe/promet', 'POST', {
+                    skladiste_id: Number(form.skladiste_id),
+                    artikal_id: Number(form.artikal_id),
+                    tip_prometa: form.tip_prometa,
+                    kolicina: kol,
+                    datum: form.datum,
+                    vezni_dokument: form.vezni_dokument || null,
+                    opis: form.opis || null,
+                    partner_id: form.partner_id ? Number(form.partner_id) : null,
+                });
+                if (odg && odg.error) throw new Error(odg.error);
+                const msg = `Kretanje upisano. Novo stanje: ${odg.novo_stanje}.`;
+                setFormInfo(odg.upozorenje ? msg + ' UPOZORENJE: ' + odg.upozorenje : msg);
+                showAlert('Kretanje upisano.', odg.upozorenje ? 'warning' : 'success');
+            }
+            // Reset numerickih polja, ostavi skladiste/tip/datum za brzi sljedeci unos
+            setForm(f => ({ ...f, artikal_id: '', kolicina: '', vezni_dokument: '', opis: '', partner_id: '' }));
+        } catch (e) {
+            setFormGreska('Greska: ' + (e?.message || 'nepoznata'));
+        } finally { setSnimanje(false); }
+    };
+
+    const TabBtn = ({ id, ikona, label }) => (
+        <button
+            className={`btn ${tab === id ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => setTab(id)}
+            style={{ marginRight: 6 }}
+        >
+            <i className={`fas ${ikona}`} style={{ marginRight: 6 }}></i>{label}
+        </button>
+    );
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:12,gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{fontSize:13,color:'var(--gray-500)'}}>
+                    <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                    Append-only ledger - svako kretanje je novi red. Stanje = SUM(kolicina). Korekcije idu kroz novi red, ne UPDATE.
+                </div>
+                <div>
+                    {tab === 'stanje'   && <ExportButton tabela="zalihe_stanje" naslov="Zalihe - stanje" />}
+                    {tab === 'istorija' && <ExportButton tabela="zalihe_promet" naslov="Zalihe - promet" />}
+                </div>
+            </div>
+
+            <div style={{marginBottom:12}}>
+                <TabBtn id="stanje" ikona="fa-warehouse" label="Stanje" />
+                <TabBtn id="istorija" ikona="fa-history" label="Istorija (ledger)" />
+                {canEdit && <TabBtn id="novo" ikona="fa-plus" label="Novo kretanje" />}
+            </div>
+
+            {/* ===== TAB: STANJE ===== */}
+            {tab === 'stanje' && (
+                <>
+                    <div className="card" style={{marginBottom:12}}>
+                        <div className="card-body" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'center'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                <label style={{fontSize:13,color:'var(--gray-600)',fontWeight:600}}>Skladiste:</label>
+                                <select className="form-control" style={{flex:'0 0 220px'}} value={stFiltSkladiste} onChange={e=>setStFiltSkladiste(e.target.value)}>
+                                    <option value="">— sva skladista —</option>
+                                    {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv}</option>)}
+                                </select>
+                            </div>
+                            <input type="text" className="form-control" style={{flex:'1 1 220px',minWidth:180}}
+                                placeholder="Pretraga (sifra, naziv artikla, skladiste)..."
+                                value={stPretraga} onChange={e=>setStPretraga(e.target.value)} />
+                            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'var(--text-primary)',cursor:'pointer',userSelect:'none'}}>
+                                <input type="checkbox" checked={stPrikaziNule} onChange={e=>setStPrikaziNule(e.target.checked)} />
+                                Prikazi i nula stanja
+                            </label>
+                            <div style={{marginLeft:'auto',fontSize:12,color:'var(--gray-400)'}}>{stanjeFiltrirano.length} pozicija</div>
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <div style={{overflowX:'auto'}}>
+                            {stanjeLoad ? (
+                                <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Ucitavanje...</div>
+                            ) : stanjeFiltrirano.length === 0 ? (
+                                <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
+                                    <i className="fas fa-inbox" style={{fontSize:24,opacity:0.4,marginBottom:8,display:'block'}}></i>
+                                    Nema stanja za prikaz. Upisi kretanja kroz tab "Novo kretanje".
+                                </div>
+                            ) : (
+                                <table style={{width:'100%'}}>
+                                    <thead><tr>
+                                        <th>Skladiste</th><th>Sifra</th><th>Artikal</th><th>JM</th>
+                                        <th style={{textAlign:'right'}}>Stanje</th>
+                                        <th>Zadnji promet</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        {stanjeFiltrirano.map(r => {
+                                            const negat = Number(r.stanje) < 0;
+                                            return (
+                                                <tr key={`${r.skladiste_id}-${r.artikal_id}`}>
+                                                    <td style={{fontSize:12,color:'var(--gray-500)'}}>{r.skladiste_sifra} <span style={{color:'var(--gray-400)'}}>{r.skladiste_naziv}</span></td>
+                                                    <td style={{fontFamily:'monospace',fontSize:12,color:'var(--gray-500)'}}>{r.artikal_sifra}</td>
+                                                    <td style={{fontWeight:500}}>{r.artikal_naziv}</td>
+                                                    <td style={{fontSize:12}}>{r.artikal_jm}</td>
+                                                    <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:600,color: negat ? '#dc2626' : '#0f172a'}}>
+                                                        {Number(r.stanje).toLocaleString('bs-BA',{maximumFractionDigits:3})}
+                                                        {negat && <i className="fas fa-exclamation-triangle" style={{marginLeft:6,color:'#dc2626',fontSize:11}} title="Negativan saldo"></i>}
+                                                    </td>
+                                                    <td style={{fontSize:12,color:'var(--gray-500)'}}>{r.zadnji_promet_datum || '—'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* ===== TAB: ISTORIJA (ledger) ===== */}
+            {tab === 'istorija' && (
+                <>
+                    <div className="card" style={{marginBottom:12}}>
+                        <div className="card-body" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'flex-end'}}>
+                            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                                <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Skladiste</label>
+                                <select className="form-control" style={{minWidth:180}} value={isFiltSkladiste} onChange={e=>setIsFiltSkladiste(e.target.value)}>
+                                    <option value="">— sva —</option>
+                                    {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv}</option>)}
+                                </select>
+                            </div>
+                            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                                <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Artikal</label>
+                                <select className="form-control" style={{minWidth:220}} value={isFiltArtikal} onChange={e=>setIsFiltArtikal(e.target.value)}>
+                                    <option value="">— svi —</option>
+                                    {artikli.map(a => <option key={a.id} value={a.id}>{a.sifra} - {a.naziv}</option>)}
+                                </select>
+                            </div>
+                            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                                <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Tip prometa</label>
+                                <select className="form-control" style={{minWidth:180}} value={isFiltTip} onChange={e=>setIsFiltTip(e.target.value)}>
+                                    <option value="">— svi tipovi —</option>
+                                    {ZALIHE_TIPOVI.map(t => <option key={t.kod} value={t.kod}>{t.naziv}</option>)}
+                                </select>
+                            </div>
+                            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                                <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Datum od</label>
+                                <input type="date" className="form-control" value={isFiltOd} onChange={e=>setIsFiltOd(e.target.value)} />
+                            </div>
+                            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                                <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Datum do</label>
+                                <input type="date" className="form-control" value={isFiltDo} onChange={e=>setIsFiltDo(e.target.value)} />
+                            </div>
+                            <button className="btn btn-primary" onClick={ucitajIstoriju} disabled={istorijaLoad}>
+                                <i className={`fas ${istorijaLoad ? 'fa-spinner fa-spin' : 'fa-search'}`} style={{marginRight:6}}></i>Primijeni
+                            </button>
+                            <div style={{marginLeft:'auto',fontSize:12,color:'var(--gray-400)'}}>{istorija.length} kretanja</div>
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <div style={{overflowX:'auto'}}>
+                            {istorijaLoad ? (
+                                <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Ucitavanje...</div>
+                            ) : istorija.length === 0 ? (
+                                <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
+                                    <i className="fas fa-inbox" style={{fontSize:24,opacity:0.4,marginBottom:8,display:'block'}}></i>
+                                    Nema kretanja za zadane filtere.
+                                </div>
+                            ) : (
+                                <table style={{width:'100%'}}>
+                                    <thead><tr>
+                                        <th>Datum</th><th>Tip</th><th>Skladiste</th><th>Artikal</th>
+                                        <th style={{textAlign:'right'}}>Kolicina</th>
+                                        <th>Dokument</th><th>Partner</th><th>Opis</th><th>Korisnik</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        {istorija.map(r => {
+                                            const meta = _zaliheTipMeta(r.tip_prometa);
+                                            const negat = Number(r.kolicina) < 0;
+                                            return (
+                                                <tr key={r.id}>
+                                                    <td style={{fontSize:12,whiteSpace:'nowrap'}}>{r.datum}</td>
+                                                    <td>
+                                                        <span style={{fontSize:10,padding:'2px 6px',borderRadius:8,background:meta.boja+'22',color:meta.boja,fontWeight:600,whiteSpace:'nowrap'}}>
+                                                            {meta.naziv}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{fontSize:12,color:'var(--gray-500)'}}>{r.skladiste_sifra}</td>
+                                                    <td><span style={{fontFamily:'monospace',fontSize:11,color:'var(--gray-400)',marginRight:6}}>{r.artikal_sifra}</span>{r.artikal_naziv}</td>
+                                                    <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:600,color: negat ? '#dc2626' : '#059669'}}>
+                                                        {Number(r.kolicina).toLocaleString('bs-BA',{maximumFractionDigits:3})} <span style={{fontSize:10,color:'var(--gray-400)'}}>{r.artikal_jm}</span>
+                                                    </td>
+                                                    <td style={{fontSize:12,fontFamily:'monospace',color:'var(--gray-500)'}}>{r.vezni_dokument || '—'}</td>
+                                                    <td style={{fontSize:12,color:'var(--gray-600)'}}>{r.partner_naziv || '—'}</td>
+                                                    <td style={{fontSize:12,color:'var(--gray-500)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.opis || ''}</td>
+                                                    <td style={{fontSize:12,color:'var(--gray-500)'}}>{r.kreirao_ime ? `${r.kreirao_ime} ${r.kreirao_prezime||''}`.trim() : '—'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* ===== TAB: NOVO KRETANJE ===== */}
+            {tab === 'novo' && canEdit && (
+                <div className="card">
+                    <div className="card-body">
+                        <div style={{marginBottom:16,display:'flex',gap:8,alignItems:'center'}}>
+                            <label style={{fontSize:13,fontWeight:600,color:'var(--gray-600)'}}>Mod:</label>
+                            <button className={`btn btn-sm ${form.mod==='direktno'?'btn-primary':'btn-outline'}`} onClick={()=>setForm(f=>({...f,mod:'direktno'}))}>
+                                <i className="fas fa-arrow-right" style={{marginRight:4}}></i>Direktno (1 red)
+                            </button>
+                            <button className={`btn btn-sm ${form.mod==='prenos'?'btn-primary':'btn-outline'}`} onClick={()=>setForm(f=>({...f,mod:'prenos'}))}>
+                                <i className="fas fa-exchange-alt" style={{marginRight:4}}></i>Prenos izmedju skladista
+                            </button>
+                            <span style={{fontSize:11,color:'var(--gray-400)',marginLeft:12}}>
+                                Direktno: prijem, izdaja, popis, korekcija, pocetno stanje. Prenos: out + in atomicno.
+                            </span>
+                        </div>
+
+                        {form.mod === 'direktno' ? (
+                            <>
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label>Tip prometa <span style={{color:'#dc2626'}}>*</span></label>
+                                        <select className="form-control" value={form.tip_prometa} onChange={e=>setForm(f=>({...f,tip_prometa:e.target.value}))}>
+                                            {ZALIHE_TIPOVI.filter(t=>ZALIHE_TIPOVI_DIREKTNI.includes(t.kod)).map(t => (
+                                                <option key={t.kod} value={t.kod}>{t.predznak} {t.naziv}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Skladiste <span style={{color:'#dc2626'}}>*</span></label>
+                                        <select className="form-control" value={form.skladiste_id} onChange={e=>setForm(f=>({...f,skladiste_id:e.target.value}))}>
+                                            <option value="">— odaberi —</option>
+                                            {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv} ({s.tip})</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label>Iz skladista <span style={{color:'#dc2626'}}>*</span></label>
+                                    <select className="form-control" value={form.iz_skladiste_id} onChange={e=>setForm(f=>({...f,iz_skladiste_id:e.target.value}))}>
+                                        <option value="">— odaberi izvor —</option>
+                                        {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>U skladiste <span style={{color:'#dc2626'}}>*</span></label>
+                                    <select className="form-control" value={form.u_skladiste_id} onChange={e=>setForm(f=>({...f,u_skladiste_id:e.target.value}))}>
+                                        <option value="">— odaberi odrediste —</option>
+                                        {skladista.filter(s=>String(s.id)!==String(form.iz_skladiste_id)).map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="form-row">
+                            <div className="form-group" style={{flex:2}}>
+                                <label>Artikal <span style={{color:'#dc2626'}}>*</span></label>
+                                <select className="form-control" value={form.artikal_id} onChange={e=>setForm(f=>({...f,artikal_id:e.target.value}))}>
+                                    <option value="">— odaberi artikal —</option>
+                                    {artikli.map(a => <option key={a.id} value={a.id}>{a.sifra} - {a.naziv} ({a.jm})</option>)}
+                                </select>
+                                <div style={{fontSize:11,color:'var(--gray-400)',marginTop:4}}>Samo aktivni artikli (usluge se ne prikazuju jer nemaju zalihu).</div>
+                            </div>
+                            <div className="form-group">
+                                <label>Kolicina <span style={{color:'#dc2626'}}>*</span></label>
+                                <input className="form-control" inputMode="decimal" value={form.kolicina} onChange={e=>setForm(f=>({...f,kolicina:e.target.value}))} placeholder="0" />
+                                <div style={{fontSize:11,color:'var(--gray-400)',marginTop:4}}>Uvijek pozitivan broj — server postavlja predznak.</div>
+                            </div>
+                            <div className="form-group">
+                                <label>Datum <span style={{color:'#dc2626'}}>*</span></label>
+                                <input type="date" className="form-control" value={form.datum} onChange={e=>setForm(f=>({...f,datum:e.target.value}))} />
+                            </div>
+                        </div>
+
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>Vezni dokument</label>
+                                <input className="form-control" value={form.vezni_dokument} onChange={e=>setForm(f=>({...f,vezni_dokument:e.target.value}))} placeholder="npr. KAL-2026-001, R-12/26..." />
+                            </div>
+                            {form.mod === 'direktno' && (
+                                <div className="form-group">
+                                    <label>Partner</label>
+                                    <select className="form-control" value={form.partner_id} onChange={e=>setForm(f=>({...f,partner_id:e.target.value}))}>
+                                        <option value="">— bez partnera —</option>
+                                        {partneri.filter(p=>p.aktivan).map(p => <option key={p.id} value={p.id}>{p.sifra} - {p.naziv}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="form-group">
+                            <label>Opis / napomena</label>
+                            <textarea className="form-control" rows="2" value={form.opis} onChange={e=>setForm(f=>({...f,opis:e.target.value}))} placeholder="Slobodan tekst (opciono)" />
+                        </div>
+
+                        {formGreska && (
+                            <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginBottom:10}}>
+                                <i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{formGreska}
+                            </div>
+                        )}
+                        {formInfo && (
+                            <div style={{padding:10,background:'#d1fae5',color:'#065f46',borderRadius:6,fontSize:13,marginBottom:10}}>
+                                <i className="fas fa-check-circle" style={{marginRight:6}}></i>{formInfo}
+                            </div>
+                        )}
+
+                        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                            <button className="btn btn-outline" onClick={()=>{setForm(PRAZAN_FORM); setFormGreska(null); setFormInfo(null);}} disabled={snimanje}>
+                                <i className="fas fa-undo" style={{marginRight:4}}></i>Reset
+                            </button>
+                            <button className="btn btn-primary" onClick={snimiKretanje} disabled={snimanje}>
+                                {snimanje ? <><i className="fas fa-spinner fa-spin" style={{marginRight:6}}></i>Snimanje...</> : <><i className="fas fa-save" style={{marginRight:6}}></i>Upisi kretanje</>}
+                            </button>
+                        </div>
+
+                        <div style={{marginTop:20,padding:12,background:'var(--gray-100)',borderRadius:8,fontSize:12,color:'var(--gray-600)'}}>
+                            <strong><i className="fas fa-lightbulb" style={{marginRight:6,color:'#f59e0b'}}></i>Napomena:</strong> Greske se NE ispravljaju brisanjem ili ureivanjem postojecih redova. Za korekciju kreiraj novi red sa tipom <code>korekcija_plus</code> ili <code>korekcija_minus</code>. Negativan saldo je dozvoljen (npr. prodaja prije nego prijem stigne) — sistem ce ti pokazati upozorenje.
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// =====================================================================
 // FAZA 1.x GRUPA 1 — Jednostavni sifrarnici (10 stranica)
 // nacini_placanja, drzave, kantoni, opcine, valute, kursna_lista,
 // napomene, carinske_tarife, vrste_zavisnih_troskova, vauceri.
@@ -13974,6 +14459,9 @@ const MODULI = [
         { page: 'pazar',        naziv: 'Polog pazara',        icon: 'fas fa-cash-register' },
         { page: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fas fa-exchange-alt' },
     ]},
+    { id: 'm_zalihe', naziv: 'Zalihe', icon: 'fas fa-boxes', stavke: [
+        { page: 'zalihe', naziv: 'Zalihe', icon: 'fas fa-boxes' },
+    ]},
     { id: 'm_web', naziv: 'Web', icon: 'fas fa-globe', uskoro: true, stavke: [] },
     { id: 'm_servis', naziv: 'Servis', icon: 'fas fa-tools', stavke: [
         { page: 'servis', naziv: 'Servisni prijem', icon: 'fas fa-tools' },
@@ -14732,6 +15220,7 @@ function App() {
             case 'grupe_artikala': return <GrupeArtikalaPage currentUser={currentUser} />;
             case 'tarife': return <TarifePage currentUser={currentUser} />;
             case 'cjenovnici': return <CjenovniciPage currentUser={currentUser} />;
+            case 'zalihe': return <ZalihePage currentUser={currentUser} />;
             case 'skladista': return <SkladistaPage currentUser={currentUser} />;
             case 'nacini_placanja': return <NaciniPlacanjaPage currentUser={currentUser} />;
             case 'drzave': return <DrzavePage currentUser={currentUser} />;
