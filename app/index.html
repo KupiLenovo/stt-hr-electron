@@ -701,26 +701,28 @@
         }
         .top-nav-item.active i { opacity: 1; }
 
+        /* Sub-tab traka: flex-wrap da sve stavke uvijek stanu u viewport
+           (modul Sifrarnici ima 17 stavki - prelama se u 2 reda na uskom ekranu) */
         .top-nav-sub {
             display: flex;
-            padding: 10px 24px;
-            gap: 6px;
-            overflow-x: auto;
-            scrollbar-width: none;
+            flex-wrap: wrap;
+            padding: 8px 20px;
+            gap: 4px 6px;
+            row-gap: 4px;
         }
-        .top-nav-sub::-webkit-scrollbar { display: none; }
         .top-nav-sub-item {
-            padding: 8px 16px;
-            display: flex; align-items: center; gap: 8px;
+            padding: 6px 12px;
+            display: flex; align-items: center; gap: 6px;
             cursor: pointer;
-            font-size: 13px; font-weight: 600;
+            font-size: 12px; font-weight: 600;
             color: var(--text-secondary);
-            border-radius: 8px;
+            border-radius: 7px;
             white-space: nowrap;
             transition: all 0.18s ease;
             border: 1px solid transparent;
+            min-height: 30px;
         }
-        .top-nav-sub-item i { font-size: 12px; opacity: 0.7; }
+        .top-nav-sub-item i { font-size: 11px; opacity: 0.7; }
         .top-nav-sub-item:hover {
             background: rgba(0, 120, 212, 0.06);
             color: var(--primary);
@@ -730,9 +732,22 @@
         .top-nav-sub-item.active {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: white;
-            box-shadow: 0 4px 12px rgba(0, 120, 212, 0.30);
+            box-shadow: 0 2px 8px rgba(0, 120, 212, 0.25);
         }
         .top-nav-sub-item.active i { opacity: 1; }
+
+        /* Top-nav glavna traka (12 modula) - i ona dobija flex-wrap fallback
+           za mala razdvajanja, ali zadrzava overflow-x: auto kao primarno
+           (12 modula najcesce stane u jedan red, ali na 13" laptopu prelama) */
+        .top-nav-main {
+            flex-wrap: wrap;
+            row-gap: 0;
+            overflow-x: visible;
+        }
+        @media (max-width: 1280px) {
+            .top-nav-item { padding: 12px 14px !important; font-size: 11px !important; letter-spacing: 0.4px !important; }
+            .top-nav-sub-item { padding: 5px 10px !important; font-size: 11px !important; }
+        }
 
         /* Sidebar — sakrij na desktop, ostavi za mobile */
         @media (min-width: 901px) {
