@@ -10800,18 +10800,20 @@ function SifrarnikLite({ currentUser, config }) {
 function NaciniPlacanjaPage({ currentUser }) {
     return <SifrarnikLite currentUser={currentUser} config={{
         naslov: 'Načini plaćanja',
-        opis: 'Načini plaćanja na fakturi/računu (gotovina, kartica, virman, ostalo).',
+        opis: 'Načini plaćanja na fakturi/računu (gotovina, kartica, virman, ostalo). Konto vezuje za buduće auto-knjiženje (pasivno).',
         ikona: 'fas fa-money-bill-wave',
         endpoint: '/api/v1/nacini_placanja',
         polja: [
             { key: 'sifra', label: 'Šifra', tip: 'text', placeholder: 'npr. GOT' },
             { key: 'naziv', label: 'Naziv', tip: 'text', required: true },
             { key: 'tip', label: 'Tip', tip: 'select_enum', options: [['gotovina','Gotovina'],['kartica','Kartica'],['virman','Virman'],['ostalo','Ostalo']] },
+            { key: 'konto', label: 'Konto (knjigovodstveni)', tip: 'text', placeholder: 'npr. 2050, 2052, 2111' },
         ],
         kolone: [
             { key: 'sifra', label: 'Šifra', style: {fontFamily:'monospace',color:'var(--gray-500)'} },
             { key: 'naziv', label: 'Naziv', style: {fontWeight:500} },
             { key: 'tip', label: 'Tip' },
+            { key: 'konto', label: 'Konto', style: {fontFamily:'monospace',color:'var(--primary)',fontWeight:600} },
         ]
     }} />;
 }
