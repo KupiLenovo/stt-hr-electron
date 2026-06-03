@@ -10671,6 +10671,637 @@ function CjenovniciPage({ currentUser }) {
 }
 
 // =====================================================================
+// FAZA 3 — NABAVKA (ulazne kalkulacije dobavljaca)
+// Dokument: zaglavlje + stavke + zavisni troskovi. Status 'draft' | 'knjizena'.
+// Knjizenje (nepovratno): +prijem u zalihe_promet + upsert cjenovnici.nabavna.
+// Novac = fening (INTEGER), kurs = x1.000.000, rabat = bazni poeni x100.
+// =====================================================================
+
+function _kalkStatusBadge(status) {
+    if (status === 'knjizena') return <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'#d1fae5',color:'#065f46',fontWeight:600}}>KNJIŽENA</span>;
+    return <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'#e5e7eb',color:'#374151',fontWeight:600}}>DRAFT</span>;
+}
+
+function KalkulacijePage({ currentUser }) {
+    const [view, setView] = useState({ mode: 'lista' });
+    if (view.mode === 'detalji')
+        return <KalkulacijaDetalji id={view.id} currentUser={currentUser} onBack={()=>setView({ mode: 'lista' })} />;
+    return <KalkulacijaLista currentUser={currentUser} onOpen={(id)=>setView({ mode: 'detalji', id })} />;
+}
+
+function KalkulacijaLista({ currentUser, onOpen }) {
+    const uloga = currentUser && currentUser.uloga;
+    const canEdit = uloga === 'admin' || uloga === 'voditelj';
+    const [lista, setLista] = useState([]);
+    const [partneri, setPartneri] = useState([]);
+    const [skladista, setSkladista] = useState([]);
+    const [ucitavanje, setUcitavanje] = useState(true);
+    const [fStatus, setFStatus] = useState('');
+    const [fPartner, setFPartner] = useState('');
+    const [fSkladiste, setFSkladiste] = useState('');
+    const [fOd, setFOd] = useState('');
+    const [fDo, setFDo] = useState('');
+
+    const ucitaj = async () => {
+        setUcitavanje(true);
+        try {
+            const qs = [];
+            if (fStatus) qs.push('status=' + encodeURIComponent(fStatus));
+            if (fPartner) qs.push('partner_id=' + encodeURIComponent(fPartner));
+            if (fSkladiste) qs.push('skladiste_id=' + encodeURIComponent(fSkladiste));
+            if (fOd) qs.push('datum_od=' + encodeURIComponent(fOd));
+            if (fDo) qs.push('datum_do=' + encodeURIComponent(fDo));
+            const d = await api('/api/v1/kalkulacije' + (qs.length ? '?' + qs.join('&') : ''));
+            setLista(Array.isArray(d) ? d : []);
+        } catch (e) { showAlert('Greška pri učitavanju kalkulacija.', 'error'); setLista([]); }
+        finally { setUcitavanje(false); }
+    };
+    useEffect(() => {
+        (async () => {
+            try {
+                const [p, s] = await Promise.all([api('/api/v1/partneri'), api('/api/v1/skladista')]);
+                setPartneri((Array.isArray(p)?p:[]).filter(x => x.je_dobavljac && x.aktivan));
+                setSkladista((Array.isArray(s)?s:[]).filter(x => x.aktivan));
+            } catch (e) {}
+            ucitaj();
+        })();
+    }, []);
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{fontSize:13,color:'var(--gray-500)'}}>
+                    <i className="fas fa-truck-loading" style={{marginRight:6}}></i>
+                    Ulazne kalkulacije dobavljača. Knjiženje hrani zalihe (prijem) i upisuje nabavnu u cjenovnik.
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="kalkulacija" naslov="Ulazne kalkulacije" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={()=>onOpen(null)}>
+                            <i className="fas fa-plus"></i> Nova kalkulacija
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="card" style={{marginBottom:12}}>
+                <div className="card-body" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'flex-end'}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Status</label>
+                        <select className="form-control" style={{flex:'0 0 130px'}} value={fStatus} onChange={e=>setFStatus(e.target.value)}>
+                            <option value="">— svi —</option>
+                            <option value="draft">Draft</option>
+                            <option value="knjizena">Knjižena</option>
+                        </select>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Dobavljač</label>
+                        <select className="form-control" style={{flex:'0 0 200px'}} value={fPartner} onChange={e=>setFPartner(e.target.value)}>
+                            <option value="">— svi —</option>
+                            {partneri.map(p => <option key={p.id} value={p.id}>{p.naziv}</option>)}
+                        </select>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Skladište</label>
+                        <select className="form-control" style={{flex:'0 0 180px'}} value={fSkladiste} onChange={e=>setFSkladiste(e.target.value)}>
+                            <option value="">— sva —</option>
+                            {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv}</option>)}
+                        </select>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Datum od</label>
+                        <input type="date" className="form-control" value={fOd} onChange={e=>setFOd(e.target.value)} />
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Datum do</label>
+                        <input type="date" className="form-control" value={fDo} onChange={e=>setFDo(e.target.value)} />
+                    </div>
+                    <button className="btn btn-outline" onClick={ucitaj}><i className="fas fa-filter"></i> Filtriraj</button>
+                </div>
+            </div>
+
+            <div className="card">
+                <div style={{overflowX:'auto'}}>
+                    {ucitavanje ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>
+                    ) : lista.length === 0 ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
+                            <i className="fas fa-inbox" style={{fontSize:24,opacity:0.4,marginBottom:8,display:'block'}}></i>
+                            Nema kalkulacija. Kreiraj prvu.
+                        </div>
+                    ) : (
+                        <table style={{width:'100%'}}>
+                            <thead><tr>
+                                <th>Šifra</th><th>Datum</th><th>Dobavljač</th><th>Skladište</th>
+                                <th>Br. dok.</th><th>Valuta</th><th style={{textAlign:'right'}}>Stavki</th>
+                                <th style={{textAlign:'right'}}>Ukupno BAM</th><th>Status</th>
+                            </tr></thead>
+                            <tbody>
+                                {lista.map(k => (
+                                    <tr key={k.id} onClick={()=>onOpen(k.id)} style={{cursor:'pointer'}}>
+                                        <td style={{fontFamily:'monospace',fontSize:12,fontWeight:600,color:'var(--primary,#2563eb)'}}>{k.sifra}</td>
+                                        <td>{formatDate(k.datum)}</td>
+                                        <td style={{fontWeight:500}}>{k.partner_naziv}</td>
+                                        <td style={{fontSize:12}}>{k.skladiste_naziv}</td>
+                                        <td style={{fontSize:12}}>{k.broj_dokumenta || '-'}</td>
+                                        <td style={{fontSize:12}}>{k.valuta_sifra}</td>
+                                        <td style={{textAlign:'right'}}>{k.ukupno_stavki}</td>
+                                        <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:600}}>{k.ukupno_iznos_bam != null ? feningToKM(k.ukupno_iznos_bam) : '-'}</td>
+                                        <td>{_kalkStatusBadge(k.status)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+                <div style={{padding:'8px 12px',fontSize:12,color:'var(--gray-400)',textAlign:'right'}}>{lista.length} kalkulacija</div>
+            </div>
+        </div>
+    );
+}
+
+function KalkulacijaDetalji({ id, currentUser, onBack }) {
+    const uloga = currentUser && currentUser.uloga;
+    const canEdit = uloga === 'admin' || uloga === 'voditelj';
+
+    const [currentId, setCurrentId] = useState(id || null);
+    const [kalk, setKalk] = useState(null);
+    const [stavke, setStavke] = useState([]);
+    const [troskovi, setTroskovi] = useState([]);
+    const [ucitavanje, setUcitavanje] = useState(!!id);
+
+    const [partneri, setPartneri] = useState([]);
+    const [skladista, setSkladista] = useState([]);
+    const [valute, setValute] = useState([]);
+    const [nacini, setNacini] = useState([]);
+    const [artikli, setArtikli] = useState([]);
+    const [vrsteTroskova, setVrsteTroskova] = useState([]);
+
+    const danas = new Date().toISOString().slice(0,10);
+    const PRAZNO_ZAGLAVLJE = { partner_id:'', skladiste_id:'', datum:danas, broj_dokumenta:'', datum_dokumenta:'', valuta_id:'', kurs:'', nacin_placanja_id:'', napomena:'' };
+    const [zForm, setZForm] = useState(PRAZNO_ZAGLAVLJE);
+    const [snimanjeZ, setSnimanjeZ] = useState(false);
+    const [greska, setGreska] = useState(null);
+
+    const isNew = !currentId;
+    const isDraft = isNew || (kalk && kalk.status === 'draft');
+    const readOnly = !isDraft || !canEdit;
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const [p, s, v, n, a, vt] = await Promise.all([
+                    api('/api/v1/partneri'), api('/api/v1/skladista'), api('/api/v1/valute'),
+                    api('/api/v1/nacini_placanja'), api('/api/v1/artikli'), api('/api/v1/vrste_zavisnih_troskova'),
+                ]);
+                setPartneri((Array.isArray(p)?p:[]).filter(x=>x.je_dobavljac && x.aktivan));
+                setSkladista((Array.isArray(s)?s:[]).filter(x=>x.aktivan));
+                setValute((Array.isArray(v)?v:[]).filter(x=>x.aktivan));
+                setNacini((Array.isArray(n)?n:[]).filter(x=>x.aktivan));
+                setArtikli((Array.isArray(a)?a:[]).filter(x=>x.aktivan && x.vrsta!=='usluga'));
+                setVrsteTroskova((Array.isArray(vt)?vt:[]).filter(x=>x.aktivan));
+            } catch(e) {}
+        })();
+    }, []);
+
+    const ucitajDetalje = async (kid) => {
+        if (!kid) return;
+        setUcitavanje(true);
+        try {
+            const d = await api('/api/v1/kalkulacije/' + kid);
+            setKalk(d);
+            setStavke(Array.isArray(d.stavke)?d.stavke:[]);
+            setTroskovi(Array.isArray(d.zavisni_troskovi)?d.zavisni_troskovi:[]);
+            setZForm({
+                partner_id: d.partner_id || '', skladiste_id: d.skladiste_id || '',
+                datum: d.datum || danas, broj_dokumenta: d.broj_dokumenta || '',
+                datum_dokumenta: d.datum_dokumenta || '', valuta_id: d.valuta_id || '',
+                kurs: d.kurs ? String(d.kurs) : '', nacin_placanja_id: d.nacin_placanja_id || '',
+                napomena: d.napomena || '',
+            });
+        } catch(e) { showAlert('Greška pri učitavanju kalkulacije.', 'error'); }
+        finally { setUcitavanje(false); }
+    };
+    useEffect(() => { if (currentId) ucitajDetalje(currentId); }, [currentId]);
+
+    const valutaSifra = (vid) => { const v = valute.find(x=>x.id===Number(vid)); return v ? v.sifra : ''; };
+    const jeBAM = valutaSifra(zForm.valuta_id) === 'BAM';
+    const kurs = jeBAM ? 1000000 : (Number(zForm.kurs) || (kalk && kalk.kurs) || 0);
+
+    const spremiZaglavlje = async () => {
+        setGreska(null);
+        if (!zForm.partner_id) { setGreska('Dobavljač je obavezan.'); return; }
+        if (!zForm.skladiste_id) { setGreska('Skladište je obavezno.'); return; }
+        if (!zForm.valuta_id) { setGreska('Valuta je obavezna.'); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(zForm.datum)) { setGreska('Datum mora biti YYYY-MM-DD.'); return; }
+        const body = {
+            partner_id: Number(zForm.partner_id), skladiste_id: Number(zForm.skladiste_id),
+            datum: zForm.datum, broj_dokumenta: zForm.broj_dokumenta || null,
+            datum_dokumenta: zForm.datum_dokumenta || null, valuta_id: Number(zForm.valuta_id),
+            nacin_placanja_id: zForm.nacin_placanja_id ? Number(zForm.nacin_placanja_id) : null,
+            napomena: zForm.napomena || null,
+        };
+        if (!jeBAM) {
+            const k = Number(zForm.kurs);
+            if (!Number.isFinite(k) || k <= 0) { setGreska('Za stranu valutu unesi kurs (x1.000.000, npr. 1955830 za EUR).'); return; }
+            body.kurs = Math.round(k);
+        }
+        setSnimanjeZ(true);
+        try {
+            if (isNew) {
+                const odg = await api('/api/v1/kalkulacije', 'POST', body);
+                showAlert('Kalkulacija kreirana: ' + odg.sifra, 'success');
+                setCurrentId(odg.id);
+            } else {
+                await api('/api/v1/kalkulacije/' + currentId, 'PUT', body);
+                showAlert('Zaglavlje ažurirano.', 'success');
+                await ucitajDetalje(currentId);
+            }
+        } catch(e) { setGreska('Greška: ' + (e?.message||'')); }
+        finally { setSnimanjeZ(false); }
+    };
+
+    // --- Stavke ---
+    const PRAZNA_STAVKA = { artikal_id:'', kolicina:'', nabavna_cijena:'', rabat_pct:'', napomena:'' };
+    const [stavkaModal, setStavkaModal] = useState(false);
+    const [stavkaEdit, setStavkaEdit] = useState(null);
+    const [sForm, setSForm] = useState(PRAZNA_STAVKA);
+    const [snimanjeS, setSnimanjeS] = useState(false);
+    const [sGreska, setSGreska] = useState(null);
+
+    const otvoriNovuStavku = () => { setStavkaEdit(null); setSForm(PRAZNA_STAVKA); setSGreska(null); setStavkaModal(true); };
+    const otvoriUrediStavku = (st) => {
+        setStavkaEdit(st);
+        setSForm({ artikal_id: st.artikal_id, kolicina: String(st.kolicina),
+            nabavna_cijena: feningToKM(st.nabavna_cijena),
+            rabat_pct: st.rabat_pct ? String(st.rabat_pct/100).replace('.',',') : '',
+            napomena: st.napomena || '' });
+        setSGreska(null); setStavkaModal(true);
+    };
+    const snimiStavku = async () => {
+        setSGreska(null);
+        if (!sForm.artikal_id) { setSGreska('Artikal je obavezan.'); return; }
+        const kol = Number(String(sForm.kolicina).replace(',','.'));
+        if (!Number.isFinite(kol) || kol <= 0) { setSGreska('Količina mora biti pozitivan broj.'); return; }
+        const rabat = sForm.rabat_pct ? Math.round(parseFloat(String(sForm.rabat_pct).replace(',','.'))*100) : 0;
+        if (rabat < 0 || rabat > 9999) { setSGreska('Rabat mora biti 0–99,99%.'); return; }
+        const body = {
+            artikal_id: Number(sForm.artikal_id), kolicina: kol,
+            nabavna_cijena: kmToFening(sForm.nabavna_cijena), rabat_pct: rabat,
+            napomena: sForm.napomena || null,
+        };
+        setSnimanjeS(true);
+        try {
+            if (stavkaEdit) await api(`/api/v1/kalkulacije/${currentId}/stavke/${stavkaEdit.id}`, 'PUT', body);
+            else await api(`/api/v1/kalkulacije/${currentId}/stavke`, 'POST', body);
+            setStavkaModal(false);
+            await ucitajDetalje(currentId);
+        } catch(e) { setSGreska('Greška: ' + (e?.message||'')); }
+        finally { setSnimanjeS(false); }
+    };
+    const obrisiStavku = async (st) => {
+        if (!await askConfirm(`Obrisati stavku #${st.redni_broj} (${st.artikal_naziv})?`, true)) return;
+        try { await api(`/api/v1/kalkulacije/${currentId}/stavke/${st.id}`, 'DELETE'); await ucitajDetalje(currentId); }
+        catch(e) { showAlert('Greška: ' + (e?.message||''), 'error'); }
+    };
+
+    // --- Zavisni troskovi ---
+    const PRAZAN_TROSAK = { vrsta_id:'', iznos:'', napomena:'' };
+    const [trosakModal, setTrosakModal] = useState(false);
+    const [trosakEdit, setTrosakEdit] = useState(null);
+    const [tForm, setTForm] = useState(PRAZAN_TROSAK);
+    const [snimanjeT, setSnimanjeT] = useState(false);
+    const [tGreska, setTGreska] = useState(null);
+
+    const otvoriNoviTrosak = () => { setTrosakEdit(null); setTForm(PRAZAN_TROSAK); setTGreska(null); setTrosakModal(true); };
+    const otvoriUrediTrosak = (t) => {
+        setTrosakEdit(t);
+        setTForm({ vrsta_id: t.vrsta_id, iznos: feningToKM(t.iznos), napomena: t.napomena || '' });
+        setTGreska(null); setTrosakModal(true);
+    };
+    const snimiTrosak = async () => {
+        setTGreska(null);
+        if (!tForm.vrsta_id) { setTGreska('Vrsta troška je obavezna.'); return; }
+        const body = { vrsta_id: Number(tForm.vrsta_id), iznos: kmToFening(tForm.iznos), napomena: tForm.napomena || null };
+        setSnimanjeT(true);
+        try {
+            if (trosakEdit) await api(`/api/v1/kalkulacije/${currentId}/zavisni-troskovi/${trosakEdit.id}`, 'PUT', body);
+            else await api(`/api/v1/kalkulacije/${currentId}/zavisni-troskovi`, 'POST', body);
+            setTrosakModal(false);
+            await ucitajDetalje(currentId);
+        } catch(e) { setTGreska('Greška: ' + (e?.message||'')); }
+        finally { setSnimanjeT(false); }
+    };
+    const obrisiTrosak = async (t) => {
+        if (!await askConfirm(`Obrisati zavisni trošak (${t.vrsta_naziv})?`, true)) return;
+        try { await api(`/api/v1/kalkulacije/${currentId}/zavisni-troskovi/${t.id}`, 'DELETE'); await ucitajDetalje(currentId); }
+        catch(e) { showAlert('Greška: ' + (e?.message||''), 'error'); }
+    };
+
+    // --- Knjizenje ---
+    const [knjizenje, setKnjizenje] = useState(false);
+    const knjizi = async () => {
+        if (!await askConfirm('Knjiženje zaključava kalkulaciju, unosi stavke u zalihe (prijem) i upisuje nabavnu u cjenovnik. Nepovratno. Nastaviti?', true)) return;
+        setKnjizenje(true);
+        try {
+            const odg = await api(`/api/v1/kalkulacije/${currentId}/knjizi`, 'POST');
+            showAlert(`Kalkulacija knjižena. ${odg.broj_redova_ledger} redova u ledgeru, ${odg.broj_azuriranih_cjenovnika} cjenovnika.`, 'success');
+            await ucitajDetalje(currentId);
+        } catch(e) { showAlert('Greška pri knjiženju: ' + (e?.message||''), 'error'); }
+        finally { setKnjizenje(false); }
+    };
+
+    const sumStavke = stavke.reduce((a,s)=> a + (s.nabavna_sa_rabatom||0) * s.kolicina, 0);
+    const sumTroskovi = troskovi.reduce((a,t)=> a + (t.iznos||0), 0);
+    const sumUkupnoValuta = sumStavke + sumTroskovi;
+    const sumUkupnoBAM = kurs ? Math.round(sumUkupnoValuta * kurs / 1000000) : null;
+    const vSif = valutaSifra(zForm.valuta_id) || (kalk && kalk.valuta_sifra) || '';
+
+    if (ucitavanje) return <div className="fade-in" style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>;
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <button className="btn btn-outline btn-sm" onClick={onBack}><i className="fas fa-arrow-left"></i> Nazad</button>
+                    <h2 style={{margin:0,fontSize:18}}>
+                        {isNew ? 'Nova kalkulacija' : kalk?.sifra} {kalk && _kalkStatusBadge(kalk.status)}
+                    </h2>
+                </div>
+            </div>
+
+            {/* ZAGLAVLJE */}
+            <div className="card" style={{marginBottom:12}}>
+                <div className="card-header"><i className="fas fa-file-invoice" style={{marginRight:6}}></i> Zaglavlje</div>
+                <div className="card-body">
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Dobavljač <span style={{color:'#dc2626'}}>*</span></label>
+                            <select className="form-control" value={zForm.partner_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,partner_id:e.target.value}))}>
+                                <option value="">— odaberi —</option>
+                                {partneri.map(p => <option key={p.id} value={p.id}>{p.naziv}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Skladište prijema <span style={{color:'#dc2626'}}>*</span></label>
+                            <select className="form-control" value={zForm.skladiste_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,skladiste_id:e.target.value}))}>
+                                <option value="">— odaberi —</option>
+                                {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv} ({s.tip})</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Datum <span style={{color:'#dc2626'}}>*</span></label>
+                            <input type="date" className="form-control" value={zForm.datum} disabled={readOnly} onChange={e=>setZForm(f=>({...f,datum:e.target.value}))} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Broj dokumenta dobavljača</label>
+                            <input className="form-control" value={zForm.broj_dokumenta} disabled={readOnly} onChange={e=>setZForm(f=>({...f,broj_dokumenta:e.target.value}))} placeholder="npr. R-1234/26" />
+                        </div>
+                        <div className="form-group">
+                            <label>Datum dokumenta</label>
+                            <input type="date" className="form-control" value={zForm.datum_dokumenta} disabled={readOnly} onChange={e=>setZForm(f=>({...f,datum_dokumenta:e.target.value}))} />
+                        </div>
+                        <div className="form-group">
+                            <label>Način plaćanja</label>
+                            <select className="form-control" value={zForm.nacin_placanja_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,nacin_placanja_id:e.target.value}))}>
+                                <option value="">—</option>
+                                {nacini.map(n => <option key={n.id} value={n.id}>{n.naziv}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Valuta <span style={{color:'#dc2626'}}>*</span></label>
+                            <select className="form-control" value={zForm.valuta_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,valuta_id:e.target.value, kurs: valutaSifra(e.target.value)==='BAM' ? '' : f.kurs}))}>
+                                <option value="">— odaberi —</option>
+                                {valute.map(v => <option key={v.id} value={v.id}>{v.sifra} - {v.naziv}</option>)}
+                            </select>
+                        </div>
+                        {!jeBAM && zForm.valuta_id && (
+                            <div className="form-group">
+                                <label>Kurs (×1.000.000) <span style={{color:'#dc2626'}}>*</span></label>
+                                <input className="form-control" inputMode="numeric" value={zForm.kurs} disabled={readOnly} onChange={e=>setZForm(f=>({...f,kurs:e.target.value}))} placeholder="npr. 1955830 (EUR)" />
+                            </div>
+                        )}
+                        <div className="form-group" style={{flex:'2 1 auto'}}>
+                            <label>Napomena</label>
+                            <input className="form-control" value={zForm.napomena} disabled={readOnly} onChange={e=>setZForm(f=>({...f,napomena:e.target.value}))} />
+                        </div>
+                    </div>
+                    {greska && <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{greska}</div>}
+                    {!readOnly && (
+                        <div style={{marginTop:10}}>
+                            <button className="btn btn-primary" onClick={spremiZaglavlje} disabled={snimanjeZ}>
+                                {snimanjeZ ? <><i className="fas fa-spinner fa-spin"></i> Snimanje...</> : <><i className="fas fa-save"></i> {isNew ? 'Kreiraj draft' : 'Sačuvaj zaglavlje'}</>}
+                            </button>
+                        </div>
+                    )}
+                    {kalk && kalk.status === 'knjizena' && (
+                        <div style={{marginTop:10,padding:10,background:'#ecfdf5',color:'#065f46',borderRadius:6,fontSize:13}}>
+                            <i className="fas fa-lock" style={{marginRight:6}}></i>
+                            Knjižena {formatDate(kalk.knjiziano_kreirano)} {kalk.knjizio_ime ? `— ${kalk.knjizio_ime} ${kalk.knjizio_prezime}` : ''}. Stavke su zaključane.
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* STAVKE — samo kad kalkulacija postoji */}
+            {!isNew && (
+                <div className="card" style={{marginBottom:12}}>
+                    <div className="card-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span><i className="fas fa-list" style={{marginRight:6}}></i> Stavke</span>
+                        {!readOnly && <button className="btn btn-primary btn-sm" onClick={otvoriNovuStavku}><i className="fas fa-plus"></i> Dodaj stavku</button>}
+                    </div>
+                    <div style={{overflowX:'auto'}}>
+                        {stavke.length === 0 ? (
+                            <div style={{padding:24,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>Nema stavki. Dodaj barem jednu prije knjiženja.</div>
+                        ) : (
+                            <table style={{width:'100%'}}>
+                                <thead><tr>
+                                    <th>#</th><th>Šifra</th><th>Artikal</th>
+                                    <th style={{textAlign:'right'}}>Količina</th>
+                                    <th style={{textAlign:'right'}}>Nabavna jed.</th>
+                                    <th style={{textAlign:'right'}}>Rabat %</th>
+                                    <th style={{textAlign:'right'}}>Sa rabatom</th>
+                                    {kalk && kalk.status === 'knjizena' && <th style={{textAlign:'right'}}>Finalna BAM</th>}
+                                    {!readOnly && <th style={{textAlign:'right'}}>Akcije</th>}
+                                </tr></thead>
+                                <tbody>
+                                    {stavke.map(s => (
+                                        <tr key={s.id}>
+                                            <td>{s.redni_broj}</td>
+                                            <td style={{fontFamily:'monospace',fontSize:12,color:'var(--gray-500)'}}>{s.artikal_sifra}</td>
+                                            <td style={{fontWeight:500}}>{s.artikal_naziv}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{s.kolicina} {s.artikal_jm}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{feningToKM(s.nabavna_cijena)}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{((s.rabat_pct||0)/100).toFixed(2).replace('.',',')}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:600}}>{feningToKM(s.nabavna_sa_rabatom)}</td>
+                                            {kalk && kalk.status === 'knjizena' && <td style={{textAlign:'right',fontFamily:'monospace',color:'#065f46'}}>{s.nabavna_finalna_bam != null ? feningToKM(s.nabavna_finalna_bam) : '-'}</td>}
+                                            {!readOnly && (
+                                                <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                                                    <button className="btn btn-sm btn-outline" onClick={()=>otvoriUrediStavku(s)} style={{marginRight:4}}><i className="fas fa-edit"></i></button>
+                                                    <button className="btn btn-sm" onClick={()=>obrisiStavku(s)} style={{background:'#fee2e2',color:'#991b1b',border:'none'}}><i className="fas fa-trash"></i></button>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                    <div style={{padding:'8px 12px',textAlign:'right',fontSize:13}}>
+                        Σ stavke ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumStavke)}</strong>
+                    </div>
+                </div>
+            )}
+
+            {/* ZAVISNI TROSKOVI */}
+            {!isNew && (
+                <div className="card" style={{marginBottom:12}}>
+                    <div className="card-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span><i className="fas fa-truck-loading" style={{marginRight:6}}></i> Zavisni troškovi</span>
+                        {!readOnly && <button className="btn btn-primary btn-sm" onClick={otvoriNoviTrosak}><i className="fas fa-plus"></i> Dodaj trošak</button>}
+                    </div>
+                    <div style={{overflowX:'auto'}}>
+                        {troskovi.length === 0 ? (
+                            <div style={{padding:18,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>Nema zavisnih troškova (opciono).</div>
+                        ) : (
+                            <table style={{width:'100%'}}>
+                                <thead><tr>
+                                    <th>Vrsta</th><th style={{textAlign:'right'}}>Iznos ({vSif})</th><th>Napomena</th>
+                                    {!readOnly && <th style={{textAlign:'right'}}>Akcije</th>}
+                                </tr></thead>
+                                <tbody>
+                                    {troskovi.map(t => (
+                                        <tr key={t.id}>
+                                            <td style={{fontWeight:500}}>{t.vrsta_naziv}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{feningToKM(t.iznos)}</td>
+                                            <td style={{fontSize:12,color:'var(--gray-500)'}}>{t.napomena || '-'}</td>
+                                            {!readOnly && (
+                                                <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                                                    <button className="btn btn-sm btn-outline" onClick={()=>otvoriUrediTrosak(t)} style={{marginRight:4}}><i className="fas fa-edit"></i></button>
+                                                    <button className="btn btn-sm" onClick={()=>obrisiTrosak(t)} style={{background:'#fee2e2',color:'#991b1b',border:'none'}}><i className="fas fa-trash"></i></button>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                    <div style={{padding:'8px 12px',textAlign:'right',fontSize:13}}>
+                        Σ zavisni ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumTroskovi)}</strong>
+                    </div>
+                </div>
+            )}
+
+            {/* UKUPNO + KNJIZI */}
+            {!isNew && (
+                <div className="card" style={{marginBottom:12}}>
+                    <div className="card-body" style={{display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:16,alignItems:'center'}}>
+                        <div style={{fontSize:14,lineHeight:1.9}}>
+                            <div>Stavke ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumStavke)}</strong></div>
+                            <div>Zavisni troškovi ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumTroskovi)}</strong></div>
+                            <div>Ukupno ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumUkupnoValuta)}</strong> {!jeBAM && <span style={{color:'var(--gray-400)',fontSize:12}}>× kurs {kurs ? (kurs/1000000).toFixed(6) : '?'}</span>}</div>
+                            <div style={{fontSize:16,marginTop:4}}>Ukupno BAM: <strong style={{fontFamily:'monospace',color:'#065f46'}}>{sumUkupnoBAM != null ? feningToKM(sumUkupnoBAM) : '—'}</strong></div>
+                        </div>
+                        {isDraft && canEdit && (
+                            <button className="btn btn-primary" style={{background:'#059669',borderColor:'#059669',fontSize:15,padding:'10px 20px'}}
+                                onClick={knjizi} disabled={knjizenje || stavke.length === 0}
+                                title={stavke.length === 0 ? 'Dodaj barem jednu stavku' : ''}>
+                                {knjizenje ? <><i className="fas fa-spinner fa-spin"></i> Knjiženje...</> : <><i className="fas fa-check-double"></i> Knjiži kalkulaciju</>}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* STAVKA MODAL */}
+            {stavkaModal && (
+                <Modal isOpen={true} onClose={()=>!snimanjeS && setStavkaModal(false)}
+                    title={stavkaEdit ? `Uredi stavku #${stavkaEdit.redni_broj}` : 'Nova stavka'}
+                    footer={<>
+                        <button className="btn btn-outline" onClick={()=>setStavkaModal(false)} disabled={snimanjeS}>Odustani</button>
+                        <button className="btn btn-primary" onClick={snimiStavku} disabled={snimanjeS}>
+                            {snimanjeS ? <><i className="fas fa-spinner fa-spin"></i> Snimanje...</> : <><i className="fas fa-save"></i> {stavkaEdit ? 'Sačuvaj' : 'Dodaj'}</>}
+                        </button>
+                    </>}>
+                    <div className="form-group">
+                        <label>Artikal <span style={{color:'#dc2626'}}>*</span></label>
+                        <select className="form-control" value={sForm.artikal_id} onChange={e=>setSForm(f=>({...f,artikal_id:e.target.value}))} autoFocus>
+                            <option value="">— odaberi artikal —</option>
+                            {artikli.map(a => <option key={a.id} value={a.id}>{a.sifra} - {a.naziv}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Količina <span style={{color:'#dc2626'}}>*</span></label>
+                            <input className="form-control" inputMode="decimal" value={sForm.kolicina} onChange={e=>setSForm(f=>({...f,kolicina:e.target.value}))} placeholder="0" />
+                        </div>
+                        <div className="form-group">
+                            <label>Nabavna jed. ({vSif || 'valuta'})</label>
+                            <input className="form-control" inputMode="decimal" value={sForm.nabavna_cijena} onChange={e=>setSForm(f=>({...f,nabavna_cijena:e.target.value}))} placeholder="0,00" />
+                        </div>
+                        <div className="form-group">
+                            <label>Rabat %</label>
+                            <input className="form-control" inputMode="decimal" value={sForm.rabat_pct} onChange={e=>setSForm(f=>({...f,rabat_pct:e.target.value}))} placeholder="0,00" />
+                        </div>
+                    </div>
+                    {sForm.nabavna_cijena && sForm.kolicina && (() => {
+                        const nf = kmToFening(sForm.nabavna_cijena);
+                        const rb = sForm.rabat_pct ? Math.round(parseFloat(String(sForm.rabat_pct).replace(',','.'))*100) : 0;
+                        const sr = Math.round(nf * (10000 - rb) / 10000);
+                        const kol = Number(String(sForm.kolicina).replace(',','.')) || 0;
+                        return (
+                            <div style={{padding:10,background:'var(--gray-100)',borderRadius:8,fontSize:13,marginTop:8,display:'flex',gap:20,flexWrap:'wrap'}}>
+                                <span>Sa rabatom (jed.): <strong style={{fontFamily:'monospace'}}>{feningToKM(sr)}</strong></span>
+                                <span>Vrijednost stavke: <strong style={{fontFamily:'monospace'}}>{feningToKM(Math.round(sr*kol))} {vSif}</strong></span>
+                            </div>
+                        );
+                    })()}
+                    <div className="form-group" style={{marginTop:8}}>
+                        <label>Napomena</label>
+                        <input className="form-control" value={sForm.napomena} onChange={e=>setSForm(f=>({...f,napomena:e.target.value}))} />
+                    </div>
+                    {sGreska && <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{sGreska}</div>}
+                </Modal>
+            )}
+
+            {/* TROSAK MODAL */}
+            {trosakModal && (
+                <Modal isOpen={true} onClose={()=>!snimanjeT && setTrosakModal(false)}
+                    title={trosakEdit ? 'Uredi zavisni trošak' : 'Novi zavisni trošak'}
+                    footer={<>
+                        <button className="btn btn-outline" onClick={()=>setTrosakModal(false)} disabled={snimanjeT}>Odustani</button>
+                        <button className="btn btn-primary" onClick={snimiTrosak} disabled={snimanjeT}>
+                            {snimanjeT ? <><i className="fas fa-spinner fa-spin"></i> Snimanje...</> : <><i className="fas fa-save"></i> {trosakEdit ? 'Sačuvaj' : 'Dodaj'}</>}
+                        </button>
+                    </>}>
+                    <div className="form-group">
+                        <label>Vrsta troška <span style={{color:'#dc2626'}}>*</span></label>
+                        <select className="form-control" value={tForm.vrsta_id} onChange={e=>setTForm(f=>({...f,vrsta_id:e.target.value}))} autoFocus>
+                            <option value="">— odaberi —</option>
+                            {vrsteTroskova.map(v => <option key={v.id} value={v.id}>{v.naziv}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label>Iznos ({vSif || 'valuta'})</label>
+                        <input className="form-control" inputMode="decimal" value={tForm.iznos} onChange={e=>setTForm(f=>({...f,iznos:e.target.value}))} placeholder="0,00" />
+                    </div>
+                    <div className="form-group">
+                        <label>Napomena</label>
+                        <input className="form-control" value={tForm.napomena} onChange={e=>setTForm(f=>({...f,napomena:e.target.value}))} />
+                    </div>
+                    {tGreska && <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{tGreska}</div>}
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+// =====================================================================
 // FAZA 2 — ZALIHE (append-only ledger)
 // 3 taba: Stanje (agregat SUM), Istorija (raw ledger), Novo kretanje (form)
 // Nikada NE UPDATE/DELETE - korekcije idu kroz novi 'korekcija_plus'/'korekcija_minus' red.
@@ -14459,6 +15090,9 @@ const MODULI = [
         { page: 'pazar',        naziv: 'Polog pazara',        icon: 'fas fa-cash-register' },
         { page: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fas fa-exchange-alt' },
     ]},
+    { id: 'm_nabavka', naziv: 'Nabavka', icon: 'fas fa-truck-loading', stavke: [
+        { page: 'kalkulacije', naziv: 'Ulazne kalkulacije', icon: 'fas fa-file-invoice' },
+    ]},
     { id: 'm_zalihe', naziv: 'Zalihe', icon: 'fas fa-boxes', stavke: [
         { page: 'zalihe', naziv: 'Zalihe', icon: 'fas fa-boxes' },
     ]},
@@ -15220,6 +15854,7 @@ function App() {
             case 'grupe_artikala': return <GrupeArtikalaPage currentUser={currentUser} />;
             case 'tarife': return <TarifePage currentUser={currentUser} />;
             case 'cjenovnici': return <CjenovniciPage currentUser={currentUser} />;
+            case 'kalkulacije': return <KalkulacijePage currentUser={currentUser} />;
             case 'zalihe': return <ZalihePage currentUser={currentUser} />;
             case 'skladista': return <SkladistaPage currentUser={currentUser} />;
             case 'nacini_placanja': return <NaciniPlacanjaPage currentUser={currentUser} />;
