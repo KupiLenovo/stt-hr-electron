@@ -8248,7 +8248,7 @@ function ProfilPage({ currentUser, radnici }) {
                                 <label>{f==='stari'?'Trenutni PIN':f==='novi'?'Novi PIN':'Ponovi novi PIN'}</label>
                                 <input type="password" inputMode="numeric" maxLength={4} className="form-control"
                                     style={{maxWidth:160,letterSpacing:8,fontSize:20}}
-                                    value={pinForm[f]} onChange={e=>setPinForm(p=>({...p,[f]:e.target.value.replace(/\D/,'')}))} />
+                                    value={pinForm[f]} onChange={e=>setPinForm(p=>({...p,[f]:e.target.value.replace(/\D/g,'')}))} />
                             </div>
                         ))}
                         {pinForm.err && <div style={{color:'#dc2626',fontSize:13,marginBottom:10}}>{pinForm.err}</div>}
@@ -14320,7 +14320,7 @@ function DownloadPage({ currentUser }) {
 
                         {/* Format */}
                         <label style={{fontSize:12,fontWeight:600,color:'var(--gray-500)',textTransform:'uppercase',marginBottom:8,display:'block'}}>3. Format</label>
-                        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:20}}>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(72px, 1fr))',gap:8,marginBottom:20}}>
                             {[['csv','fa-file-csv','#10b981'],['excel','fa-file-excel','#1d6f42'],['json','fa-file-code','#7c3aed'],['pdf','fa-file-pdf','#dc2626']].map(([f, icon, color]) => (
                                 <div key={f} onClick={()=>setFormat(f)} style={{
                                     padding:14,borderRadius:10,cursor:'pointer',textAlign:'center',
