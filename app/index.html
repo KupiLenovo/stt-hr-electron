@@ -1128,13 +1128,16 @@ async function api(path, method, body) {
         if (!res.ok) {
             // Pokušaj uzeti error poruku iz server response-a
             let errorMsg = 'HTTP ' + res.status;
+            let errBody = null;
             try {
                 const errJson = await res.json();
+                errBody = errJson;
                 if (errJson?.error) errorMsg = errJson.error;
             } catch(_) {}
             addDebug('error', `${method} ${path} → ${errorMsg}`);
             const err = new Error(errorMsg);
             err.status = res.status;
+            err.body = errBody;   // pun JSON body greske (npr. 409 kontrolni_iznos detalji)
             throw err;
         }
         addDebug('ok', `${method} ${path}`);
@@ -10838,7 +10841,7 @@ function KalkulacijaDetalji({ id, currentUser, onBack }) {
     const [vrsteTroskova, setVrsteTroskova] = useState([]);
 
     const danas = new Date().toISOString().slice(0,10);
-    const PRAZNO_ZAGLAVLJE = { partner_id:'', skladiste_id:'', datum:danas, broj_dokumenta:'', datum_dokumenta:'', valuta_id:'', kurs:'', nacin_placanja_id:'', napomena:'' };
+    const PRAZNO_ZAGLAVLJE = { partner_id:'', skladiste_id:'', datum:danas, broj_dokumenta:'', datum_dokumenta:'', valuta_id:'', kurs:'', nacin_placanja_id:'', napomena:'', iznos_fakture_sa_pdv:'' };
     const [zForm, setZForm] = useState(PRAZNO_ZAGLAVLJE);
     const [snimanjeZ, setSnimanjeZ] = useState(false);
     const [greska, setGreska] = useState(null);
@@ -10878,6 +10881,7 @@ function KalkulacijaDetalji({ id, currentUser, onBack }) {
                 datum_dokumenta: d.datum_dokumenta || '', valuta_id: d.valuta_id || '',
                 kurs: d.kurs ? String(d.kurs) : '', nacin_placanja_id: d.nacin_placanja_id || '',
                 napomena: d.napomena || '',
+                iznos_fakture_sa_pdv: d.iznos_fakture_sa_pdv != null ? feningToKM(d.iznos_fakture_sa_pdv) : '',
             });
         } catch(e) { showAlert('Greška pri učitavanju kalkulacije.', 'error'); }
         finally { setUcitavanje(false); }
@@ -10900,6 +10904,7 @@ function KalkulacijaDetalji({ id, currentUser, onBack }) {
             datum_dokumenta: zForm.datum_dokumenta || null, valuta_id: Number(zForm.valuta_id),
             nacin_placanja_id: zForm.nacin_placanja_id ? Number(zForm.nacin_placanja_id) : null,
             napomena: zForm.napomena || null,
+            iznos_fakture_sa_pdv: (zForm.iznos_fakture_sa_pdv !== '' && zForm.iznos_fakture_sa_pdv != null) ? kmToFening(zForm.iznos_fakture_sa_pdv) : null,
         };
         if (!jeBAM) {
             const k = Number(zForm.kurs);
@@ -11000,15 +11005,32 @@ function KalkulacijaDetalji({ id, currentUser, onBack }) {
 
     // --- Knjizenje ---
     const [knjizenje, setKnjizenje] = useState(false);
+    const _izvrsiKnjizenje = async (force) => {
+        const odg = await api(`/api/v1/kalkulacije/${currentId}/knjizi`, 'POST', force ? { force_knjizi: true } : {});
+        showAlert(`Kalkulacija knjižena${force ? ' (uz upozorenje o razlici)' : ''}. ${odg.broj_redova_ledger} redova u ledgeru, ${odg.broj_azuriranih_cjenovnika} cjenovnika.`, force ? 'warning' : 'success');
+        await ucitajDetalje(currentId);
+    };
     const knjizi = async () => {
         if (!await askConfirm('Knjiženje zaključava kalkulaciju, unosi stavke u zalihe (prijem) i upisuje nabavnu u cjenovnik. Nepovratno. Nastaviti?', true)) return;
         setKnjizenje(true);
         try {
-            const odg = await api(`/api/v1/kalkulacije/${currentId}/knjizi`, 'POST');
-            showAlert(`Kalkulacija knjižena. ${odg.broj_redova_ledger} redova u ledgeru, ${odg.broj_azuriranih_cjenovnika} cjenovnika.`, 'success');
-            await ucitajDetalje(currentId);
-        } catch(e) { showAlert('Greška pri knjiženju: ' + (e?.message||''), 'error'); }
-        finally { setKnjizenje(false); }
+            await _izvrsiKnjizenje(false);
+        } catch(e) {
+            if (e?.status === 409 && e?.body?.error === 'kontrolni_iznos_ne_odgovara') {
+                const r = e.body.razlika;
+                const sif = valutaSifra(zForm.valuta_id) || (kalk && kalk.valuta_sifra) || '';
+                const ok = await askConfirm(`Razlika između kontrolnog iznosa fakture i sume stavki je ${feningToKM(r)} ${sif}. Provjeri da li su stavke ili kontrolni iznos tačno upisani. Ipak knjiži?`, true);
+                if (ok) {
+                    try { await _izvrsiKnjizenje(true); }
+                    catch(e2) { showAlert('Greška pri knjiženju: ' + (e2?.message||''), 'error'); }
+                }
+            } else if (e?.message === 'kalkulacija_zakljucana') {
+                showAlert('Kalkulacija je već knjižena.', 'error');
+                await ucitajDetalje(currentId);
+            } else {
+                showAlert('Greška pri knjiženju: ' + (e?.message||''), 'error');
+            }
+        } finally { setKnjizenje(false); }
     };
 
     const sumStavke = stavke.reduce((a,s)=> a + (s.nabavna_sa_rabatom||0) * s.kolicina, 0);
@@ -11016,6 +11038,11 @@ function KalkulacijaDetalji({ id, currentUser, onBack }) {
     const sumUkupnoValuta = sumStavke + sumTroskovi;
     const sumUkupnoBAM = kurs ? Math.round(sumUkupnoValuta * kurs / 1000000) : null;
     const vSif = valutaSifra(zForm.valuta_id) || (kalk && kalk.valuta_sifra) || '';
+    // Kontrolni iznos fakture: izracunato SA PDV-om (stavke*tarifa + zavisni), u valuti
+    const sumStavkeSaPdv = stavke.reduce((a,s)=> a + (s.nabavna_sa_rabatom||0) * s.kolicina * (1 + (Number(s.tarifa_stopa)||0)/10000), 0);
+    const izracunatoSaPdv = Math.round(sumStavkeSaPdv + sumTroskovi);
+    const kontrolniIznos = (kalk && kalk.iznos_fakture_sa_pdv != null) ? kalk.iznos_fakture_sa_pdv : null;
+    const kontrolnaRazlika = kontrolniIznos != null ? (izracunatoSaPdv - kontrolniIznos) : null;
 
     if (ucitavanje) return <div className="fade-in" style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>;
 
@@ -11088,6 +11115,14 @@ function KalkulacijaDetalji({ id, currentUser, onBack }) {
                         <div className="form-group" style={{flex:'2 1 auto'}}>
                             <label>Napomena</label>
                             <input className="form-control" value={zForm.napomena} disabled={readOnly} onChange={e=>setZForm(f=>({...f,napomena:e.target.value}))} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group" style={{flex:'1 1 auto'}}>
+                            <label>Iznos fakture sa PDV-om (kontrolno, u valuti)</label>
+                            <input className="form-control" inputMode="decimal" value={zForm.iznos_fakture_sa_pdv} disabled={readOnly}
+                                onChange={e=>setZForm(f=>({...f,iznos_fakture_sa_pdv:e.target.value}))} placeholder="0,00 (opciono)" />
+                            <div style={{fontSize:12,color:'var(--gray-500)',marginTop:4}}>Iznos kojeg dobavljač traži da se plati (s PDV-om). Sistem ga poredi sa sumom stavki prije knjiženja.</div>
                         </div>
                     </div>
                     {greska && <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{greska}</div>}
@@ -11206,6 +11241,15 @@ function KalkulacijaDetalji({ id, currentUser, onBack }) {
                             <div>Zavisni troškovi ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumTroskovi)}</strong></div>
                             <div>Ukupno ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumUkupnoValuta)}</strong> {!jeBAM && <span style={{color:'var(--gray-400)',fontSize:12}}>× kurs {kurs ? (kurs/1000000).toFixed(6) : '?'}</span>}</div>
                             <div style={{fontSize:16,marginTop:4}}>Ukupno BAM: <strong style={{fontFamily:'monospace',color:'#065f46'}}>{sumUkupnoBAM != null ? feningToKM(sumUkupnoBAM) : '—'}</strong></div>
+                            {kontrolniIznos != null && (
+                                <div style={{marginTop:8,padding:8,background:'var(--gray-100)',borderRadius:6,fontSize:13}}>
+                                    <div>Kontrolni iznos (faktura): <strong style={{fontFamily:'monospace'}}>{feningToKM(kontrolniIznos)} {vSif}</strong></div>
+                                    <div>Izračunato (stavke + PDV + zavisni): <strong style={{fontFamily:'monospace'}}>{feningToKM(izracunatoSaPdv)} {vSif}</strong></div>
+                                    <div style={{color: Math.abs(kontrolnaRazlika) <= 1 ? '#059669' : '#dc2626', fontWeight: Math.abs(kontrolnaRazlika) <= 1 ? 400 : 700}}>
+                                        Razlika: <strong style={{fontFamily:'monospace'}}>{feningToKM(kontrolnaRazlika)} {vSif}</strong> {Math.abs(kontrolnaRazlika) <= 1 ? '✓ U redu' : '⚠ Provjeriti'}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         {isDraft && canEdit && (
                             <button className="btn btn-primary" style={{background:'#059669',borderColor:'#059669',fontSize:15,padding:'10px 20px'}}
