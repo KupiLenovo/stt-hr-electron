@@ -10687,6 +10687,14 @@ function _kalkStatusBadge(status) {
 
 function KalkulacijePage({ currentUser }) {
     const [view, setView] = useState({ mode: 'lista' });
+    // Faza 3.5: otvori konkretnu kalkulaciju kad se dođe iz Zalihe→Istorija (klik na referencu)
+    useEffect(() => {
+        const pending = localStorage.getItem('open_kalkulacija_id');
+        if (pending) {
+            localStorage.removeItem('open_kalkulacija_id');
+            setView({ mode: 'detalji', id: Number(pending) });
+        }
+    }, []);
     if (view.mode === 'detalji')
         return <KalkulacijaDetalji id={view.id} currentUser={currentUser} onBack={()=>setView({ mode: 'lista' })} />;
     return <KalkulacijaLista currentUser={currentUser} onOpen={(id)=>setView({ mode: 'detalji', id })} />;
@@ -11368,7 +11376,7 @@ function _zaliheTipMeta(kod) {
     return ZALIHE_TIPOVI.find(t => t.kod === kod) || { kod, naziv: kod, predznak: '?', boja: '#6b7280' };
 }
 
-function ZalihePage({ currentUser }) {
+function ZalihePage({ currentUser, setPage }) {
     const uloga = currentUser && currentUser.uloga;
     const canEdit = uloga === 'admin' || uloga === 'voditelj';
 
@@ -11688,7 +11696,13 @@ function ZalihePage({ currentUser }) {
                                                     <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:600,color: negat ? '#dc2626' : '#059669'}}>
                                                         {Number(r.kolicina).toLocaleString('bs-BA',{maximumFractionDigits:3})} <span style={{fontSize:10,color:'var(--gray-400)'}}>{r.artikal_jm}</span>
                                                     </td>
-                                                    <td style={{fontSize:12,fontFamily:'monospace',color:'var(--gray-500)'}}>{r.vezni_dokument || '—'}</td>
+                                                    <td style={{fontSize:12,fontFamily:'monospace',color:'var(--gray-500)'}}>
+                                                        {r.referenca_tip === 'kalkulacija' && r.referenca_id ? (
+                                                            <a href="#" onClick={(e)=>{e.preventDefault(); localStorage.setItem('open_kalkulacija_id', r.referenca_id); setPage && setPage('kalkulacije');}}
+                                                               style={{color:'var(--primary, #2563eb)',cursor:'pointer',textDecoration:'underline'}}
+                                                               title="Otvori kalkulaciju">{r.vezni_dokument}</a>
+                                                        ) : (r.vezni_dokument || '—')}
+                                                    </td>
                                                     <td style={{fontSize:12,color:'var(--gray-600)'}}>{r.partner_naziv || '—'}</td>
                                                     <td style={{fontSize:12,color:'var(--gray-500)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.opis || ''}</td>
                                                     <td style={{fontSize:12,color:'var(--gray-500)'}}>{r.kreirao_ime ? `${r.kreirao_ime} ${r.kreirao_prezime||''}`.trim() : '—'}</td>
@@ -15899,7 +15913,7 @@ function App() {
             case 'tarife': return <TarifePage currentUser={currentUser} />;
             case 'cjenovnici': return <CjenovniciPage currentUser={currentUser} />;
             case 'kalkulacije': return <KalkulacijePage currentUser={currentUser} />;
-            case 'zalihe': return <ZalihePage currentUser={currentUser} />;
+            case 'zalihe': return <ZalihePage currentUser={currentUser} setPage={setPage} />;
             case 'skladista': return <SkladistaPage currentUser={currentUser} />;
             case 'nacini_placanja': return <NaciniPlacanjaPage currentUser={currentUser} />;
             case 'drzave': return <DrzavePage currentUser={currentUser} />;
