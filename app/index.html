@@ -10757,24 +10757,24 @@ function KalkulacijaLista({ currentUser, onOpen }) {
 
             <div className="card" style={{marginBottom:12}}>
                 <div className="card-body" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'flex-end'}}>
-                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:4,width:130}}>
                         <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Status</label>
-                        <select className="form-control" style={{flex:'0 0 130px'}} value={fStatus} onChange={e=>setFStatus(e.target.value)}>
+                        <select className="form-control" style={{width:'100%'}} value={fStatus} onChange={e=>setFStatus(e.target.value)}>
                             <option value="">— svi —</option>
                             <option value="draft">Draft</option>
                             <option value="knjizena">Knjižena</option>
                         </select>
                     </div>
-                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:4,width:200}}>
                         <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Dobavljač</label>
-                        <select className="form-control" style={{flex:'0 0 200px'}} value={fPartner} onChange={e=>setFPartner(e.target.value)}>
+                        <select className="form-control" style={{width:'100%'}} value={fPartner} onChange={e=>setFPartner(e.target.value)}>
                             <option value="">— svi —</option>
                             {partneri.map(p => <option key={p.id} value={p.id}>{p.naziv}</option>)}
                         </select>
                     </div>
-                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:4,width:180}}>
                         <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Skladište</label>
-                        <select className="form-control" style={{flex:'0 0 180px'}} value={fSkladiste} onChange={e=>setFSkladiste(e.target.value)}>
+                        <select className="form-control" style={{width:'100%'}} value={fSkladiste} onChange={e=>setFSkladiste(e.target.value)}>
                             <option value="">— sva —</option>
                             {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv}</option>)}
                         </select>
