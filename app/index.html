@@ -10674,6 +10674,627 @@ function CjenovniciPage({ currentUser }) {
 }
 
 // =====================================================================
+// FAZA 4.A — PRODAJA: Veleprodajne fakture (racun, tip_prodaje='vp')
+// Knjizenje skida stanje ('izdaja'). Marza = nabavna snapshot (cjenovnici.nabavna).
+// Usluge dozvoljene (ne diraju zalihu). Novac=fening, popust=bp x100.
+// =====================================================================
+
+function _racunStatusBadge(status) {
+    if (status === 'knjizena') return <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'#d1fae5',color:'#065f46',fontWeight:600}}>KNJIŽENA</span>;
+    if (status === 'stornirana') return <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'#fee2e2',color:'#991b1b',fontWeight:600}}>STORNIRANA</span>;
+    return <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'#e5e7eb',color:'#374151',fontWeight:600}}>DRAFT</span>;
+}
+
+function FaktureVPRouter({ currentUser }) {
+    const [view, setView] = useState({ mode: 'lista' });
+    if (view.mode === 'detalji')
+        return <FakturaVPDetalji id={view.id} currentUser={currentUser} onBack={()=>setView({ mode: 'lista' })} />;
+    return <FaktureVPLista currentUser={currentUser} onOpen={(id)=>setView({ mode: 'detalji', id })} />;
+}
+
+function FaktureVPLista({ currentUser, onOpen }) {
+    const uloga = currentUser && currentUser.uloga;
+    const canEdit = uloga === 'admin' || uloga === 'voditelj';
+    const [lista, setLista] = useState([]);
+    const [partneri, setPartneri] = useState([]);
+    const [skladista, setSkladista] = useState([]);
+    const [ucitavanje, setUcitavanje] = useState(true);
+    const [fStatus, setFStatus] = useState('');
+    const [fPartner, setFPartner] = useState('');
+    const [fSkladiste, setFSkladiste] = useState('');
+    const [fOd, setFOd] = useState('');
+    const [fDo, setFDo] = useState('');
+
+    const ucitaj = async () => {
+        setUcitavanje(true);
+        try {
+            const qs = ['tip_prodaje=vp', 'vrsta_dokumenta=faktura'];
+            if (fStatus) qs.push('status=' + encodeURIComponent(fStatus));
+            if (fPartner) qs.push('partner_id=' + encodeURIComponent(fPartner));
+            if (fSkladiste) qs.push('skladiste_id=' + encodeURIComponent(fSkladiste));
+            if (fOd) qs.push('datum_od=' + encodeURIComponent(fOd));
+            if (fDo) qs.push('datum_do=' + encodeURIComponent(fDo));
+            const d = await api('/api/v1/racuni?' + qs.join('&'));
+            setLista(Array.isArray(d) ? d : []);
+        } catch (e) { showAlert('Greška pri učitavanju faktura.', 'error'); setLista([]); }
+        finally { setUcitavanje(false); }
+    };
+    useEffect(() => {
+        (async () => {
+            try {
+                const [p, s] = await Promise.all([api('/api/v1/partneri'), api('/api/v1/skladista')]);
+                setPartneri((Array.isArray(p)?p:[]).filter(x => x.aktivan));
+                setSkladista((Array.isArray(s)?s:[]).filter(x => x.aktivan));
+            } catch (e) {}
+            ucitaj();
+        })();
+    }, []);
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{fontSize:13,color:'var(--gray-500)'}}>
+                    <i className="fas fa-file-invoice" style={{marginRight:6}}></i>
+                    Veleprodajne fakture (B2B). Knjiženje skida stanje sa zaliha i zaključava fakturu.
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <ExportButton tabela="racun" naslov="Racuni (prodaja)" />
+                    {canEdit && (
+                        <button className="btn btn-primary" onClick={()=>onOpen(null)}>
+                            <i className="fas fa-plus"></i> Nova faktura
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="card" style={{marginBottom:12}}>
+                <div className="card-body" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'flex-end'}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:4,width:140}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Status</label>
+                        <select className="form-control" style={{width:'100%'}} value={fStatus} onChange={e=>setFStatus(e.target.value)}>
+                            <option value="">— svi —</option>
+                            <option value="draft">Draft</option>
+                            <option value="knjizena">Knjižena</option>
+                            <option value="stornirana">Stornirana</option>
+                        </select>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4,width:200}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Kupac</label>
+                        <select className="form-control" style={{width:'100%'}} value={fPartner} onChange={e=>setFPartner(e.target.value)}>
+                            <option value="">— svi —</option>
+                            {partneri.map(p => <option key={p.id} value={p.id}>{p.naziv}</option>)}
+                        </select>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4,width:180}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Skladište</label>
+                        <select className="form-control" style={{width:'100%'}} value={fSkladiste} onChange={e=>setFSkladiste(e.target.value)}>
+                            <option value="">— sva —</option>
+                            {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv}</option>)}
+                        </select>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Datum od</label>
+                        <input type="date" className="form-control" value={fOd} onChange={e=>setFOd(e.target.value)} />
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Datum do</label>
+                        <input type="date" className="form-control" value={fDo} onChange={e=>setFDo(e.target.value)} />
+                    </div>
+                    <button className="btn btn-outline" onClick={ucitaj}><i className="fas fa-filter"></i> Filtriraj</button>
+                </div>
+            </div>
+
+            <div className="card">
+                <div style={{overflowX:'auto'}}>
+                    {ucitavanje ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>
+                    ) : lista.length === 0 ? (
+                        <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
+                            <i className="fas fa-inbox" style={{fontSize:24,opacity:0.4,marginBottom:8,display:'block'}}></i>
+                            Nema faktura. Kreiraj prvu.
+                        </div>
+                    ) : (
+                        <table style={{width:'100%'}}>
+                            <thead><tr>
+                                <th>Šifra</th><th>Datum</th><th>Kupac</th><th>Skladište</th>
+                                <th>Otpremnica</th><th>Valuta</th><th style={{textAlign:'right'}}>Stavki</th>
+                                <th style={{textAlign:'right'}}>Ukupno BAM</th><th>Status</th>
+                            </tr></thead>
+                            <tbody>
+                                {lista.map(r => (
+                                    <tr key={r.id} onClick={()=>onOpen(r.id)} style={{cursor:'pointer'}}>
+                                        <td style={{fontFamily:'monospace',fontSize:12,fontWeight:600,color:'var(--primary,#2563eb)'}}>{r.sifra}</td>
+                                        <td>{formatDate(r.datum)}</td>
+                                        <td style={{fontWeight:500}}>{r.partner_naziv}</td>
+                                        <td style={{fontSize:12}}>{r.skladiste_naziv}</td>
+                                        <td style={{fontSize:12}}>{r.otpremnica || '-'}</td>
+                                        <td style={{fontSize:12}}>{r.valuta_sifra}</td>
+                                        <td style={{textAlign:'right'}}>{r.ukupno_stavki}</td>
+                                        <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:600}}>{feningToKM(r.ukupno_sa_pdv)}</td>
+                                        <td>{_racunStatusBadge(r.status)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+                <div style={{padding:'8px 12px',fontSize:12,color:'var(--gray-400)',textAlign:'right'}}>{lista.length} faktura</div>
+            </div>
+        </div>
+    );
+}
+
+function FakturaVPDetalji({ id, currentUser, onBack }) {
+    const uloga = currentUser && currentUser.uloga;
+    const canEdit = uloga === 'admin' || uloga === 'voditelj';
+
+    const [currentId, setCurrentId] = useState(id || null);
+    const [racun, setRacun] = useState(null);
+    const [stavke, setStavke] = useState([]);
+    const [ucitavanje, setUcitavanje] = useState(!!id);
+
+    const [partneri, setPartneri] = useState([]);
+    const [skladista, setSkladista] = useState([]);
+    const [valute, setValute] = useState([]);
+    const [nacini, setNacini] = useState([]);
+    const [artikli, setArtikli] = useState([]);
+    const [radnici, setRadnici] = useState([]);
+    const [cjenovnik, setCjenovnik] = useState({}); // artikal_id -> {nabavna, cijena_sa_pdv}
+
+    const danas = new Date().toISOString().slice(0,10);
+    const PRAZNO = { partner_id:'', primalac_id:'', isti_primalac:true, skladiste_id:'', datum:danas, valuta_id:'', kurs:'',
+                     nacin_placanja_id:'', rok_placanja_dana:'', datum_otpreme:'', otpremnica:'', vozac:'', ovlasceni_id:'', napomena:'' };
+    const [zForm, setZForm] = useState(PRAZNO);
+    const [snimanjeZ, setSnimanjeZ] = useState(false);
+    const [greska, setGreska] = useState(null);
+
+    const isNew = !currentId;
+    const isDraft = isNew || (racun && racun.status === 'draft');
+    const readOnly = !isDraft || !canEdit;
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const [p, s, v, n, a, r] = await Promise.all([
+                    api('/api/v1/partneri'), api('/api/v1/skladista'), api('/api/v1/valute'),
+                    api('/api/v1/nacini_placanja'), api('/api/v1/artikli'), api('/api/radnici'),
+                ]);
+                setPartneri((Array.isArray(p)?p:[]).filter(x=>x.aktivan));
+                setSkladista((Array.isArray(s)?s:[]).filter(x=>x.aktivan));
+                setValute((Array.isArray(v)?v:[]).filter(x=>x.aktivan));
+                setNacini((Array.isArray(n)?n:[]).filter(x=>x.aktivan));
+                setArtikli((Array.isArray(a)?a:[]).filter(x=>x.aktivan));
+                setRadnici((Array.isArray(r)?r:[]).filter(x=>x.aktivan!==0));
+            } catch(e) {}
+        })();
+    }, []);
+
+    const ucitajCjenovnik = async (skId) => {
+        if (!skId) { setCjenovnik({}); return; }
+        try {
+            const d = await api('/api/v1/cjenovnici?skladiste_id=' + encodeURIComponent(skId));
+            const map = {};
+            (Array.isArray(d)?d:[]).forEach(c => { map[c.artikal_id] = { nabavna: c.nabavna, cijena_sa_pdv: c.cijena_sa_pdv }; });
+            setCjenovnik(map);
+        } catch(e) { setCjenovnik({}); }
+    };
+    useEffect(() => { if (zForm.skladiste_id) ucitajCjenovnik(zForm.skladiste_id); }, [zForm.skladiste_id]);
+
+    const ucitajDetalje = async (rid) => {
+        if (!rid) return;
+        setUcitavanje(true);
+        try {
+            const d = await api('/api/v1/racuni/' + rid);
+            setRacun(d);
+            setStavke(Array.isArray(d.stavke)?d.stavke:[]);
+            setZForm({
+                partner_id: d.partner_id || '', primalac_id: d.primalac_id || '',
+                isti_primalac: !d.primalac_id, skladiste_id: d.skladiste_id || '',
+                datum: d.datum || danas, valuta_id: d.valuta_id || '', kurs: d.kurs ? String(d.kurs) : '',
+                nacin_placanja_id: d.nacin_placanja_id || '', rok_placanja_dana: d.rok_placanja_dana != null ? String(d.rok_placanja_dana) : '',
+                datum_otpreme: d.datum_otpreme || '', otpremnica: d.otpremnica || '', vozac: d.vozac || '',
+                ovlasceni_id: d.ovlasceni_id || '', napomena: d.napomena || '',
+            });
+        } catch(e) { showAlert('Greška pri učitavanju fakture.', 'error'); }
+        finally { setUcitavanje(false); }
+    };
+    useEffect(() => { if (currentId) ucitajDetalje(currentId); }, [currentId]);
+
+    const valutaSifra = (vid) => { const v = valute.find(x=>x.id===Number(vid)); return v ? v.sifra : ''; };
+    const jeBAM = valutaSifra(zForm.valuta_id) === 'BAM';
+    const kurs = jeBAM ? 1000000 : (Number(zForm.kurs) || (racun && racun.kurs) || 0);
+    const vSif = valutaSifra(zForm.valuta_id) || (racun && racun.valuta_sifra) || '';
+
+    const spremiZaglavlje = async () => {
+        setGreska(null);
+        if (!zForm.partner_id) { setGreska('Kupac je obavezan.'); return; }
+        if (!zForm.skladiste_id) { setGreska('Skladište je obavezno.'); return; }
+        if (!zForm.valuta_id) { setGreska('Valuta je obavezna.'); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(zForm.datum)) { setGreska('Datum mora biti YYYY-MM-DD.'); return; }
+        const body = {
+            tip_prodaje: 'vp', vrsta_dokumenta: 'faktura',
+            partner_id: Number(zForm.partner_id),
+            primalac_id: zForm.isti_primalac ? null : (zForm.primalac_id ? Number(zForm.primalac_id) : null),
+            skladiste_id: Number(zForm.skladiste_id), datum: zForm.datum, valuta_id: Number(zForm.valuta_id),
+            nacin_placanja_id: zForm.nacin_placanja_id ? Number(zForm.nacin_placanja_id) : null,
+            rok_placanja_dana: zForm.rok_placanja_dana !== '' ? Number(zForm.rok_placanja_dana) : null,
+            datum_otpreme: zForm.datum_otpreme || null, otpremnica: zForm.otpremnica || null,
+            vozac: zForm.vozac || null, ovlasceni_id: zForm.ovlasceni_id ? Number(zForm.ovlasceni_id) : null,
+            napomena: zForm.napomena || null,
+        };
+        if (!jeBAM) {
+            const k = Number(zForm.kurs);
+            if (!Number.isFinite(k) || k <= 0) { setGreska('Za stranu valutu unesi kurs (x1.000.000).'); return; }
+            body.kurs = Math.round(k);
+        }
+        setSnimanjeZ(true);
+        try {
+            if (isNew) {
+                const odg = await api('/api/v1/racuni', 'POST', body);
+                showAlert('Faktura kreirana: ' + odg.sifra, 'success');
+                setCurrentId(odg.id);
+            } else {
+                await api('/api/v1/racuni/' + currentId, 'PUT', body);
+                showAlert('Zaglavlje ažurirano.', 'success');
+                await ucitajDetalje(currentId);
+            }
+        } catch(e) { setGreska('Greška: ' + (e?.message||'')); }
+        finally { setSnimanjeZ(false); }
+    };
+
+    // --- Stavke ---
+    const PRAZNA_STAVKA = { artikal_id:'', kolicina:'', cijena_sa_pdv_jed:'', popust_pct:'', napomena:'' };
+    const [stavkaModal, setStavkaModal] = useState(false);
+    const [stavkaEdit, setStavkaEdit] = useState(null);
+    const [sForm, setSForm] = useState(PRAZNA_STAVKA);
+    const [snimanjeS, setSnimanjeS] = useState(false);
+    const [sGreska, setSGreska] = useState(null);
+
+    const otvoriNovuStavku = () => { setStavkaEdit(null); setSForm(PRAZNA_STAVKA); setSGreska(null); setStavkaModal(true); };
+    const otvoriUrediStavku = (st) => {
+        setStavkaEdit(st);
+        setSForm({ artikal_id: st.artikal_id, kolicina: String(st.kolicina),
+            cijena_sa_pdv_jed: feningToKM(st.cijena_sa_pdv_jed),
+            popust_pct: st.popust_pct ? String(st.popust_pct/100).replace('.',',') : '', napomena: st.napomena || '' });
+        setSGreska(null); setStavkaModal(true);
+    };
+    // Autofill cijene iz cjenovnika kad se izabere artikal (samo na novoj stavci)
+    const onArtikalChange = (aid) => {
+        setSForm(f => {
+            const next = { ...f, artikal_id: aid };
+            if (!stavkaEdit && aid && cjenovnik[aid] && cjenovnik[aid].cijena_sa_pdv) {
+                next.cijena_sa_pdv_jed = feningToKM(cjenovnik[aid].cijena_sa_pdv);
+            }
+            return next;
+        });
+    };
+    const snimiStavku = async () => {
+        setSGreska(null);
+        if (!sForm.artikal_id) { setSGreska('Artikal je obavezan.'); return; }
+        const kol = Number(String(sForm.kolicina).replace(',','.'));
+        if (!Number.isFinite(kol) || kol <= 0) { setSGreska('Količina mora biti pozitivan broj.'); return; }
+        const popust = sForm.popust_pct ? Math.round(parseFloat(String(sForm.popust_pct).replace(',','.'))*100) : 0;
+        if (popust < 0 || popust > 9999) { setSGreska('Popust mora biti 0–99,99%.'); return; }
+        const body = {
+            artikal_id: Number(sForm.artikal_id), kolicina: kol,
+            cijena_sa_pdv_jed: kmToFening(sForm.cijena_sa_pdv_jed), popust_pct: popust,
+            napomena: sForm.napomena || null,
+        };
+        setSnimanjeS(true);
+        try {
+            const odg = stavkaEdit
+                ? await api(`/api/v1/racuni/${currentId}/stavke/${stavkaEdit.id}`, 'PUT', body)
+                : await api(`/api/v1/racuni/${currentId}/stavke`, 'POST', body);
+            if (odg && odg.warning === 'nema_nabavne_cijene') showAlert('Artikal nema nabavnu cijenu u cjenovniku tog skladišta — marža se ne može izračunati.', 'warning');
+            setStavkaModal(false);
+            await ucitajDetalje(currentId);
+        } catch(e) { setSGreska('Greška: ' + (e?.message||'')); }
+        finally { setSnimanjeS(false); }
+    };
+    const obrisiStavku = async (st) => {
+        if (!await askConfirm(`Obrisati stavku #${st.redni_broj} (${st.artikal_naziv})?`, true)) return;
+        try { await api(`/api/v1/racuni/${currentId}/stavke/${st.id}`, 'DELETE'); await ucitajDetalje(currentId); }
+        catch(e) { showAlert('Greška: ' + (e?.message||''), 'error'); }
+    };
+
+    // --- Knjizenje ---
+    const [knjizenje, setKnjizenje] = useState(false);
+    const knjizi = async () => {
+        if (!await askConfirm('Knjiženje skida stanje sa zaliha i zaključava fakturu. Nepovratno. Nastaviti?', true)) return;
+        setKnjizenje(true);
+        try {
+            const odg = await api(`/api/v1/racuni/${currentId}/knjizi`, 'POST', {});
+            showAlert(`Faktura knjižena. ${odg.broj_redova_ledger} redova u ledgeru.`, 'success');
+            if (odg.upozorenja && odg.upozorenja.length) {
+                const lst = odg.upozorenja.map(u => `${u.artikal_sifra} (${u.novo_stanje})`).join(', ');
+                showAlert('UPOZORENJE: negativno stanje za: ' + lst, 'warning');
+            }
+            await ucitajDetalje(currentId);
+        } catch(e) {
+            if (e?.message === 'racun_zakljucan') { showAlert('Faktura je već knjižena.', 'error'); await ucitajDetalje(currentId); }
+            else showAlert('Greška pri knjiženju: ' + (e?.message||''), 'error');
+        } finally { setKnjizenje(false); }
+    };
+
+    // --- Totali (sume su u VALUTI zaglavlja; marza u BAM) ---
+    const sumBez = stavke.reduce((a,s)=> a + (s.iznos_bez_pdv||0), 0);
+    const sumPdv = stavke.reduce((a,s)=> a + (s.iznos_pdv||0), 0);
+    const sumSaPdv = stavke.reduce((a,s)=> a + (s.iznos_sa_pdv||0), 0);
+    const sumSaPdvBAM = kurs ? Math.round(sumSaPdv * kurs / 1000000) : null;
+    // Marza (BAM): prodajna bez PDV (u BAM) - nabavna (BAM). nabavna_jed je BAM, iznos_bez_pdv je u valuti.
+    let marzaBAM = 0, nabavnaTotalBAM = 0;
+    stavke.forEach(s => {
+        const prodajnaBezBAM = Math.round((s.iznos_bez_pdv||0) * kurs / 1000000);
+        const nabBAM = Math.round((s.nabavna_jed||0) * s.kolicina);
+        marzaBAM += (prodajnaBezBAM - nabBAM);
+        nabavnaTotalBAM += nabBAM;
+    });
+    const marzaPct = nabavnaTotalBAM > 0 ? (marzaBAM / nabavnaTotalBAM * 100) : null;
+
+    if (ucitavanje) return <div className="fade-in" style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>;
+
+    const artNaziv = (aid) => { const a = artikli.find(x=>x.id===Number(aid)); return a ? `${a.sifra} - ${a.naziv}` : ''; };
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <button className="btn btn-outline btn-sm" onClick={onBack}><i className="fas fa-arrow-left"></i> Nazad</button>
+                    <h2 style={{margin:0,fontSize:18}}>{isNew ? 'Nova faktura' : racun?.sifra} {racun && _racunStatusBadge(racun.status)}</h2>
+                </div>
+            </div>
+
+            {/* ZAGLAVLJE */}
+            <div className="card" style={{marginBottom:12}}>
+                <div className="card-header"><i className="fas fa-file-invoice" style={{marginRight:6}}></i> Zaglavlje</div>
+                <div className="card-body">
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Kupac <span style={{color:'#dc2626'}}>*</span></label>
+                            <select className="form-control" value={zForm.partner_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,partner_id:e.target.value}))}>
+                                <option value="">— odaberi —</option>
+                                {partneri.map(p => <option key={p.id} value={p.id}>{p.naziv}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Skladište <span style={{color:'#dc2626'}}>*</span></label>
+                            <select className="form-control" value={zForm.skladiste_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,skladiste_id:e.target.value}))}>
+                                <option value="">— odaberi —</option>
+                                {skladista.map(s => <option key={s.id} value={s.id}>{s.sifra} - {s.naziv} ({s.tip})</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Datum <span style={{color:'#dc2626'}}>*</span></label>
+                            <input type="date" className="form-control" value={zForm.datum} disabled={readOnly} onChange={e=>setZForm(f=>({...f,datum:e.target.value}))} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label style={{display:'flex',alignItems:'center',gap:8}}>Primalac
+                                <span style={{fontWeight:400,fontSize:12,color:'var(--gray-500)'}}>
+                                    <input type="checkbox" checked={zForm.isti_primalac} disabled={readOnly} onChange={e=>setZForm(f=>({...f,isti_primalac:e.target.checked}))} style={{marginRight:4}} />isti kao kupac
+                                </span>
+                            </label>
+                            <select className="form-control" value={zForm.primalac_id} disabled={readOnly || zForm.isti_primalac} onChange={e=>setZForm(f=>({...f,primalac_id:e.target.value}))}>
+                                <option value="">— odaberi —</option>
+                                {partneri.map(p => <option key={p.id} value={p.id}>{p.naziv}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Valuta <span style={{color:'#dc2626'}}>*</span></label>
+                            <select className="form-control" value={zForm.valuta_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,valuta_id:e.target.value, kurs: valutaSifra(e.target.value)==='BAM' ? '' : f.kurs}))}>
+                                <option value="">— odaberi —</option>
+                                {valute.map(v => <option key={v.id} value={v.id}>{v.sifra} - {v.naziv}</option>)}
+                            </select>
+                        </div>
+                        {!jeBAM && zForm.valuta_id && (
+                            <div className="form-group">
+                                <label>Kurs (×1.000.000) <span style={{color:'#dc2626'}}>*</span></label>
+                                <input className="form-control" inputMode="numeric" value={zForm.kurs} disabled={readOnly} onChange={e=>setZForm(f=>({...f,kurs:e.target.value}))} placeholder="npr. 1955830" />
+                            </div>
+                        )}
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Način plaćanja</label>
+                            <select className="form-control" value={zForm.nacin_placanja_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,nacin_placanja_id:e.target.value}))}>
+                                <option value="">—</option>
+                                {nacini.map(n => <option key={n.id} value={n.id}>{n.naziv}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Rok plaćanja (dana)</label>
+                            <input className="form-control" inputMode="numeric" value={zForm.rok_placanja_dana} disabled={readOnly} onChange={e=>setZForm(f=>({...f,rok_placanja_dana:e.target.value}))} placeholder="npr. 30" />
+                        </div>
+                        <div className="form-group">
+                            <label>Ovlaštena osoba</label>
+                            <select className="form-control" value={zForm.ovlasceni_id} disabled={readOnly} onChange={e=>setZForm(f=>({...f,ovlasceni_id:e.target.value}))}>
+                                <option value="">—</option>
+                                {radnici.map(r => <option key={r.id} value={r.id}>{r.ime} {r.prezime}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Datum otpreme</label>
+                            <input type="date" className="form-control" value={zForm.datum_otpreme} disabled={readOnly} onChange={e=>setZForm(f=>({...f,datum_otpreme:e.target.value}))} />
+                        </div>
+                        <div className="form-group">
+                            <label>Otpremnica (broj)</label>
+                            <input className="form-control" value={zForm.otpremnica} disabled={readOnly} onChange={e=>setZForm(f=>({...f,otpremnica:e.target.value}))} />
+                        </div>
+                        <div className="form-group">
+                            <label>Vozač</label>
+                            <input className="form-control" value={zForm.vozac} disabled={readOnly} onChange={e=>setZForm(f=>({...f,vozac:e.target.value}))} />
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label>Napomena</label>
+                        <input className="form-control" value={zForm.napomena} disabled={readOnly} onChange={e=>setZForm(f=>({...f,napomena:e.target.value}))} />
+                    </div>
+                    {greska && <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{greska}</div>}
+                    {!readOnly && (
+                        <div style={{marginTop:10}}>
+                            <button className="btn btn-primary" onClick={spremiZaglavlje} disabled={snimanjeZ}>
+                                {snimanjeZ ? <><i className="fas fa-spinner fa-spin"></i> Snimanje...</> : <><i className="fas fa-save"></i> {isNew ? 'Kreiraj draft' : 'Sačuvaj zaglavlje'}</>}
+                            </button>
+                        </div>
+                    )}
+                    {racun && racun.status === 'knjizena' && (
+                        <div style={{marginTop:10,padding:10,background:'#ecfdf5',color:'#065f46',borderRadius:6,fontSize:13}}>
+                            <i className="fas fa-lock" style={{marginRight:6}}></i>
+                            Knjižena {formatDate(racun.knjiziano_kreirano)} {racun.knjizio_ime ? `— ${racun.knjizio_ime} ${racun.knjizio_prezime}` : ''}. Stanje skinuto, faktura zaključana.
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* STAVKE */}
+            {!isNew && (
+                <div className="card" style={{marginBottom:12}}>
+                    <div className="card-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span><i className="fas fa-list" style={{marginRight:6}}></i> Stavke</span>
+                        {!readOnly && <button className="btn btn-primary btn-sm" onClick={otvoriNovuStavku}><i className="fas fa-plus"></i> Dodaj stavku</button>}
+                    </div>
+                    <div style={{overflowX:'auto'}}>
+                        {stavke.length === 0 ? (
+                            <div style={{padding:24,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>Nema stavki. Dodaj barem jednu prije knjiženja.</div>
+                        ) : (
+                            <table style={{width:'100%',fontSize:13}}>
+                                <thead><tr>
+                                    <th>#</th><th>Artikal</th><th>JM</th>
+                                    <th style={{textAlign:'right'}}>Kol.</th>
+                                    <th style={{textAlign:'right'}}>Cij. s PDV</th>
+                                    <th style={{textAlign:'right'}}>Pop.%</th>
+                                    <th style={{textAlign:'right'}}>Bez PDV</th>
+                                    <th style={{textAlign:'right'}}>PDV</th>
+                                    <th style={{textAlign:'right'}}>Sa PDV</th>
+                                    <th style={{textAlign:'right'}}>Marža%</th>
+                                    {!readOnly && <th style={{textAlign:'right'}}>Akcije</th>}
+                                </tr></thead>
+                                <tbody>
+                                    {stavke.map(s => {
+                                        const prodBezBAM = Math.round((s.iznos_bez_pdv||0) * kurs / 1000000);
+                                        const nabBAM = Math.round((s.nabavna_jed||0) * s.kolicina);
+                                        const mPct = nabBAM > 0 ? ((prodBezBAM - nabBAM) / nabBAM * 100) : null;
+                                        return (
+                                        <tr key={s.id}>
+                                            <td>{s.redni_broj}</td>
+                                            <td><span style={{fontFamily:'monospace',fontSize:11,color:'var(--gray-500)'}}>{s.artikal_sifra}</span> {s.artikal_naziv}{s.artikal_vrsta==='usluga' && <span style={{fontSize:10,marginLeft:4,color:'#7c3aed'}}>(usluga)</span>}</td>
+                                            <td style={{fontSize:12}}>{s.artikal_jm}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{s.kolicina}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{feningToKM(s.cijena_sa_pdv_jed)}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{((s.popust_pct||0)/100).toFixed(2).replace('.',',')}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{feningToKM(s.iznos_bez_pdv)}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace'}}>{feningToKM(s.iznos_pdv)}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:600}}>{feningToKM(s.iznos_sa_pdv)}</td>
+                                            <td style={{textAlign:'right',fontFamily:'monospace',color: mPct==null?'var(--gray-400)':(mPct>=0?'#059669':'#dc2626')}}>{mPct==null ? '—' : mPct.toFixed(1).replace('.',',')}</td>
+                                            {!readOnly && (
+                                                <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                                                    <button className="btn btn-sm btn-outline" onClick={()=>otvoriUrediStavku(s)} style={{marginRight:4}}><i className="fas fa-edit"></i></button>
+                                                    <button className="btn btn-sm" onClick={()=>obrisiStavku(s)} style={{background:'#fee2e2',color:'#991b1b',border:'none'}}><i className="fas fa-trash"></i></button>
+                                                </td>
+                                            )}
+                                        </tr>);
+                                    })}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* UKUPNO + KNJIZI */}
+            {!isNew && (
+                <div className="card" style={{marginBottom:12}}>
+                    <div className="card-body" style={{display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:16,alignItems:'center'}}>
+                        <div style={{fontSize:14,lineHeight:1.9}}>
+                            <div>Iznos bez PDV ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumBez)}</strong></div>
+                            <div>PDV ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumPdv)}</strong></div>
+                            <div style={{fontSize:16}}>Iznos sa PDV ({vSif}): <strong style={{fontFamily:'monospace'}}>{feningToKM(sumSaPdv)}</strong> {!jeBAM && <span style={{color:'var(--gray-400)',fontSize:12}}>× kurs {kurs ? (kurs/1000000).toFixed(6) : '?'}</span>}</div>
+                            {!jeBAM && <div style={{fontSize:16}}>Iznos BAM: <strong style={{fontFamily:'monospace',color:'#065f46'}}>{sumSaPdvBAM != null ? feningToKM(sumSaPdvBAM) : '—'}</strong></div>}
+                            <div style={{marginTop:4,color: marzaBAM>=0?'#059669':'#dc2626'}}>Ukupna marža (BAM): <strong style={{fontFamily:'monospace'}}>{feningToKM(marzaBAM)}</strong> {marzaPct!=null && <span>({marzaPct.toFixed(1).replace('.',',')}%)</span>}</div>
+                        </div>
+                        {isDraft && canEdit && (
+                            <button className="btn btn-primary" style={{background:'#059669',borderColor:'#059669',fontSize:15,padding:'10px 20px'}}
+                                onClick={knjizi} disabled={knjizenje || stavke.length === 0}
+                                title={stavke.length === 0 ? 'Dodaj barem jednu stavku' : ''}>
+                                {knjizenje ? <><i className="fas fa-spinner fa-spin"></i> Knjiženje...</> : <><i className="fas fa-check-double"></i> Knjiži fakturu</>}
+                            </button>
+                        )}
+                        {racun && racun.status === 'knjizena' && (
+                            <button className="btn btn-outline" onClick={()=>window.print()}><i className="fas fa-print"></i> Štampaj</button>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* STAVKA MODAL */}
+            {stavkaModal && (() => {
+                const nab = sForm.artikal_id && cjenovnik[sForm.artikal_id] ? cjenovnik[sForm.artikal_id].nabavna : 0;
+                const art = artikli.find(a=>a.id===Number(sForm.artikal_id));
+                const stopa = art && art.tarifa_stopa ? Number(art.tarifa_stopa) : 0;
+                const cf = kmToFening(sForm.cijena_sa_pdv_jed);
+                const pop = sForm.popust_pct ? Math.round(parseFloat(String(sForm.popust_pct).replace(',','.'))*100) : 0;
+                const csp = Math.round(cf * (10000 - pop) / 10000);
+                const kol = Number(String(sForm.kolicina).replace(',','.')) || 0;
+                const izSa = Math.round(csp * kol);
+                const izBez = Math.round(izSa * 10000 / (10000 + stopa));
+                const nabT = Math.round(nab * kol);
+                const mP = nabT > 0 ? ((izBez - nabT) / nabT * 100) : null;
+                return (
+                <Modal isOpen={true} onClose={()=>!snimanjeS && setStavkaModal(false)}
+                    title={stavkaEdit ? `Uredi stavku #${stavkaEdit.redni_broj}` : 'Nova stavka'}
+                    footer={<>
+                        <button className="btn btn-outline" onClick={()=>setStavkaModal(false)} disabled={snimanjeS}>Odustani</button>
+                        <button className="btn btn-primary" onClick={snimiStavku} disabled={snimanjeS}>
+                            {snimanjeS ? <><i className="fas fa-spinner fa-spin"></i> Snimanje...</> : <><i className="fas fa-save"></i> {stavkaEdit ? 'Sačuvaj' : 'Dodaj'}</>}
+                        </button>
+                    </>}>
+                    <div className="form-group">
+                        <label>Artikal <span style={{color:'#dc2626'}}>*</span></label>
+                        <select className="form-control" value={sForm.artikal_id} onChange={e=>onArtikalChange(e.target.value)} autoFocus>
+                            <option value="">— odaberi artikal —</option>
+                            {artikli.map(a => <option key={a.id} value={a.id}>{a.sifra} - {a.naziv}{a.vrsta==='usluga'?' (usluga)':''}</option>)}
+                        </select>
+                        {sForm.artikal_id && art && art.vrsta!=='usluga' && !cjenovnik[sForm.artikal_id] && (
+                            <div style={{fontSize:12,color:'#92400e',marginTop:4}}><i className="fas fa-exclamation-triangle" style={{marginRight:4}}></i>Artikal nema cijenu u cjenovniku ovog skladišta — unesi ručno.</div>
+                        )}
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Količina <span style={{color:'#dc2626'}}>*</span></label>
+                            <input className="form-control" inputMode="decimal" value={sForm.kolicina} onChange={e=>setSForm(f=>({...f,kolicina:e.target.value}))} placeholder="0" />
+                        </div>
+                        <div className="form-group">
+                            <label>Cijena sa PDV ({vSif||'val.'})</label>
+                            <input className="form-control" inputMode="decimal" value={sForm.cijena_sa_pdv_jed} onChange={e=>setSForm(f=>({...f,cijena_sa_pdv_jed:e.target.value}))} placeholder="0,00" />
+                        </div>
+                        <div className="form-group">
+                            <label>Popust %</label>
+                            <input className="form-control" inputMode="decimal" value={sForm.popust_pct} onChange={e=>setSForm(f=>({...f,popust_pct:e.target.value}))} placeholder="0,00" />
+                        </div>
+                    </div>
+                    {sForm.cijena_sa_pdv_jed && sForm.kolicina && (
+                        <div style={{padding:10,background:'var(--gray-100)',borderRadius:8,fontSize:13,marginTop:8,display:'flex',gap:18,flexWrap:'wrap'}}>
+                            <span>Bez PDV: <strong style={{fontFamily:'monospace'}}>{feningToKM(izBez)}</strong></span>
+                            <span>PDV: <strong style={{fontFamily:'monospace'}}>{feningToKM(izSa-izBez)}</strong></span>
+                            <span>Sa PDV: <strong style={{fontFamily:'monospace'}}>{feningToKM(izSa)} {vSif}</strong></span>
+                            <span>Marža: <strong style={{fontFamily:'monospace',color: mP==null?'var(--gray-500)':(mP>=0?'#059669':'#dc2626')}}>{mP==null ? 'N/A' : mP.toFixed(1).replace('.',',')+'%'}</strong></span>
+                        </div>
+                    )}
+                    <div className="form-group" style={{marginTop:8}}>
+                        <label>Napomena</label>
+                        <input className="form-control" value={sForm.napomena} onChange={e=>setSForm(f=>({...f,napomena:e.target.value}))} />
+                    </div>
+                    {sGreska && <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{sGreska}</div>}
+                </Modal>);
+            })()}
+        </div>
+    );
+}
+
+// =====================================================================
 // FAZA 3 — NABAVKA (ulazne kalkulacije dobavljaca)
 // Dokument: zaglavlje + stavke + zavisni troskovi. Status 'draft' | 'knjizena'.
 // Knjizenje (nepovratno): +prijem u zalihe_promet + upsert cjenovnici.nabavna.
@@ -15148,6 +15769,9 @@ const MODULI = [
         { page: 'pazar',        naziv: 'Polog pazara',        icon: 'fas fa-cash-register' },
         { page: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fas fa-exchange-alt' },
     ]},
+    { id: 'm_prodaja', naziv: 'Prodaja', icon: 'fas fa-cash-register', stavke: [
+        { page: 'fakture_vp', naziv: 'Veleprodajne fakture', icon: 'fas fa-file-invoice' },
+    ]},
     { id: 'm_nabavka', naziv: 'Nabavka', icon: 'fas fa-truck-loading', stavke: [
         { page: 'kalkulacije', naziv: 'Ulazne kalkulacije', icon: 'fas fa-file-invoice' },
     ]},
@@ -15912,6 +16536,7 @@ function App() {
             case 'grupe_artikala': return <GrupeArtikalaPage currentUser={currentUser} />;
             case 'tarife': return <TarifePage currentUser={currentUser} />;
             case 'cjenovnici': return <CjenovniciPage currentUser={currentUser} />;
+            case 'fakture_vp': return <FaktureVPRouter currentUser={currentUser} />;
             case 'kalkulacije': return <KalkulacijePage currentUser={currentUser} />;
             case 'zalihe': return <ZalihePage currentUser={currentUser} setPage={setPage} />;
             case 'skladista': return <SkladistaPage currentUser={currentUser} />;
