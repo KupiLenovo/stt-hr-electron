@@ -10693,7 +10693,7 @@ function ArtikalLookupModal({ skladisteId, onSelect, onClose }) {
             finally { setLoading(false); }
         }, 200);
         return () => clearTimeout(t);
-    }, [q]);
+    }, [q, skladisteId]);
     const onKey = (e) => {
         if (e.key === 'ArrowDown') { e.preventDefault(); setHi(h => Math.min(h+1, rows.length-1)); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(h-1, 0)); }
