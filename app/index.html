@@ -11149,6 +11149,16 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
             else showAlert('Greška pri knjiženju: ' + (e?.message||''), 'error');
         } finally { setKnjizenje(false); }
     };
+    // DOPUNA 6: PDF (fetch sa Bearer -> blob -> novi tab; window.open ne salje Authorization header)
+    const stampajPdf = async () => {
+        try {
+            const res = await fetch(API_URL + `/api/v1/racuni/${currentId}/pdf`, authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {});
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const url = URL.createObjectURL(await res.blob());
+            window.open(url, '_blank');
+            setTimeout(()=>URL.revokeObjectURL(url), 60000);
+        } catch(e) { showAlert('Greška pri generisanju PDF-a: ' + (e?.message||''), 'error'); }
+    };
 
     // --- Totali (sume su u VALUTI zaglavlja; marza u BAM) ---
     const sumBez = stavke.reduce((a,s)=> a + (s.iznos_bez_pdv||0), 0);
@@ -11376,7 +11386,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
                             </button>
                         )}
                         {racun && racun.status === 'knjizena' && (
-                            <button className="btn btn-outline" onClick={()=>window.print()}><i className="fas fa-print"></i> Štampaj</button>
+                            <button className="btn btn-outline" onClick={stampajPdf}><i className="fas fa-file-pdf"></i> Štampaj PDF</button>
                         )}
                     </div>
                 </div>
