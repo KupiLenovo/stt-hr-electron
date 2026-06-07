@@ -10752,28 +10752,40 @@ function FaktureVPRouter({ currentUser }) {
 function FaktureVPLista({ currentUser, onOpen }) {
     const uloga = currentUser && currentUser.uloga;
     const canEdit = uloga === 'admin' || uloga === 'voditelj';
+    const danas = new Date().toISOString().slice(0,10);
+    const prviUMjesecu = danas.slice(0,8) + '01';
+    const LIMIT = 50;
     const [lista, setLista] = useState([]);
+    const [total, setTotal] = useState(0);
+    const [hasMore, setHasMore] = useState(false);
     const [partneri, setPartneri] = useState([]);
     const [skladista, setSkladista] = useState([]);
     const [ucitavanje, setUcitavanje] = useState(true);
     const [fStatus, setFStatus] = useState('');
     const [fPartner, setFPartner] = useState('');
     const [fSkladiste, setFSkladiste] = useState('');
-    const [fOd, setFOd] = useState('');
-    const [fDo, setFDo] = useState('');
+    const [fOd, setFOd] = useState(prviUMjesecu); // DOPUNA 7: default ovaj mjesec
+    const [fDo, setFDo] = useState(danas);
+    const [oznaceni, setOznaceni] = useState(()=>new Set()); // DOPUNA 3
+    const [batchRunning, setBatchRunning] = useState(false);
+    const [batchRez, setBatchRez] = useState(null);
 
-    const ucitaj = async () => {
+    const ucitaj = async (offset = 0, append = false) => {
         setUcitavanje(true);
         try {
-            const qs = ['tip_prodaje=vp', 'vrsta_dokumenta=faktura'];
+            const qs = ['tip_prodaje=vp', 'vrsta_dokumenta=faktura', 'limit=' + LIMIT, 'offset=' + offset];
             if (fStatus) qs.push('status=' + encodeURIComponent(fStatus));
             if (fPartner) qs.push('partner_id=' + encodeURIComponent(fPartner));
             if (fSkladiste) qs.push('skladiste_id=' + encodeURIComponent(fSkladiste));
             if (fOd) qs.push('datum_od=' + encodeURIComponent(fOd));
             if (fDo) qs.push('datum_do=' + encodeURIComponent(fDo));
             const d = await api('/api/v1/racuni?' + qs.join('&'));
-            setLista(Array.isArray(d) ? d : []);
-        } catch (e) { showAlert('Greška pri učitavanju faktura.', 'error'); setLista([]); }
+            const items = (d && Array.isArray(d.items)) ? d.items : [];
+            setLista(prev => append ? [...prev, ...items] : items);
+            setTotal(d?.total || 0);
+            setHasMore(!!d?.has_more);
+            if (!append) setOznaceni(new Set());
+        } catch (e) { showAlert('Greška pri učitavanju faktura.', 'error'); if (!append) { setLista([]); setTotal(0); setHasMore(false); } }
         finally { setUcitavanje(false); }
     };
     useEffect(() => {
@@ -10783,9 +10795,26 @@ function FaktureVPLista({ currentUser, onOpen }) {
                 setPartneri((Array.isArray(p)?p:[]).filter(x => x.aktivan));
                 setSkladista((Array.isArray(s)?s:[]).filter(x => x.aktivan));
             } catch (e) {}
-            ucitaj();
+            ucitaj(0, false);
         })();
     }, []);
+
+    const draftIds = lista.filter(r => r.status === 'draft').map(r => r.id);
+    const sviOznaceni = draftIds.length > 0 && draftIds.every(id => oznaceni.has(id));
+    const toggleOznaci = (id) => setOznaceni(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    const toggleSve = () => setOznaceni(prev => sviOznaceni ? new Set() : new Set(draftIds));
+    const RAZLOG_TXT = { nedovoljno_stanja:'Nedovoljno stanja', vec_knjizena:'Već knjižena', nema_stavki:'Nema stavki', nevazeci_id:'Nevažeći ID', stavka_artikal_neaktivan:'Neaktivan artikal', interna_greska:'Interna greška' };
+
+    const knjiziOznacene = async () => {
+        const ids = [...oznaceni];
+        if (ids.length === 0) return;
+        if (!await askConfirm(`Knjižiti ${ids.length} označenih faktura? Skida stanje sa zaliha.`, true)) return;
+        setBatchRunning(true);
+        try { setBatchRez(await api('/api/v1/racuni/batch-knjizi', 'POST', { racun_ids: ids })); }
+        catch (e) { showAlert('Greška: ' + (e?.message||''), 'error'); }
+        finally { setBatchRunning(false); }
+    };
+    const zatvoriBatch = () => { setBatchRez(null); ucitaj(0, false); };
 
     return (
         <div className="fade-in">
@@ -10837,46 +10866,85 @@ function FaktureVPLista({ currentUser, onOpen }) {
                         <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Datum do</label>
                         <input type="date" className="form-control" value={fDo} onChange={e=>setFDo(e.target.value)} />
                     </div>
-                    <button className="btn btn-outline" onClick={ucitaj}><i className="fas fa-filter"></i> Filtriraj</button>
+                    <button className="btn btn-outline" onClick={()=>ucitaj(0,false)}><i className="fas fa-filter"></i> Filtriraj</button>
                 </div>
             </div>
 
+            {canEdit && oznaceni.size > 0 && (
+                <div className="card" style={{marginBottom:12,background:'#ecfdf5'}}>
+                    <div className="card-body" style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+                        <strong>{oznaceni.size} označeno</strong>
+                        <button className="btn btn-primary" style={{background:'#059669',borderColor:'#059669'}} onClick={knjiziOznacene} disabled={batchRunning}>
+                            {batchRunning ? <><i className="fas fa-spinner fa-spin"></i> Knjiženje...</> : <><i className="fas fa-check-double"></i> Knjiži označene</>}
+                        </button>
+                        <button className="btn btn-outline btn-sm" onClick={()=>setOznaceni(new Set())}>Odznači sve</button>
+                    </div>
+                </div>
+            )}
+
             <div className="card">
                 <div style={{overflowX:'auto'}}>
-                    {ucitavanje ? (
+                    {ucitavanje && lista.length===0 ? (
                         <div style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>
                     ) : lista.length === 0 ? (
                         <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
                             <i className="fas fa-inbox" style={{fontSize:24,opacity:0.4,marginBottom:8,display:'block'}}></i>
-                            Nema faktura. Kreiraj prvu.
+                            Nema faktura u izabranom periodu. Promijeni filter ili kreiraj prvu.
                         </div>
                     ) : (
                         <table style={{width:'100%'}}>
                             <thead><tr>
+                                {canEdit && <th style={{width:30}}><input type="checkbox" checked={sviOznaceni} onChange={toggleSve} disabled={draftIds.length===0} title="Označi sve draftove" /></th>}
                                 <th>Šifra</th><th>Datum</th><th>Kupac</th><th>Skladište</th>
                                 <th>Otpremnica</th><th>Valuta</th><th style={{textAlign:'right'}}>Stavki</th>
                                 <th style={{textAlign:'right'}}>Ukupno BAM</th><th>Status</th>
                             </tr></thead>
                             <tbody>
                                 {lista.map(r => (
-                                    <tr key={r.id} onClick={()=>onOpen(r.id)} style={{cursor:'pointer'}}>
-                                        <td style={{fontFamily:'monospace',fontSize:12,fontWeight:600,color:'var(--primary,#2563eb)'}}>{r.sifra}</td>
-                                        <td>{formatDate(r.datum)}</td>
-                                        <td style={{fontWeight:500}}>{r.partner_naziv}</td>
-                                        <td style={{fontSize:12}}>{r.skladiste_naziv}</td>
-                                        <td style={{fontSize:12}}>{r.otpremnica || '-'}</td>
-                                        <td style={{fontSize:12}}>{r.valuta_sifra}</td>
-                                        <td style={{textAlign:'right'}}>{r.ukupno_stavki}</td>
-                                        <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:600}}>{feningToKM(r.ukupno_sa_pdv)}</td>
-                                        <td>{_racunStatusBadge(r.status)}</td>
+                                    <tr key={r.id} style={{cursor:'pointer'}}>
+                                        {canEdit && <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={oznaceni.has(r.id)} disabled={r.status!=='draft'} onChange={()=>toggleOznaci(r.id)} /></td>}
+                                        <td onClick={()=>onOpen(r.id)} style={{fontFamily:'monospace',fontSize:12,fontWeight:600,color:'var(--primary,#2563eb)'}}>{r.sifra}</td>
+                                        <td onClick={()=>onOpen(r.id)}>{formatDate(r.datum)}</td>
+                                        <td onClick={()=>onOpen(r.id)} style={{fontWeight:500}}>{r.partner_naziv}</td>
+                                        <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>{r.skladiste_naziv}</td>
+                                        <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>{r.otpremnica || '-'}</td>
+                                        <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>{r.valuta_sifra}</td>
+                                        <td onClick={()=>onOpen(r.id)} style={{textAlign:'right'}}>{r.ukupno_stavki}</td>
+                                        <td onClick={()=>onOpen(r.id)} style={{textAlign:'right',fontFamily:'monospace',fontWeight:600}}>{feningToKM(r.ukupno_sa_pdv)}</td>
+                                        <td onClick={()=>onOpen(r.id)}>{_racunStatusBadge(r.status)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     )}
                 </div>
-                <div style={{padding:'8px 12px',fontSize:12,color:'var(--gray-400)',textAlign:'right'}}>{lista.length} faktura</div>
+                <div style={{padding:'8px 12px',fontSize:12,color:'var(--gray-400)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    <span>Prikazano {lista.length} od {total}</span>
+                    {hasMore && <button className="btn btn-outline btn-sm" onClick={()=>ucitaj(lista.length, true)} disabled={ucitavanje}>{ucitavanje ? 'Učitavanje...' : `Učitaj još ${LIMIT}`}</button>}
+                </div>
             </div>
+
+            {batchRez && (
+                <Modal isOpen={true} onClose={zatvoriBatch} title="Rezultat knjiženja"
+                    footer={<button className="btn btn-primary" onClick={zatvoriBatch}>U redu</button>}>
+                    <div style={{fontSize:13}}>
+                        <div style={{marginBottom:10}}><strong style={{color:'#059669'}}>Uspješno ({batchRez.uspjesno.length})</strong>
+                            {batchRez.uspjesno.length>0 && <div style={{fontFamily:'monospace',fontSize:12,marginTop:4,color:'#065f46'}}>{batchRez.uspjesno.map(u=>u.sifra).join(', ')}</div>}
+                        </div>
+                        {batchRez.neuspjesno.length>0 && (
+                            <div><strong style={{color:'#dc2626'}}>Neuspješno ({batchRez.neuspjesno.length})</strong>
+                                <table style={{width:'100%',fontSize:12,marginTop:4}}>
+                                    <tbody>{batchRez.neuspjesno.map((n,i)=>(
+                                        <tr key={i}><td style={{color:'#dc2626',width:18}}><i className="fas fa-times"></i></td>
+                                            <td style={{fontFamily:'monospace',whiteSpace:'nowrap'}}>{n.sifra||('#'+n.id)}</td>
+                                            <td>{RAZLOG_TXT[n.razlog]||n.razlog}{n.detalji ? ' — ' + n.detalji.map(d=>`${d.sifra}: traženo ${d.trazeno}, na stanju ${d.na_stanju}`).join('; ') : ''}</td></tr>
+                                    ))}</tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 }
@@ -11097,6 +11165,25 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
     });
     const marzaPct = nabavnaTotalBAM > 0 ? (marzaBAM / nabavnaTotalBAM * 100) : null;
 
+    // DOPUNA 8: keyboard shortcuts (Insert=nova stavka, F9=knjizi, Ctrl+S=spremi, Esc=zatvori modal)
+    const hRef = useRef({});
+    hRef.current = { isDraft, isNew, readOnly, stavkeLen: stavke.length, knjizenje, snimanjeZ,
+        anyModal: stavkaModal || lookupOpen || !!nedovoljno,
+        otvoriNovuStavku, knjizi, spremiZaglavlje,
+        closeModals: () => { if (lookupOpen) setLookupOpen(false); else if (stavkaModal) setStavkaModal(false); else if (nedovoljno) setNedovoljno(null); } };
+    useEffect(() => {
+        const onKey = (e) => {
+            const h = hRef.current;
+            if (e.key === 'Escape') { if (h.anyModal) { e.preventDefault(); h.closeModals(); } return; }
+            if (h.anyModal) return; // ne hvataj globalne dok je modal otvoren
+            if (e.key === 'Insert' && h.isDraft && !h.isNew && !h.readOnly) { e.preventDefault(); h.otvoriNovuStavku(); }
+            else if (e.key === 'F9' && h.isDraft && !h.isNew && h.stavkeLen >= 1 && !h.knjizenje) { e.preventDefault(); h.knjizi(); }
+            else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); if (h.isDraft && !h.readOnly && !h.snimanjeZ) h.spremiZaglavlje(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
     if (ucitavanje) return <div className="fade-in" style={{padding:30,textAlign:'center',color:'var(--gray-400)'}}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>;
 
     const artNaziv = (aid) => { const a = artikli.find(x=>x.id===Number(aid)); return a ? `${a.sifra} - ${a.naziv}` : ''; };
@@ -11316,6 +11403,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
                             {snimanjeS ? <><i className="fas fa-spinner fa-spin"></i> Snimanje...</> : <><i className="fas fa-save"></i> {stavkaEdit ? 'Sačuvaj' : 'Dodaj'}</>}
                         </button>
                     </>}>
+                    <div onKeyDown={(e)=>{ if(e.key==='Enter' && e.target.tagName!=='TEXTAREA' && !snimanjeS){ e.preventDefault(); snimiStavku(); } }}>
                     <div className="form-group">
                         <label>Šifra artikla <span style={{color:'#dc2626'}}>*</span> <span style={{fontWeight:400,fontSize:11,color:'var(--gray-500)'}}>(unesi "-" ili Tab za pretragu)</span></label>
                         <div style={{display:'flex',gap:6}}>
@@ -11371,6 +11459,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
                         <input className="form-control" value={sForm.napomena} onChange={e=>setSForm(f=>({...f,napomena:e.target.value}))} />
                     </div>
                     {sGreska && <div style={{padding:10,background:'#fee2e2',color:'#991b1b',borderRadius:6,fontSize:13,marginTop:8}}><i className="fas fa-exclamation-triangle" style={{marginRight:6}}></i>{sGreska}</div>}
+                </div>
                 </Modal>);
             })()}
             {lookupOpen && <ArtikalLookupModal skladisteId={zForm.skladiste_id} onSelect={izaberiArtikal} onClose={()=>setLookupOpen(false)} />}
