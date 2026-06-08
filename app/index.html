@@ -19893,92 +19893,116 @@ function StaffLoyaltyPortal({ currentUser }) {
 // AUDIT LOG PAGE
 // ==========================================
 function AuditLogPage({ currentUser }) {
-    const [log, setLog] = useState([]);
-    const [search, setSearch] = useState('');
-    useEffect(() => { setLog(getAuditLog()); }, []);
+    const LIMIT = 50;
+    const [items, setItems] = useState([]);
+    const [total, setTotal] = useState(0);
+    const [hasMore, setHasMore] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [radnici, setRadnici] = useState([]);
+    const [fRadnik, setFRadnik] = useState('');
+    const [fMetoda, setFMetoda] = useState('');
+    const [fRuta, setFRuta] = useState('');
+    const [fStatus, setFStatus] = useState('');
+    const [fOd, setFOd] = useState('');
+    const [fDo, setFDo] = useState('');
 
-    const filtered = log.filter(e =>
-        e.akcija.toLowerCase().includes(search.toLowerCase()) ||
-        e.korisnik.toLowerCase().includes(search.toLowerCase()) ||
-        (e.detalji||'').toLowerCase().includes(search.toLowerCase())
-    );
-
-    const ikonice = {
-        'prijava': { icon: 'fa-sign-in-alt', color: '#059669' },
-        'odjava':  { icon: 'fa-sign-out-alt', color: '#6b7280' },
-        'auto-odjava': { icon: 'fa-clock', color: '#d97706' },
-        'auto-close-smjena': { icon: 'fa-stopwatch', color: '#d97706' },
-        'offline-sync': { icon: 'fa-cloud-upload-alt', color: '#1a56db' },
+    const ucitaj = async (offset = 0, append = false) => {
+        setLoading(true);
+        try {
+            const qs = ['limit=' + LIMIT, 'offset=' + offset];
+            if (fRadnik) qs.push('radnik_id=' + encodeURIComponent(fRadnik));
+            if (fMetoda) qs.push('metoda=' + encodeURIComponent(fMetoda));
+            if (fRuta) qs.push('ruta=' + encodeURIComponent(fRuta));
+            if (fStatus) qs.push('status_code=' + encodeURIComponent(fStatus));
+            if (fOd) qs.push('datum_od=' + encodeURIComponent(fOd));
+            if (fDo) qs.push('datum_do=' + encodeURIComponent(fDo));
+            const d = await api('/api/v1/audit_log?' + qs.join('&'));
+            const its = (d && Array.isArray(d.items)) ? d.items : [];
+            setItems(prev => append ? [...prev, ...its] : its);
+            setTotal(d ? d.total : 0); setHasMore(!!(d && d.has_more));
+        } catch (e) { showAlert('Greška pri učitavanju audit loga.', 'error'); if (!append) { setItems([]); setTotal(0); setHasMore(false); } }
+        finally { setLoading(false); }
     };
+    useEffect(() => {
+        (async () => {
+            try { const r = await api('/api/radnici'); setRadnici(Array.isArray(r) ? r : []); } catch (e) {}
+            ucitaj(0, false);
+        })();
+    }, []);
 
+    const metodaBoja = (m) => m === 'DELETE' ? '#dc2626' : m === 'POST' ? '#059669' : m === 'PUT' ? '#d97706' : '#6b7280';
+    const statusBoja = (s) => s >= 500 ? '#dc2626' : s >= 400 ? '#d97706' : '#059669';
     const handleExport = () => {
-        exportCSV(
-            ['Datum/Vrijeme', 'Akcija', 'Korisnik', 'Detalji'],
-            filtered.map(e => [new Date(e.ts).toLocaleString('hr'), e.akcija, e.korisnik, e.detalji||'']),
-            'stt-audit-log'
-        );
-    };
-
-    const handleClear = async () => {
-        if (!await askConfirm('Obrisati kompletni audit log? Ova akcija se ne može poništiti.', true)) return;
-        localStorage.removeItem('stt_audit');
-        setLog([]);
+        exportCSV(['Vrijeme', 'Radnik', 'Metoda', 'Ruta', 'Status', 'IP'],
+            items.map(e => [e.vrijeme, (e.radnik_ime ? e.radnik_ime + ' ' + (e.radnik_prezime || '') : (e.radnik_id || '-')), e.metoda, e.ruta_puna, e.status_code, e.ip || '']),
+            'stt-audit-log');
     };
 
     return (
-        <div className="fade-in" style={{padding:24}}>
-            <div className="card">
-                <div className="card-header" style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
-                    <h3><i className="fas fa-history" style={{marginRight:8,color:'var(--primary)'}}></i>Audit Log</h3>
-                    <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                        <div className="search-bar" style={{width:240}}>
-                            <i className="fas fa-search search-icon"></i>
-                            <input placeholder="Pretraži..." value={search} onChange={e=>setSearch(e.target.value)} />
-                        </div>
-                        <button onClick={handleExport} className="btn btn-outline" style={{fontSize:13}}>
-                            <i className="fas fa-download" style={{marginRight:6}}></i>CSV
-                        </button>
-                        {currentUser.uloga==='admin' && (
-                            <button onClick={handleClear} className="btn" style={{background:'var(--danger)',color:'white',fontSize:13}}>
-                                <i className="fas fa-trash" style={{marginRight:6}}></i>Obriši log
-                            </button>
-                        )}
+        <div className="fade-in" style={{ padding: 24 }}>
+            <div className="card" style={{ marginBottom: 12 }}>
+                <div className="card-body" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: 180 }}>
+                        <label style={{ fontSize: 12, color: 'var(--gray-600)', fontWeight: 600 }}>Radnik</label>
+                        <select className="form-control" style={{ width: '100%' }} value={fRadnik} onChange={e => setFRadnik(e.target.value)}>
+                            <option value="">— svi —</option>
+                            {radnici.map(r => <option key={r.id} value={r.id}>{r.ime} {r.prezime}</option>)}
+                        </select>
                     </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: 120 }}>
+                        <label style={{ fontSize: 12, color: 'var(--gray-600)', fontWeight: 600 }}>Metoda</label>
+                        <select className="form-control" style={{ width: '100%' }} value={fMetoda} onChange={e => setFMetoda(e.target.value)}>
+                            <option value="">— sve —</option><option>POST</option><option>PUT</option><option>DELETE</option>
+                        </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: 160 }}>
+                        <label style={{ fontSize: 12, color: 'var(--gray-600)', fontWeight: 600 }}>Ruta</label>
+                        <input className="form-control" value={fRuta} onChange={e => setFRuta(e.target.value)} placeholder="npr. racuni" />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: 90 }}>
+                        <label style={{ fontSize: 12, color: 'var(--gray-600)', fontWeight: 600 }}>Status</label>
+                        <input className="form-control" inputMode="numeric" value={fStatus} onChange={e => setFStatus(e.target.value)} placeholder="409" />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <label style={{ fontSize: 12, color: 'var(--gray-600)', fontWeight: 600 }}>Od</label>
+                        <input type="date" className="form-control" value={fOd} onChange={e => setFOd(e.target.value)} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <label style={{ fontSize: 12, color: 'var(--gray-600)', fontWeight: 600 }}>Do</label>
+                        <input type="date" className="form-control" value={fDo} onChange={e => setFDo(e.target.value)} />
+                    </div>
+                    <button className="btn btn-outline" onClick={() => ucitaj(0, false)}><i className="fas fa-filter"></i> Filtriraj</button>
+                    <button className="btn btn-outline" onClick={handleExport}><i className="fas fa-download"></i> CSV</button>
                 </div>
-                <div className="card-body" style={{padding:0}}>
-                    {filtered.length === 0 ? (
-                        <div style={{padding:48,textAlign:'center',color:'var(--gray-400)'}}>
-                            <i className="fas fa-history" style={{fontSize:32,marginBottom:12,display:'block'}}></i>
-                            {log.length === 0 ? 'Audit log je prazan — akcije se bilježe automatski.' : 'Nema rezultata za pretragu.'}
-                        </div>
+            </div>
+            <div className="card">
+                <div className="card-header"><i className="fas fa-history" style={{ marginRight: 8, color: 'var(--primary)' }}></i>Audit Log (API izmjene)</div>
+                <div style={{ overflowX: 'auto' }}>
+                    {loading && items.length === 0 ? (
+                        <div style={{ padding: 30, textAlign: 'center', color: 'var(--gray-400)' }}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div>
+                    ) : items.length === 0 ? (
+                        <div style={{ padding: 40, textAlign: 'center', color: 'var(--gray-400)' }}><i className="fas fa-history" style={{ fontSize: 28, marginBottom: 10, display: 'block', opacity: 0.4 }}></i>Nema zapisa za izabrane filtere.</div>
                     ) : (
-                        <table className="table">
-                            <thead><tr><th>Vrijeme</th><th>Akcija</th><th>Korisnik</th><th>Detalji</th></tr></thead>
+                        <table style={{ width: '100%', fontSize: 13 }}>
+                            <thead><tr><th>Vrijeme</th><th>Radnik</th><th>Metoda</th><th>Ruta</th><th style={{ textAlign: 'right' }}>Status</th><th>IP</th></tr></thead>
                             <tbody>
-                                {filtered.map(e => {
-                                    const ik = ikonice[e.akcija] || { icon: 'fa-circle', color: 'var(--gray-400)' };
-                                    return (
-                                        <tr key={e.id}>
-                                            <td style={{fontSize:12,color:'var(--gray-500)',whiteSpace:'nowrap'}}>
-                                                {formatDate(e.ts.split('T')[0])} {e.ts.split('T')[1]?.slice(0,5)}
-                                            </td>
-                                            <td>
-                                                <span style={{display:'inline-flex',alignItems:'center',gap:6}}>
-                                                    <i className={`fas ${ik.icon}`} style={{color:ik.color,fontSize:13}}></i>
-                                                    <strong>{e.akcija}</strong>
-                                                </span>
-                                            </td>
-                                            <td>{e.korisnik}</td>
-                                            <td style={{fontSize:13,color:'var(--gray-500)'}}>{e.detalji||'—'}</td>
-                                        </tr>
-                                    );
-                                })}
+                                {items.map(e => (
+                                    <tr key={e.id}>
+                                        <td style={{ fontSize: 12, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>{e.vrijeme}</td>
+                                        <td>{e.radnik_ime ? (e.radnik_ime + ' ' + (e.radnik_prezime || '')) : (e.radnik_id || '—')}</td>
+                                        <td><span style={{ fontFamily: 'monospace', fontWeight: 600, color: metodaBoja(e.metoda) }}>{e.metoda}</span></td>
+                                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{e.ruta_puna}</td>
+                                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: statusBoja(e.status_code) }}>{e.status_code}</td>
+                                        <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{e.ip || '—'}</td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     )}
                 </div>
-                <div style={{padding:'10px 20px',borderTop:'1px solid var(--gray-200)',fontSize:12,color:'var(--gray-400)'}}>
-                    {filtered.length} od {log.length} zapisa • Log se čuva lokalno (max 500 unosa)
+                <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--gray-400)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>Prikazano {items.length} od {total}</span>
+                    {hasMore && <button className="btn btn-outline btn-sm" onClick={() => ucitaj(items.length, true)} disabled={loading}>{loading ? 'Učitavanje...' : ('Učitaj još ' + LIMIT)}</button>}
                 </div>
             </div>
         </div>
