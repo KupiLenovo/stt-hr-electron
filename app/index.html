@@ -15960,101 +15960,110 @@ class ErrorBoundary extends React.Component {
 // Badge logika i Primopredaja pulsing su izvedeni u NavModuli render funkciji.
 // =====================================================================
 const MODULI = [
-    { id: 'm_dashboard', naziv: 'Dashboard', icon: 'fas fa-tachometer-alt', stavke: [
-        { page: 'centrala',  naziv: 'Centrala',  icon: 'fas fa-building' },
-        { page: 'dashboard', naziv: 'Dashboard', icon: 'fas fa-tachometer-alt' },
+    // === Faza Nav Reorg (Zadatak 1): 8 modula sa subGrupe. Postojeci page-key-evi i router NETAKNUTI. ===
+    { id: 'm_pocetna', naziv: 'Početna', icon: 'fas fa-home', stavke: [
+        { page: 'centrala',  naziv: 'Centrala',  icon: 'fas fa-th-large' },
+        { page: 'dashboard', naziv: 'Dashboard', icon: 'fas fa-chart-pie' },
     ]},
-    { id: 'm_veleprodaja', naziv: 'Veleprodaja', icon: 'fas fa-warehouse', stavke: [
-        { page: 'fakture_vp', naziv: 'Veleprodajne fakture', icon: 'fas fa-file-invoice' },
-    ]},
-    { id: 'm_maloprodaja', naziv: 'Maloprodaja', icon: 'fas fa-store', stavke: [
-        { page: 'pazar',        naziv: 'Polog pazara',        icon: 'fas fa-cash-register' },
+    { id: 'm_roba', naziv: 'Roba', icon: 'fas fa-boxes',
+      stavke: [
+        { page: 'artikli',         naziv: 'Artikli',            icon: 'fas fa-box' },
+        { page: 'grupe_artikala',  naziv: 'Grupe artikala',     icon: 'fas fa-layer-group' },
+        { page: 'cjenovnici',      naziv: 'Cjenovnici',         icon: 'fas fa-tags' },
+        { page: 'tarife',          naziv: 'Tarife (PDV)',       icon: 'fas fa-percent' },
+        { page: 'kalkulacije',     naziv: 'Ulazne kalkulacije', icon: 'fas fa-file-invoice' },
+        { page: 'zalihe',          naziv: 'Pregled zaliha',     icon: 'fas fa-warehouse' },
+      ],
+      subGrupe: [
+        { id: 'g_katalog', naziv: 'Katalog', icon: 'fas fa-box',           page_keys: ['artikli','grupe_artikala','cjenovnici','tarife'] },
+        { id: 'g_nabavka', naziv: 'Nabavka', icon: 'fas fa-truck-loading', page_keys: ['kalkulacije'] },
+        { id: 'g_zalihe',  naziv: 'Zalihe',  icon: 'fas fa-boxes',         page_keys: ['zalihe'] },
+      ]
+    },
+    { id: 'm_prodaja', naziv: 'Prodaja', icon: 'fas fa-cash-register',
+      stavke: [
+        { page: 'fakture_vp',   naziv: 'VP Fakture',          icon: 'fas fa-file-invoice' },
+        { page: 'pazar',        naziv: 'Polog pazara',        icon: 'fas fa-coins' },
         { page: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fas fa-exchange-alt' },
-    ]},
-    { id: 'm_nabavka', naziv: 'Nabavka', icon: 'fas fa-truck-loading', stavke: [
-        { page: 'kalkulacije', naziv: 'Ulazne kalkulacije', icon: 'fas fa-file-invoice' },
-    ]},
-    { id: 'm_zalihe', naziv: 'Zalihe', icon: 'fas fa-boxes', stavke: [
-        { page: 'zalihe', naziv: 'Zalihe', icon: 'fas fa-boxes' },
-    ]},
+      ],
+      subGrupe: [
+        { id: 'g_veleprodaja', naziv: 'Veleprodaja', icon: 'fas fa-file-invoice', page_keys: ['fakture_vp'] },
+        { id: 'g_maloprodaja', naziv: 'Maloprodaja', icon: 'fas fa-store',        page_keys: ['pazar','primopredaja'] },
+      ]
+    },
+    { id: 'm_operacije', naziv: 'Operacije', icon: 'fas fa-cogs',
+      stavke: [
+        { page: 'servis',    naziv: 'Servisni prijem',    icon: 'fas fa-tools' },
+        { page: 'dostava',   naziv: 'Dostava robe',       icon: 'fas fa-truck' },
+        { page: 'dopuna',    naziv: 'Dopuna maloprodaje', icon: 'fas fa-dolly' },
+        { page: 'dopuna_vp', naziv: 'Dopuna VP — Uvoz',   icon: 'fas fa-ship' },
+        { page: 'vozila',    naziv: 'Službena vozila',    icon: 'fas fa-car-side' },
+      ],
+      subGrupe: [
+        { id: 'g_servis',    naziv: 'Servis',    icon: 'fas fa-tools', page_keys: ['servis'] },
+        { id: 'g_logistika', naziv: 'Logistika', icon: 'fas fa-truck', page_keys: ['dostava','dopuna','dopuna_vp','vozila'] },
+      ]
+    },
     { id: 'm_web', naziv: 'Web', icon: 'fas fa-globe', uskoro: true, stavke: [] },
-    { id: 'm_servis', naziv: 'Servis', icon: 'fas fa-tools', stavke: [
-        { page: 'servis', naziv: 'Servisni prijem', icon: 'fas fa-tools' },
-    ]},
-    { id: 'm_logistika', naziv: 'Logistika', icon: 'fas fa-truck', stavke: [
-        { page: 'dostava',   naziv: 'Dostava robe',        icon: 'fas fa-truck' },
-        { page: 'dopuna',    naziv: 'Dopuna maloprodaje',  icon: 'fas fa-boxes' },
-        { page: 'dopuna_vp', naziv: 'Dopuna VP — Uvoz',    icon: 'fas fa-ship' },
-        { page: 'vozila',    naziv: 'Službena vozila',     icon: 'fas fa-car-side' },
-    ]},
-    { id: 'm_finansije', naziv: 'Finansije', icon: 'fas fa-coins', stavke: [
-        { page: 'vp_dugovanja', naziv: 'VP Dugovanja', icon: 'fas fa-hand-holding-usd' },
-    ]},
-    { id: 'm_hr', naziv: 'HR', icon: 'fas fa-users', stavke: [
-        { page: 'evidencija',        naziv: 'Evidencija rada',     icon: 'fas fa-clock' },
-        { page: 'admin_evidencija',  naziv: 'Pregled evidencije',  icon: 'fas fa-user-clock', gate: 'admin_voditelj' },
-        { page: 'odmori',            naziv: 'Godišnji odmori',     icon: 'fas fa-umbrella-beach' },
-        { page: 'kasnjenja',         naziv: 'Kašnjenja / Izjave',  icon: 'fas fa-exclamation-triangle' },
-        { page: 'radnici',           naziv: 'Radnici',             icon: 'fas fa-users-cog', gate: 'admin' },
-        { page: 'profil',            naziv: 'Moj profil',          icon: 'fas fa-user-circle' },
-    ]},
-    { id: 'm_crm', naziv: 'CRM', icon: 'fas fa-chart-line', stavke: [
-        { page: 'crm',                  naziv: 'CRM — Kupci',           icon: 'fas fa-chart-line' },
+    { id: 'm_ljudi', naziv: 'Ljudi', icon: 'fas fa-users',
+      stavke: [
+        { page: 'evidencija',           naziv: 'Evidencija rada',       icon: 'fas fa-clock' },
+        { page: 'admin_evidencija',     naziv: 'Pregled evidencije',    icon: 'fas fa-user-clock', gate: 'admin_voditelj' },
+        { page: 'odmori',               naziv: 'Godišnji odmori',       icon: 'fas fa-umbrella-beach' },
+        { page: 'kasnjenja',            naziv: 'Kašnjenja / Izjave',    icon: 'fas fa-exclamation-triangle' },
+        { page: 'radnici',              naziv: 'Radnici',               icon: 'fas fa-users-cog', gate: 'admin' },
+        { page: 'profil',               naziv: 'Moj profil',            icon: 'fas fa-user-circle' },
+        { page: 'crm',                  naziv: 'CRM — Kupci',           icon: 'fas fa-address-book' },
         { page: 'leadovi',              naziv: 'Sales Leadovi (MP)',    icon: 'fas fa-bullhorn' },
         { page: 'leadovi_vp',           naziv: 'Sales Leadovi (VP)',    icon: 'fas fa-bullhorn' },
         { page: 'loyalty_kupilenovo',   naziv: 'Kupilenovo Care Club',  icon: 'fas fa-laptop' },
         { page: 'loyalty_tuttocapsule', naziv: 'Tutto Capsule Loyalty', icon: 'fas fa-mug-hot' },
         { page: 'loyalty_staff',        naziv: 'Staff Portal',          icon: 'fas fa-star' },
-    ]},
-    { id: 'm_sifrarnici', naziv: 'Šifrarnici', icon: 'fas fa-folder-open',
-      // 'stavke' = flat lista koristi sidebar NavModuli i sve drugo sto trazi stavke modula.
-      // 'subGrupe' = samo TopNavigation koristi za grupisan dropdown render (4 grupe).
-      // Page_keys u subGrupama moraju biti subset stavke[].page (svaki page_key mora postojati).
-      stavke: [
-        { page: 'partneri',                 naziv: 'Partneri',           icon: 'fas fa-address-book' },
-        { page: 'artikli',                  naziv: 'Artikli',            icon: 'fas fa-box' },
-        { page: 'grupe_artikala',           naziv: 'Grupe artikala',     icon: 'fas fa-layer-group' },
-        { page: 'tarife',                   naziv: 'Tarife',             icon: 'fas fa-percent' },
-        { page: 'cjenovnici',               naziv: 'Cjenovnik',          icon: 'fas fa-tags' },
-        { page: 'nacini_placanja',          naziv: 'Načini plaćanja',    icon: 'fas fa-money-bill-wave' },
-        { page: 'drzave',                   naziv: 'Države',             icon: 'fas fa-flag' },
-        { page: 'kantoni',                  naziv: 'Kantoni',            icon: 'fas fa-map' },
-        { page: 'opcine',                   naziv: 'Općine',             icon: 'fas fa-map-marker-alt' },
-        { page: 'valute',                   naziv: 'Valute',             icon: 'fas fa-coins' },
-        { page: 'kursna_lista',             naziv: 'Kursna lista',       icon: 'fas fa-exchange-alt' },
-        { page: 'napomene',                 naziv: 'Napomene',           icon: 'fas fa-sticky-note' },
-        { page: 'carinske_tarife',          naziv: 'Carinske tarife',    icon: 'fas fa-passport' },
-        { page: 'vrste_zavisnih_troskova',  naziv: 'Zavisni troškovi',   icon: 'fas fa-truck-loading' },
-        { page: 'vauceri',                  naziv: 'Vaučeri',            icon: 'fas fa-ticket-alt' },
-        { page: 'kontni_plan',              naziv: 'Kontni plan',        icon: 'fas fa-book' },
-        { page: 'vrste_naloga',             naziv: 'Vrste naloga',       icon: 'fas fa-file-invoice' },
-        { page: 'skladista',                naziv: 'Skladišta',          icon: 'fas fa-warehouse' },
-        { page: 'lokacije',                 naziv: 'Lokacije',           icon: 'fas fa-store' },
       ],
       subGrupe: [
-        { id: 'g_katalog',    naziv: 'Katalog',    icon: 'fas fa-box',
-          page_keys: ['partneri','artikli','grupe_artikala','tarife','cjenovnici'] },
-        { id: 'g_geografija', naziv: 'Geografija', icon: 'fas fa-map-marked-alt',
-          page_keys: ['drzave','kantoni','opcine'] },
-        { id: 'g_finansije',  naziv: 'Finansije',  icon: 'fas fa-coins',
-          page_keys: ['kontni_plan','vrste_naloga','valute','kursna_lista','carinske_tarife'] },
-        { id: 'g_operativa',  naziv: 'Operativa',  icon: 'fas fa-warehouse',
-          page_keys: ['nacini_placanja','napomene','vrste_zavisnih_troskova','vauceri','skladista','lokacije'] },
+        { id: 'g_hr',      naziv: 'HR',      icon: 'fas fa-user-clock', page_keys: ['evidencija','admin_evidencija','odmori','kasnjenja','radnici','profil'] },
+        { id: 'g_crm',     naziv: 'CRM',     icon: 'fas fa-chart-line', page_keys: ['crm','leadovi','leadovi_vp'] },
+        { id: 'g_loyalty', naziv: 'Loyalty', icon: 'fas fa-star',       page_keys: ['loyalty_kupilenovo','loyalty_tuttocapsule','loyalty_staff'] },
       ]
     },
-    { id: 'm_alati', naziv: 'Alati', icon: 'fas fa-toolbox', stavke: [
-        { page: 'izvjestaji', naziv: 'Izvještaji',          icon: 'fas fa-chart-bar', gate: 'admin_voditelj' },
-        { page: 'vodici',     naziv: 'Vodici i tutorijali', icon: 'fas fa-book' },
-        { page: 'chat',       naziv: 'Chat / Komunikacija', icon: 'fas fa-comments' },
-        { page: 'zadaci',     naziv: 'Zadaci (svi)',        icon: 'fas fa-tasks' },
-        { page: 'zadaci_mp',  naziv: 'Zadaci MP',           icon: 'fas fa-tasks' },
-        { page: 'zadaci_vp',  naziv: 'Zadaci VP',           icon: 'fas fa-tasks' },
+    { id: 'm_finansije', naziv: 'Finansije', icon: 'fas fa-coins', stavke: [
+        { page: 'vp_dugovanja', naziv: 'VP Dugovanja', icon: 'fas fa-hand-holding-usd' },
+        { page: 'izvjestaji',   naziv: 'Izvještaji',   icon: 'fas fa-chart-bar', gate: 'admin_voditelj' },
     ]},
-    { id: 'm_administracija', naziv: 'Administracija', icon: 'fas fa-cog', stavke: [
-        { page: 'pravila',  naziv: 'Pravila i Instrukcije', icon: 'fas fa-book' },
-        { page: 'audit',    naziv: 'Audit log',             icon: 'fas fa-history', gate: 'admin' },
-        { page: 'download', naziv: 'Preuzimanje podataka',  icon: 'fas fa-download' },
-    ]},
+    { id: 'm_sistem', naziv: 'Sistem', icon: 'fas fa-cog',
+      stavke: [
+        { page: 'partneri',                 naziv: 'Partneri',              icon: 'fas fa-address-book' },
+        { page: 'nacini_placanja',          naziv: 'Načini plaćanja',       icon: 'fas fa-money-bill-wave' },
+        { page: 'napomene',                 naziv: 'Napomene',              icon: 'fas fa-sticky-note' },
+        { page: 'vrste_zavisnih_troskova',  naziv: 'Zavisni troškovi',      icon: 'fas fa-truck-loading' },
+        { page: 'vauceri',                  naziv: 'Vaučeri',               icon: 'fas fa-ticket-alt' },
+        { page: 'skladista',                naziv: 'Skladišta',             icon: 'fas fa-warehouse' },
+        { page: 'lokacije',                 naziv: 'Lokacije',              icon: 'fas fa-store' },
+        { page: 'drzave',                   naziv: 'Države',                icon: 'fas fa-flag' },
+        { page: 'kantoni',                  naziv: 'Kantoni',               icon: 'fas fa-map' },
+        { page: 'opcine',                   naziv: 'Općine',                icon: 'fas fa-map-marker-alt' },
+        { page: 'valute',                   naziv: 'Valute',                icon: 'fas fa-coins' },
+        { page: 'kursna_lista',             naziv: 'Kursna lista',          icon: 'fas fa-exchange-alt' },
+        { page: 'carinske_tarife',          naziv: 'Carinske tarife',       icon: 'fas fa-passport' },
+        { page: 'kontni_plan',              naziv: 'Kontni plan',           icon: 'fas fa-book' },
+        { page: 'vrste_naloga',             naziv: 'Vrste naloga',          icon: 'fas fa-file-invoice' },
+        { page: 'vodici',                   naziv: 'Vodiči i tutorijali',   icon: 'fas fa-book' },
+        { page: 'chat',                     naziv: 'Chat / Komunikacija',   icon: 'fas fa-comments' },
+        { page: 'zadaci',                   naziv: 'Zadaci (svi)',          icon: 'fas fa-tasks' },
+        { page: 'zadaci_mp',                naziv: 'Zadaci MP',             icon: 'fas fa-tasks' },
+        { page: 'zadaci_vp',                naziv: 'Zadaci VP',             icon: 'fas fa-tasks' },
+        { page: 'pravila',                  naziv: 'Pravila i Instrukcije', icon: 'fas fa-book' },
+        { page: 'audit',                    naziv: 'Audit log',             icon: 'fas fa-history', gate: 'admin' },
+        { page: 'download',                 naziv: 'Preuzimanje podataka',  icon: 'fas fa-download' },
+      ],
+      subGrupe: [
+        { id: 'g_sif_operativa',  naziv: 'Šifrarnici — Operativa',  icon: 'fas fa-warehouse',      page_keys: ['partneri','nacini_placanja','napomene','vrste_zavisnih_troskova','vauceri','skladista','lokacije'] },
+        { id: 'g_sif_geografija', naziv: 'Šifrarnici — Geografija', icon: 'fas fa-map-marked-alt', page_keys: ['drzave','kantoni','opcine'] },
+        { id: 'g_sif_finansije',  naziv: 'Šifrarnici — Finansije',  icon: 'fas fa-coins',          page_keys: ['valute','kursna_lista','carinske_tarife','kontni_plan','vrste_naloga'] },
+        { id: 'g_alati',          naziv: 'Alati',                   icon: 'fas fa-toolbox',        page_keys: ['vodici','chat','zadaci','zadaci_mp','zadaci_vp'] },
+        { id: 'g_administracija', naziv: 'Administracija',          icon: 'fas fa-cog',            page_keys: ['pravila','audit','download'] },
+      ]
+    },
 ];
 
 // Provjera vidljivosti stavke prema postojecim gate-ovima (1:1 iz starog sidebar-a)
