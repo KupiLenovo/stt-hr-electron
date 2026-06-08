@@ -1579,7 +1579,120 @@ function Modal({ isOpen, onClose, title, children, footer }) {
     return ReactDOM.createPortal(content, portalTarget);
 }
 
-// --- Dashboard Page ---
+// Zadatak 4: Dashboard za Pocetnu (admin verzija). Pure-SVG sparkline, bez biblioteke.
+function Sparkline({ data }) {
+    if (!data || data.length === 0) return null;
+    const max = Math.max(...data), min = Math.min(...data);
+    const W = 300, H = 56, pad = 4;
+    const pts = data.length === 1
+        ? `${pad},${H/2} ${W-pad},${H/2}`
+        : data.map((v, i) => {
+            const x = pad + (i / (data.length - 1)) * (W - 2 * pad);
+            const y = H - pad - ((v - min) / ((max - min) || 1)) * (H - 2 * pad);
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+    return (
+        <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block', margin: '10px 0' }}>
+            <polyline fill="none" stroke="#0F6E56" strokeWidth="2" points={pts} />
+        </svg>
+    );
+}
+
+function DashboardPocetna({ currentUser, setPage }) {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    useEffect(() => {
+        api('/api/v1/dashboard').then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+    }, []);
+
+    if (loading) return <div className="fade-in" style={{ padding: 24 }}><div className="card"><div className="card-body" style={{ textAlign: 'center', color: 'var(--gray-400)' }}><i className="fas fa-spinner fa-spin"></i> Učitavanje...</div></div></div>;
+    if (!data) return <div className="fade-in" style={{ padding: 24 }}><div className="card"><div className="card-body">Greška pri učitavanju dashboarda.</div></div></div>;
+    if (data.placeholder || data.uloga !== 'admin') {
+        return (
+            <div className="fade-in" style={{ padding: 24 }}>
+                <div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 40, color: 'var(--gray-500)' }}>
+                    <i className="fas fa-chart-pie" style={{ fontSize: 32, marginBottom: 12, display: 'block', opacity: 0.4 }}></i>
+                    Dobar dan{data.korisnik && data.korisnik.ime ? ', ' + data.korisnik.ime : ''}. Dashboard za vašu ulogu je uskoro.
+                </div></div>
+            </div>
+        );
+    }
+
+    const d = data.danas;
+    const trendUp = d.trend_pct >= 0;
+    const navAkcija = (a) => { if (a.link && setPage) setPage(a.link); };
+    const navTipka = (t) => {
+        if (t.akcija === 'nova') {
+            if (t.page === 'fakture_vp') localStorage.setItem('open_faktura_nova', '1');
+            else if (t.page === 'kalkulacije') localStorage.setItem('open_kalkulacija_nova', '1');
+        }
+        if (setPage) setPage(t.page);
+    };
+
+    return (
+        <div className="fade-in" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>Dobar dan{data.korisnik && data.korisnik.ime ? ', ' + data.korisnik.ime : ''}</h1>
+                <div style={{ color: 'var(--gray-500)' }}>{formatDate(d.datum)}</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+                <div className="card">
+                    <div className="card-header">Današnji promet</div>
+                    <div className="card-body">
+                        <div style={{ fontSize: 34, fontWeight: 700, color: 'var(--gray-900,#111827)' }}>{feningToKM(d.promet_bam)} KM</div>
+                        <div style={{ fontWeight: 600, color: trendUp ? '#0F6E56' : '#C04828' }}>
+                            <i className={`fas fa-arrow-${trendUp ? 'up' : 'down'}`} style={{ marginRight: 4 }}></i>
+                            {(trendUp ? '+' : '')}{d.trend_pct.toFixed(1)}% vs prošli isti dan
+                        </div>
+                        <Sparkline data={data.trend_mjesec.sparkline} />
+                        <div style={{ color: 'var(--gray-500)', fontSize: 13 }}>{d.broj_faktura} faktura · {d.broj_kalkulacija} kalkulacija danas</div>
+                    </div>
+                </div>
+                <div className="card">
+                    <div className="card-header">Akcije ({data.akcije.length})</div>
+                    <div className="card-body" style={{ padding: '4px 12px' }}>
+                        {data.akcije.length === 0 ? <div style={{ padding: 16, color: 'var(--gray-400)', fontSize: 13 }}>Nema otvorenih akcija. 👍</div> :
+                            data.akcije.map(a => (
+                                <div key={a.tip} onClick={() => navAkcija(a)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--gray-100)', cursor: 'pointer' }}>
+                                    <div style={{ fontSize: 22, fontWeight: 700, color: '#0F6E56', minWidth: 40 }}>{a.broj}</div>
+                                    <div style={{ flex: 1 }}>{a.label}</div>
+                                    <i className="fas fa-chevron-right" style={{ color: 'var(--gray-400)', fontSize: 12 }}></i>
+                                </div>
+                            ))}
+                    </div>
+                </div>
+                <div className="card">
+                    <div className="card-header">Top artikli ovog mjeseca</div>
+                    <div style={{ overflowX: 'auto' }}>
+                        {data.top_artikli_mjesec.length === 0 ? <div style={{ padding: 16, color: 'var(--gray-400)', fontSize: 13 }}>Nema prodaje ovog mjeseca.</div> :
+                            <table style={{ width: '100%', fontSize: 13 }}>
+                                <thead><tr><th>#</th><th>Šifra</th><th>Naziv</th><th style={{ textAlign: 'right' }}>Kol.</th><th style={{ textAlign: 'right' }}>Promet</th></tr></thead>
+                                <tbody>
+                                    {data.top_artikli_mjesec.map((a, i) => (
+                                        <tr key={a.sifra}><td>{i + 1}</td><td style={{ fontFamily: 'monospace', fontSize: 12 }}>{a.sifra}</td><td>{a.naziv}</td>
+                                            <td style={{ textAlign: 'right' }}>{a.kolicina}</td><td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{feningToKM(a.promet)}</td></tr>
+                                    ))}
+                                </tbody>
+                            </table>}
+                    </div>
+                </div>
+                <div className="card">
+                    <div className="card-header">Brze akcije</div>
+                    <div className="card-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
+                        {data.brze_tipke.map(t => (
+                            <button key={t.page + (t.akcija || '')} className="btn btn-outline" onClick={() => navTipka(t)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 14, height: 'auto' }}>
+                                <i className={t.icon} style={{ fontSize: 18, color: '#0F6E56' }}></i>
+                                <span style={{ fontSize: 12 }}>{t.naziv}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- Dashboard Page (legacy HR overview; vise nije routan na 'dashboard' - Zadatak 4) ---
 function DashboardPage({ radnici, evidencije, polozi, dostave, zahtjeviOdmora, currentUser }) {
     const [dashData, setDashData] = useState(null);
     useEffect(() => { api('/api/dashboard').then(setDashData).catch(()=>{}); }, []);
@@ -10744,6 +10857,13 @@ function _racunStatusBadge(status) {
 
 function FaktureVPRouter({ currentUser }) {
     const [view, setView] = useState({ mode: 'lista' });
+    // Zadatak 4: "Nova VP faktura" brza tipka s dashboarda otvara novu draft formu
+    useEffect(() => {
+        if (localStorage.getItem('open_faktura_nova')) {
+            localStorage.removeItem('open_faktura_nova');
+            setView({ mode: 'detalji', id: null });
+        }
+    }, []);
     if (view.mode === 'detalji')
         return <FakturaVPDetalji id={view.id} currentUser={currentUser} onBack={()=>setView({ mode: 'lista' })} />;
     return <FaktureVPLista currentUser={currentUser} onOpen={(id)=>setView({ mode: 'detalji', id })} />;
@@ -11514,6 +11634,9 @@ function KalkulacijePage({ currentUser }) {
         if (pending) {
             localStorage.removeItem('open_kalkulacija_id');
             setView({ mode: 'detalji', id: Number(pending) });
+        } else if (localStorage.getItem('open_kalkulacija_nova')) {
+            localStorage.removeItem('open_kalkulacija_nova');
+            setView({ mode: 'detalji', id: null }); // Zadatak 4: brza tipka "Nova kalkulacija"
         }
     }, []);
     if (view.mode === 'detalji')
@@ -16711,7 +16834,7 @@ function App() {
     const renderPage = () => {
         switch(page) {
             case 'centrala': return <CentralaPage radnici={radnici} evidencije={evidencije} polozi={polozi} dostave={dostave} zahtjeviDopune={zahtjeviDopune} zahtjeviOdmora={zahtjeviOdmora} primopredaje={primopredaje} />;
-            case 'dashboard': return <DashboardPage radnici={radnici} evidencije={evidencije} polozi={polozi} dostave={dostave} zahtjeviOdmora={zahtjeviOdmora} currentUser={currentUser} />;
+            case 'dashboard': return <DashboardPocetna currentUser={currentUser} setPage={setPage} />;
             case 'admin_evidencija': return <AdminEvidencijaPage radnici={radnici} currentUser={currentUser} />;
             case 'evidencija': return <EvidencijaPage radnici={radnici} evidencije={evidencije} setEvidencije={setEvidencije} currentUser={currentUser} setPage={setPage} />;
             case 'primopredaja': return <PrimopredajaPage radnici={radnici} currentUser={currentUser} />;
