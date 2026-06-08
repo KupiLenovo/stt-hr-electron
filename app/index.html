@@ -10855,21 +10855,62 @@ function _racunStatusBadge(status) {
     return <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'#e5e7eb',color:'#374151',fontWeight:600}}>DRAFT</span>;
 }
 
-function FaktureVPRouter({ currentUser }) {
-    const [view, setView] = useState({ mode: 'lista' });
-    // Zadatak 4: "Nova VP faktura" brza tipka s dashboarda otvara novu draft formu
-    useEffect(() => {
-        if (localStorage.getItem('open_faktura_nova')) {
-            localStorage.removeItem('open_faktura_nova');
-            setView({ mode: 'detalji', id: null });
-        }
-    }, []);
-    if (view.mode === 'detalji')
-        return <FakturaVPDetalji id={view.id} currentUser={currentUser} onBack={()=>setView({ mode: 'lista' })} />;
-    return <FaktureVPLista currentUser={currentUser} onOpen={(id)=>setView({ mode: 'detalji', id })} />;
+// FAZA 4.B: konfiguracija po vrsti dokumenta (faktura | predracun) — jedan set komponenti, dvije namjene.
+function _racunVrstaCfg(vrsta) {
+    if (vrsta === 'predracun') return {
+        vrsta: 'predracun', jePredracun: true,
+        listaIcon: 'fas fa-file-contract',
+        listaOpis: 'Veleprodajni predračuni (proforma/ponuda). Knjiženje NE skida stanje — služi kao ponuda kupcu prije isporuke.',
+        exportNaslov: 'Predračuni (VP)',
+        noviBtn: 'Novi predračun', noviNaslov: 'Novi predračun',
+        praznoLista: 'Nema predračuna u izabranom periodu. Promijeni filter ili kreiraj prvi.',
+        knjiziBtn: 'Knjiži predračun', knjiziConfirm: 'Knjiženje zaključava predračun. NE dira zalihe (samo ponuda). Nastaviti?',
+        knjiziOkPrefix: 'Predračun knjižen', batchPojam: 'predračuna',
+    };
+    return {
+        vrsta: 'faktura', jePredracun: false,
+        listaIcon: 'fas fa-file-invoice',
+        listaOpis: 'Veleprodajne fakture (B2B). Knjiženje skida stanje sa zaliha i zaključava fakturu.',
+        exportNaslov: 'Fakture (VP)',
+        noviBtn: 'Nova faktura', noviNaslov: 'Nova faktura',
+        praznoLista: 'Nema faktura u izabranom periodu. Promijeni filter ili kreiraj prvu.',
+        knjiziBtn: 'Knjiži fakturu', knjiziConfirm: 'Knjiženje skida stanje sa zaliha i zaključava fakturu. Nepovratno. Nastaviti?',
+        knjiziOkPrefix: 'Faktura knjižena', batchPojam: 'faktura',
+    };
+}
+// Rok vazenja predracuna -> boja (zelena >3d, zuta 0-3d, crvena isteklo)
+function _rokVazenjaBoja(rok) {
+    if (!rok) return null;
+    const danas = new Date(); danas.setHours(0,0,0,0);
+    const d = new Date(rok + 'T00:00:00');
+    const dana = Math.round((d - danas) / 86400000);
+    if (dana < 0) return { boja:'#dc2626', bg:'#fee2e2', txt:'isteklo' };
+    if (dana <= 3) return { boja:'#92400e', bg:'#fef3c7', txt: dana===0 ? 'danas' : (dana+'d') };
+    return { boja:'#065f46', bg:'#d1fae5', txt: dana+'d' };
 }
 
-function FaktureVPLista({ currentUser, onOpen }) {
+function RacuniVPRouter({ currentUser, vrsta = 'faktura', setPage }) {
+    const [view, setView] = useState({ mode: 'lista' });
+    // Brza tipka s dashboarda ("Nova VP faktura") + cross-page redirect (open_racun_id):
+    // konverzija predracun->faktura ili klik veze "kreirana iz predračuna"/"konvertovan u". Otvara konkretan dokument na ovoj stranici.
+    useEffect(() => {
+        const novaFlag = vrsta === 'predracun' ? 'open_predracun_nova' : 'open_faktura_nova';
+        if (localStorage.getItem(novaFlag)) {
+            localStorage.removeItem(novaFlag);
+            setView({ mode: 'detalji', id: null });
+            return;
+        }
+        const openId = localStorage.getItem('open_racun_id');
+        if (openId) { localStorage.removeItem('open_racun_id'); setView({ mode: 'detalji', id: Number(openId) }); }
+    }, []);
+    if (view.mode === 'detalji')
+        return <RacuniVPDetalji id={view.id} vrsta={vrsta} currentUser={currentUser} setPage={setPage}
+                   onBack={()=>setView({ mode: 'lista' })} onOpenRacun={(id)=>setView({ mode: 'detalji', id })} />;
+    return <RacuniVPLista currentUser={currentUser} vrsta={vrsta} onOpen={(id)=>setView({ mode: 'detalji', id })} />;
+}
+
+function RacuniVPLista({ currentUser, vrsta = 'faktura', onOpen }) {
+    const cfg = _racunVrstaCfg(vrsta);
     const uloga = currentUser && currentUser.uloga;
     const canEdit = uloga === 'admin' || uloga === 'voditelj';
     const danas = new Date().toISOString().slice(0,10);
@@ -10886,6 +10927,7 @@ function FaktureVPLista({ currentUser, onOpen }) {
     const [fSkladiste, setFSkladiste] = useState('');
     const [fOd, setFOd] = useState(prviUMjesecu); // DOPUNA 7: default ovaj mjesec
     const [fDo, setFDo] = useState(danas);
+    const [fSamoVazeci, setFSamoVazeci] = useState(false); // FAZA 4.B: samo vazeci predracuni
     const [oznaceni, setOznaceni] = useState(()=>new Set()); // DOPUNA 3
     const [batchRunning, setBatchRunning] = useState(false);
     const [batchRez, setBatchRez] = useState(null);
@@ -10893,19 +10935,20 @@ function FaktureVPLista({ currentUser, onOpen }) {
     const ucitaj = async (offset = 0, append = false) => {
         setUcitavanje(true);
         try {
-            const qs = ['tip_prodaje=vp', 'vrsta_dokumenta=faktura', 'limit=' + LIMIT, 'offset=' + offset];
+            const qs = ['tip_prodaje=vp', 'vrsta_dokumenta=' + cfg.vrsta, 'limit=' + LIMIT, 'offset=' + offset];
             if (fStatus) qs.push('status=' + encodeURIComponent(fStatus));
             if (fPartner) qs.push('partner_id=' + encodeURIComponent(fPartner));
             if (fSkladiste) qs.push('skladiste_id=' + encodeURIComponent(fSkladiste));
             if (fOd) qs.push('datum_od=' + encodeURIComponent(fOd));
             if (fDo) qs.push('datum_do=' + encodeURIComponent(fDo));
+            if (cfg.jePredracun && fSamoVazeci) qs.push('samo_vazeci=true');
             const d = await api('/api/v1/racuni?' + qs.join('&'));
             const items = (d && Array.isArray(d.items)) ? d.items : [];
             setLista(prev => append ? [...prev, ...items] : items);
             setTotal(d?.total || 0);
             setHasMore(!!d?.has_more);
             if (!append) setOznaceni(new Set());
-        } catch (e) { showAlert('Greška pri učitavanju faktura.', 'error'); if (!append) { setLista([]); setTotal(0); setHasMore(false); } }
+        } catch (e) { showAlert('Greška pri učitavanju liste.', 'error'); if (!append) { setLista([]); setTotal(0); setHasMore(false); } }
         finally { setUcitavanje(false); }
     };
     useEffect(() => {
@@ -10928,7 +10971,7 @@ function FaktureVPLista({ currentUser, onOpen }) {
     const knjiziOznacene = async () => {
         const ids = [...oznaceni];
         if (ids.length === 0) return;
-        if (!await askConfirm(`Knjižiti ${ids.length} označenih faktura? Skida stanje sa zaliha.`, true)) return;
+        if (!await askConfirm(`Knjižiti ${ids.length} označenih ${cfg.batchPojam}? ${cfg.jePredracun ? 'Predračuni ne diraju zalihe.' : 'Skida stanje sa zaliha.'}`, true)) return;
         setBatchRunning(true);
         try { setBatchRez(await api('/api/v1/racuni/batch-knjizi', 'POST', { racun_ids: ids })); }
         catch (e) { showAlert('Greška: ' + (e?.message||''), 'error'); }
@@ -10940,14 +10983,14 @@ function FaktureVPLista({ currentUser, onOpen }) {
         <div className="fade-in">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <div style={{fontSize:13,color:'var(--gray-500)'}}>
-                    <i className="fas fa-file-invoice" style={{marginRight:6}}></i>
-                    Veleprodajne fakture (B2B). Knjiženje skida stanje sa zaliha i zaključava fakturu.
+                    <i className={cfg.listaIcon} style={{marginRight:6}}></i>
+                    {cfg.listaOpis}
                 </div>
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                    <ExportButton tabela="racun" naslov="Racuni (prodaja)" />
+                    <ExportButton tabela="racun" naslov={cfg.exportNaslov} />
                     {canEdit && (
                         <button className="btn btn-primary" onClick={()=>onOpen(null)}>
-                            <i className="fas fa-plus"></i> Nova faktura
+                            <i className="fas fa-plus"></i> {cfg.noviBtn}
                         </button>
                     )}
                 </div>
@@ -10986,6 +11029,11 @@ function FaktureVPLista({ currentUser, onOpen }) {
                         <label style={{fontSize:12,color:'var(--gray-600)',fontWeight:600}}>Datum do</label>
                         <input type="date" className="form-control" value={fDo} onChange={e=>setFDo(e.target.value)} />
                     </div>
+                    {cfg.jePredracun && (
+                        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--gray-600)',fontWeight:600,cursor:'pointer',paddingBottom:8}}>
+                            <input type="checkbox" checked={fSamoVazeci} onChange={e=>setFSamoVazeci(e.target.checked)} /> Samo važeći
+                        </label>
+                    )}
                     <button className="btn btn-outline" onClick={()=>ucitaj(0,false)}><i className="fas fa-filter"></i> Filtriraj</button>
                 </div>
             </div>
@@ -11009,31 +11057,47 @@ function FaktureVPLista({ currentUser, onOpen }) {
                     ) : lista.length === 0 ? (
                         <div style={{padding:30,textAlign:'center',color:'var(--gray-400)',fontSize:13}}>
                             <i className="fas fa-inbox" style={{fontSize:24,opacity:0.4,marginBottom:8,display:'block'}}></i>
-                            Nema faktura u izabranom periodu. Promijeni filter ili kreiraj prvu.
+                            {cfg.praznoLista}
                         </div>
                     ) : (
                         <table style={{width:'100%'}}>
                             <thead><tr>
                                 {canEdit && <th style={{width:30}}><input type="checkbox" checked={sviOznaceni} onChange={toggleSve} disabled={draftIds.length===0} title="Označi sve draftove" /></th>}
                                 <th>Šifra</th><th>Datum</th><th>Kupac</th><th>Skladište</th>
-                                <th>Otpremnica</th><th>Valuta</th><th style={{textAlign:'right'}}>Stavki</th>
+                                <th>{cfg.jePredracun ? 'Rok važenja' : 'Otpremnica'}</th><th>Valuta</th><th style={{textAlign:'right'}}>Stavki</th>
                                 <th style={{textAlign:'right'}}>Ukupno BAM</th><th>Status</th>
+                                {cfg.jePredracun && <th>Konvertovan?</th>}
                             </tr></thead>
                             <tbody>
-                                {lista.map(r => (
+                                {lista.map(r => {
+                                    const rb = cfg.jePredracun ? _rokVazenjaBoja(r.rok_vazenja) : null;
+                                    return (
                                     <tr key={r.id} style={{cursor:'pointer'}}>
                                         {canEdit && <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={oznaceni.has(r.id)} disabled={r.status!=='draft'} onChange={()=>toggleOznaci(r.id)} /></td>}
                                         <td onClick={()=>onOpen(r.id)} style={{fontFamily:'monospace',fontSize:12,fontWeight:600,color:'var(--primary,#2563eb)'}}>{r.sifra}</td>
                                         <td onClick={()=>onOpen(r.id)}>{formatDate(r.datum)}</td>
                                         <td onClick={()=>onOpen(r.id)} style={{fontWeight:500}}>{r.partner_naziv}</td>
                                         <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>{r.skladiste_naziv}</td>
-                                        <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>{r.otpremnica || '-'}</td>
+                                        {cfg.jePredracun ? (
+                                            <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>
+                                                {r.rok_vazenja ? <span style={{padding:'2px 8px',borderRadius:8,fontWeight:600,background:rb.bg,color:rb.boja}}>{formatDate(r.rok_vazenja)} · {rb.txt}</span> : <span style={{color:'var(--gray-400)'}}>-</span>}
+                                            </td>
+                                        ) : (
+                                            <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>{r.otpremnica || '-'}</td>
+                                        )}
                                         <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>{r.valuta_sifra}</td>
                                         <td onClick={()=>onOpen(r.id)} style={{textAlign:'right'}}>{r.ukupno_stavki}</td>
                                         <td onClick={()=>onOpen(r.id)} style={{textAlign:'right',fontFamily:'monospace',fontWeight:600}}>{feningToKM(r.ukupno_sa_pdv)}</td>
                                         <td onClick={()=>onOpen(r.id)}>{_racunStatusBadge(r.status)}</td>
-                                    </tr>
-                                ))}
+                                        {cfg.jePredracun && (
+                                            <td onClick={()=>onOpen(r.id)} style={{fontSize:12}}>
+                                                {r.konvertovan_u_sifra
+                                                    ? <span style={{color:'#059669',fontWeight:600}}><i className="fas fa-check-circle" style={{marginRight:4}}></i>{r.konvertovan_u_sifra}</span>
+                                                    : <span style={{color:'var(--gray-400)'}}>-</span>}
+                                            </td>
+                                        )}
+                                    </tr>);
+                                })}
                             </tbody>
                         </table>
                     )}
@@ -11069,7 +11133,8 @@ function FaktureVPLista({ currentUser, onOpen }) {
     );
 }
 
-function FakturaVPDetalji({ id, currentUser, onBack }) {
+function RacuniVPDetalji({ id, currentUser, vrsta = 'faktura', onBack, onOpenRacun, setPage }) {
+    const cfg = _racunVrstaCfg(vrsta);
     const uloga = currentUser && currentUser.uloga;
     const canEdit = uloga === 'admin' || uloga === 'voditelj';
 
@@ -11088,7 +11153,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
 
     const danas = new Date().toISOString().slice(0,10);
     const PRAZNO = { partner_id:'', primalac_id:'', isti_primalac:true, skladiste_id:'', datum:danas, valuta_id:'', kurs:'',
-                     nacin_placanja_id:'', rok_placanja_dana:'', datum_otpreme:'', otpremnica:'', vozac:'', ovlasceni_id:'', napomena:'' };
+                     nacin_placanja_id:'', rok_placanja_dana:'', datum_otpreme:'', otpremnica:'', vozac:'', ovlasceni_id:'', napomena:'', rok_vazenja:'' };
     const [zForm, setZForm] = useState(PRAZNO);
     const [snimanjeZ, setSnimanjeZ] = useState(false);
     const [greska, setGreska] = useState(null);
@@ -11138,7 +11203,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
                 datum: d.datum || danas, valuta_id: d.valuta_id || '', kurs: d.kurs ? String(d.kurs) : '',
                 nacin_placanja_id: d.nacin_placanja_id || '', rok_placanja_dana: d.rok_placanja_dana != null ? String(d.rok_placanja_dana) : '',
                 datum_otpreme: d.datum_otpreme || '', otpremnica: d.otpremnica || '', vozac: d.vozac || '',
-                ovlasceni_id: d.ovlasceni_id || '', napomena: d.napomena || '',
+                ovlasceni_id: d.ovlasceni_id || '', napomena: d.napomena || '', rok_vazenja: d.rok_vazenja || '',
             });
         } catch(e) { showAlert('Greška pri učitavanju fakture.', 'error'); }
         finally { setUcitavanje(false); }
@@ -11157,7 +11222,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
         if (!zForm.valuta_id) { setGreska('Valuta je obavezna.'); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(zForm.datum)) { setGreska('Datum mora biti YYYY-MM-DD.'); return; }
         const body = {
-            tip_prodaje: 'vp', vrsta_dokumenta: 'faktura',
+            tip_prodaje: 'vp', vrsta_dokumenta: cfg.vrsta,
             partner_id: Number(zForm.partner_id),
             primalac_id: zForm.isti_primalac ? null : (zForm.primalac_id ? Number(zForm.primalac_id) : null),
             skladiste_id: Number(zForm.skladiste_id), datum: zForm.datum, valuta_id: Number(zForm.valuta_id),
@@ -11166,6 +11231,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
             datum_otpreme: zForm.datum_otpreme || null, otpremnica: zForm.otpremnica || null,
             vozac: zForm.vozac || null, ovlasceni_id: zForm.ovlasceni_id ? Number(zForm.ovlasceni_id) : null,
             napomena: zForm.napomena || null,
+            rok_vazenja: (cfg.jePredracun && zForm.rok_vazenja) ? zForm.rok_vazenja : null,
         };
         if (!jeBAM) {
             const k = Number(zForm.kurs);
@@ -11176,7 +11242,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
         try {
             if (isNew) {
                 const odg = await api('/api/v1/racuni', 'POST', body);
-                showAlert('Faktura kreirana: ' + odg.sifra, 'success');
+                showAlert((cfg.jePredracun ? 'Predračun kreiran: ' : 'Faktura kreirana: ') + odg.sifra, 'success');
                 setCurrentId(odg.id);
             } else {
                 await api('/api/v1/racuni/' + currentId, 'PUT', body);
@@ -11254,20 +11320,36 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
         catch(e) { showAlert('Greška: ' + (e?.message||''), 'error'); }
     };
 
-    // --- Knjizenje (DOPUNA 4: negativan saldo BLOKIRA -> 409 nedovoljno_stanja) ---
+    // --- Knjizenje (faktura: DOPUNA 4 negativan saldo BLOKIRA; predracun: ne dira zalihe) ---
     const [knjizenje, setKnjizenje] = useState(false);
     const knjizi = async () => {
-        if (!await askConfirm('Knjiženje skida stanje sa zaliha i zaključava fakturu. Nepovratno. Nastaviti?', true)) return;
+        if (!await askConfirm(cfg.knjiziConfirm, true)) return;
         setKnjizenje(true);
         try {
             const odg = await api(`/api/v1/racuni/${currentId}/knjizi`, 'POST', {});
-            showAlert(`Faktura knjižena. ${odg.broj_redova_ledger} redova u ledgeru.`, 'success');
+            showAlert(cfg.jePredracun ? `${cfg.knjiziOkPrefix}.` : `${cfg.knjiziOkPrefix}. ${odg.broj_redova_ledger} redova u ledgeru.`, 'success');
             await ucitajDetalje(currentId);
         } catch(e) {
             if (e?.status === 409 && e?.body?.error === 'nedovoljno_stanja') setNedovoljno(e.body.detalji || []);
-            else if (e?.message === 'racun_zakljucan') { showAlert('Faktura je već knjižena.', 'error'); await ucitajDetalje(currentId); }
+            else if (e?.message === 'racun_zakljucan') { showAlert('Dokument je već knjižen.', 'error'); await ucitajDetalje(currentId); }
             else showAlert('Greška pri knjiženju: ' + (e?.message||''), 'error');
         } finally { setKnjizenje(false); }
+    };
+    // FAZA 4.B: konverzija knjizenog predracuna -> nova draft faktura, pa redirect na nju (fakture_vp).
+    const [konvertovanje, setKonvertovanje] = useState(false);
+    const konvertuj = async () => {
+        if (!racun) return;
+        if (!await askConfirm(`Konvertovati predračun ${racun.sifra} u fakturu? Bit će kreirana nova DRAFT faktura sa istim stavkama.`, true)) return;
+        setKonvertovanje(true);
+        try {
+            const odg = await api(`/api/v1/racuni/${currentId}/konvertuj-u-fakturu`, 'POST', {});
+            showAlert(`Faktura ${odg.sifra} kreirana iz predračuna ${racun.sifra}.`, 'success');
+            localStorage.setItem('open_racun_id', String(odg.id));
+            if (setPage) setPage('fakture_vp'); else await ucitajDetalje(currentId);
+        } catch(e) {
+            if (e?.body?.error === 'vec_konvertovan') { showAlert(`Predračun je već konvertovan u ${e.body.faktura_sifra}.`, 'error'); await ucitajDetalje(currentId); }
+            else showAlert('Greška pri konverziji: ' + (e?.message||''), 'error');
+        } finally { setKonvertovanje(false); }
     };
     // DOPUNA 6: PDF (fetch sa Bearer -> blob -> novi tab; window.open ne salje Authorization header)
     const stampajPdf = async () => {
@@ -11321,15 +11403,33 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
     return (
         <div className="fade-in">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap',alignItems:'center'}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                     <button className="btn btn-outline btn-sm" onClick={onBack}><i className="fas fa-arrow-left"></i> Nazad</button>
-                    <h2 style={{margin:0,fontSize:18}}>{isNew ? 'Nova faktura' : racun?.sifra} {racun && _racunStatusBadge(racun.status)}</h2>
+                    <h2 style={{margin:0,fontSize:18}}>{isNew ? cfg.noviNaslov : racun?.sifra} {racun && _racunStatusBadge(racun.status)}</h2>
+                    {/* FAZA 4.B: faktura nastala iz predracuna */}
+                    {racun && racun.iz_predracuna_id && racun.iz_predracuna_sifra && (
+                        <span style={{fontSize:12,color:'var(--gray-500)'}}>
+                            <i className="fas fa-link" style={{marginRight:4}}></i>Kreirana iz predračuna
+                            <button className="btn btn-link btn-sm" style={{padding:'0 4px',fontFamily:'monospace'}}
+                                onClick={()=>{ if (cfg.jePredracun && onOpenRacun) onOpenRacun(racun.iz_predracuna_id); else { localStorage.setItem('open_racun_id', String(racun.iz_predracuna_id)); if (setPage) setPage('predracuni_vp'); } }}>
+                                {racun.iz_predracuna_sifra}</button>
+                        </span>
+                    )}
+                    {/* FAZA 4.B: predracun vec konvertovan u fakturu */}
+                    {racun && cfg.jePredracun && racun.konvertovan_u_id && (
+                        <span style={{fontSize:12,color:'#059669',fontWeight:600}}>
+                            <i className="fas fa-check-circle" style={{marginRight:4}}></i>Konvertovan u
+                            <button className="btn btn-link btn-sm" style={{padding:'0 4px',fontFamily:'monospace',color:'#059669'}}
+                                onClick={()=>{ localStorage.setItem('open_racun_id', String(racun.konvertovan_u_id)); if (setPage) setPage('fakture_vp'); }}>
+                                {racun.konvertovan_u_sifra}</button>
+                        </span>
+                    )}
                 </div>
             </div>
 
             {/* ZAGLAVLJE */}
             <div className="card" style={{marginBottom:12}}>
-                <div className="card-header"><i className="fas fa-file-invoice" style={{marginRight:6}}></i> Zaglavlje</div>
+                <div className="card-header"><i className={cfg.listaIcon} style={{marginRight:6}}></i> Zaglavlje {cfg.jePredracun ? '(predračun)' : '(faktura)'}</div>
                 <div className="card-body">
                     <div className="form-row">
                         <div className="form-group">
@@ -11398,6 +11498,12 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
                         </div>
                     </div>
                     <div className="form-row">
+                        {cfg.jePredracun && (
+                            <div className="form-group">
+                                <label>Rok važenja {zForm.rok_vazenja && (() => { const rb=_rokVazenjaBoja(zForm.rok_vazenja); return rb ? <span style={{fontSize:11,marginLeft:4,padding:'1px 6px',borderRadius:6,background:rb.bg,color:rb.boja}}>{rb.txt}</span> : null; })()}</label>
+                                <input type="date" className="form-control" value={zForm.rok_vazenja} disabled={readOnly} onChange={e=>setZForm(f=>({...f,rok_vazenja:e.target.value}))} />
+                            </div>
+                        )}
                         <div className="form-group">
                             <label>Datum otpreme</label>
                             <input type="date" className="form-control" value={zForm.datum_otpreme} disabled={readOnly} onChange={e=>setZForm(f=>({...f,datum_otpreme:e.target.value}))} />
@@ -11426,7 +11532,7 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
                     {racun && racun.status === 'knjizena' && (
                         <div style={{marginTop:10,padding:10,background:'#ecfdf5',color:'#065f46',borderRadius:6,fontSize:13}}>
                             <i className="fas fa-lock" style={{marginRight:6}}></i>
-                            Knjižena {formatDate(racun.knjiziano_kreirano)} {racun.knjizio_ime ? `— ${racun.knjizio_ime} ${racun.knjizio_prezime}` : ''}. Stanje skinuto, faktura zaključana.
+                            {cfg.knjiziOkPrefix} {formatDate(racun.knjiziano_kreirano)} {racun.knjizio_ime ? `— ${racun.knjizio_ime} ${racun.knjizio_prezime}` : ''}. {cfg.jePredracun ? 'Predračun zaključan (zalihe netaknute).' : 'Stanje skinuto, faktura zaključana.'}
                         </div>
                     )}
                 </div>
@@ -11498,16 +11604,25 @@ function FakturaVPDetalji({ id, currentUser, onBack }) {
                             {!jeBAM && <div style={{fontSize:16}}>Iznos BAM: <strong style={{fontFamily:'monospace',color:'#065f46'}}>{sumSaPdvBAM != null ? feningToKM(sumSaPdvBAM) : '—'}</strong></div>}
                             <div style={{marginTop:4,color: marzaBAM>=0?'#059669':'#dc2626'}}>Ukupna marža (BAM): <strong style={{fontFamily:'monospace'}}>{feningToKM(marzaBAM)}</strong> {marzaPct!=null && <span>({marzaPct.toFixed(1).replace('.',',')}%)</span>}</div>
                         </div>
+                        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                         {isDraft && canEdit && (
                             <button className="btn btn-primary" style={{background:'#059669',borderColor:'#059669',fontSize:15,padding:'10px 20px'}}
                                 onClick={knjizi} disabled={knjizenje || stavke.length === 0}
                                 title={stavke.length === 0 ? 'Dodaj barem jednu stavku' : ''}>
-                                {knjizenje ? <><i className="fas fa-spinner fa-spin"></i> Knjiženje...</> : <><i className="fas fa-check-double"></i> Knjiži fakturu</>}
+                                {knjizenje ? <><i className="fas fa-spinner fa-spin"></i> Knjiženje...</> : <><i className="fas fa-check-double"></i> {cfg.knjiziBtn}</>}
+                            </button>
+                        )}
+                        {/* FAZA 4.B: Konvertuj u fakturu (samo knjizeni predracun koji jos NIJE konvertovan) */}
+                        {racun && cfg.jePredracun && racun.status === 'knjizena' && !racun.konvertovan_u_id && canEdit && (
+                            <button className="btn btn-primary" style={{background:'#2563eb',borderColor:'#2563eb',fontSize:15,padding:'10px 20px'}}
+                                onClick={konvertuj} disabled={konvertovanje}>
+                                {konvertovanje ? <><i className="fas fa-spinner fa-spin"></i> Konverzija...</> : <><i className="fas fa-file-export"></i> Konvertuj u fakturu</>}
                             </button>
                         )}
                         {racun && racun.status === 'knjizena' && (
                             <button className="btn btn-outline" onClick={stampajPdf}><i className="fas fa-file-pdf"></i> Štampaj PDF</button>
                         )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -16105,12 +16220,13 @@ const MODULI = [
     },
     { id: 'm_prodaja', naziv: 'Prodaja', icon: 'fas fa-cash-register',
       stavke: [
+        { page: 'predracuni_vp', naziv: 'VP Predračuni',       icon: 'fas fa-file-contract' },
         { page: 'fakture_vp',   naziv: 'VP Fakture',          icon: 'fas fa-file-invoice' },
         { page: 'pazar',        naziv: 'Polog pazara',        icon: 'fas fa-coins' },
         { page: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fas fa-exchange-alt' },
       ],
       subGrupe: [
-        { id: 'g_veleprodaja', naziv: 'Veleprodaja', icon: 'fas fa-file-invoice', page_keys: ['fakture_vp'] },
+        { id: 'g_veleprodaja', naziv: 'Veleprodaja', icon: 'fas fa-file-invoice', page_keys: ['predracuni_vp','fakture_vp'] },
         { id: 'g_maloprodaja', naziv: 'Maloprodaja', icon: 'fas fa-store',        page_keys: ['pazar','primopredaja'] },
       ]
     },
@@ -16867,7 +16983,8 @@ function App() {
             case 'grupe_artikala': return <GrupeArtikalaPage currentUser={currentUser} />;
             case 'tarife': return <TarifePage currentUser={currentUser} />;
             case 'cjenovnici': return <CjenovniciPage currentUser={currentUser} />;
-            case 'fakture_vp': return <FaktureVPRouter currentUser={currentUser} />;
+            case 'fakture_vp': return <RacuniVPRouter vrsta="faktura" currentUser={currentUser} setPage={setPage} />;
+            case 'predracuni_vp': return <RacuniVPRouter vrsta="predracun" currentUser={currentUser} setPage={setPage} />;
             case 'kalkulacije': return <KalkulacijePage currentUser={currentUser} />;
             case 'zalihe': return <ZalihePage currentUser={currentUser} setPage={setPage} />;
             case 'skladista': return <SkladistaPage currentUser={currentUser} />;
