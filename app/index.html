@@ -15964,13 +15964,12 @@ const MODULI = [
         { page: 'centrala',  naziv: 'Centrala',  icon: 'fas fa-building' },
         { page: 'dashboard', naziv: 'Dashboard', icon: 'fas fa-tachometer-alt' },
     ]},
-    { id: 'm_veleprodaja', naziv: 'Veleprodaja', icon: 'fas fa-warehouse', uskoro: true, stavke: [] },
+    { id: 'm_veleprodaja', naziv: 'Veleprodaja', icon: 'fas fa-warehouse', stavke: [
+        { page: 'fakture_vp', naziv: 'Veleprodajne fakture', icon: 'fas fa-file-invoice' },
+    ]},
     { id: 'm_maloprodaja', naziv: 'Maloprodaja', icon: 'fas fa-store', stavke: [
         { page: 'pazar',        naziv: 'Polog pazara',        icon: 'fas fa-cash-register' },
         { page: 'primopredaja', naziv: 'Primopredaja smjena', icon: 'fas fa-exchange-alt' },
-    ]},
-    { id: 'm_prodaja', naziv: 'Prodaja', icon: 'fas fa-cash-register', stavke: [
-        { page: 'fakture_vp', naziv: 'Veleprodajne fakture', icon: 'fas fa-file-invoice' },
     ]},
     { id: 'm_nabavka', naziv: 'Nabavka', icon: 'fas fa-truck-loading', stavke: [
         { page: 'kalkulacije', naziv: 'Ulazne kalkulacije', icon: 'fas fa-file-invoice' },
