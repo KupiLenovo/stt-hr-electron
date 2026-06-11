@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onUpdateProgress:   (cb) => ipcRenderer.on('update-progress',   (_e, progress) => cb(progress)),
     onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', (_e, info)     => cb(info)),
     installUpdate: () => ipcRenderer.send('install-update'),
+    // v4.0.0: offline ekran "Pokusaj ponovo" → ponovo ucitaj novi UI sa servera
+    retryConnection: () => ipcRenderer.send('retry-connection'),
 });

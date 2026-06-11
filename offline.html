@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STT Business Manager — Nema veze</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #DEECF9;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .card {
+    text-align: center;
+    max-width: 420px;
+    padding: 40px 32px;
+  }
+  .icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 24px;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(29, 78, 216, 0.12);
+  }
+  .icon svg { width: 38px; height: 38px; stroke: #1D4ED8; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 10px; color: #0f172a; }
+  p { font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 28px; }
+  button {
+    background: #1D4ED8;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 28px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+  }
+  button:hover { background: #1e40af; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .status { margin-top: 18px; font-size: 12px; color: #64748b; min-height: 16px; }
+  .spin { display: inline-block; width: 13px; height: 13px; vertical-align: -2px; margin-right: 6px;
+    border: 2px solid #cbd5e1; border-top-color: #1D4ED8; border-radius: 50%; animation: r 0.7s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+        <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+        <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+        <line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+    </div>
+    <h1>Nema veze sa serverom</h1>
+    <p>Aplikacija ne moze da se poveze sa STT serverom.<br>Provjeri internet konekciju pa pokusaj ponovo.</p>
+    <button id="retry" onclick="pokusaj()">Pokusaj ponovo</button>
+    <div class="status" id="status"></div>
+  </div>
+<script>
+  var btn = document.getElementById('retry');
+  var status = document.getElementById('status');
+  function pokusaj() {
+    btn.disabled = true;
+    status.innerHTML = '<span class="spin"></span>Povezivanje...';
+    if (window.electronAPI && window.electronAPI.retryConnection) {
+      window.electronAPI.retryConnection();
+    }
+    // Ako server i dalje pada, main proces nas vrati na ovaj ekran (did-fail-load) → reset dugmeta.
+    setTimeout(function () { btn.disabled = false; status.textContent = ''; }, 4000);
+  }
+  // Tihi auto-retry svakih 12s — ako se server vrati, app se sam oporavi bez klika.
+  setInterval(function () {
+    if (window.electronAPI && window.electronAPI.retryConnection) {
+      window.electronAPI.retryConnection();
+    }
+  }, 12000);
+</script>
+</body>
+</html>

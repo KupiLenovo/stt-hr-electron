@@ -1,6 +1,6 @@
 {
   "name": "stt-hr",
-  "version": "3.23.0",
+  "version": "4.0.0",
   "description": "STT Business Manager — kompletan poslovni sistem za STT d.o.o. Sarajevo",
   "main": "main.js",
   "author": "STT d.o.o. Sarajevo",
@@ -24,7 +24,7 @@
     "files": [
       "main.js",
       "preload.js",
-      "app/**/*"
+      "offline.html"
     ],
     "win": {
       "target": [

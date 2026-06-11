@@ -10,6 +10,13 @@ let mainWindow;
 const CLOUD_SERVER_IP = '46.101.96.28';
 const CLOUD_SERVER_PORT = 3737;
 
+// v4.0.0 CUTOVER: Electron vise ne ucitava lokalni app/index.html (stari UI),
+// nego NOVI UI direktno sa servera. URL je konfigurabilan preko env varijable
+// da prelazak na domenu bude 1 linija + minor release.
+// TODO (B.2 Batch 5): kad app.aierp.ba dobije A-record + TLS (Caddy),
+//   default postaje 'https://app.aierp.ba'. IP ostaje fallback tokom tranzicije.
+const SERVER_URL = process.env.STT_SERVER_URL || `http://${CLOUD_SERVER_IP}:${CLOUD_SERVER_PORT}`;
+
 // ==========================================
 // AUTO-UPDATER
 // ==========================================
@@ -58,6 +65,11 @@ function setupAutoUpdater() {
 
 ipcMain.on('install-update', () => {
     autoUpdater.quitAndInstall();
+});
+
+// v4.0.0: offline ekran "Pokusaj ponovo" dugme — ponovo ucitaj novi UI sa servera
+ipcMain.on('retry-connection', () => {
+    if (mainWindow) mainWindow.loadURL(SERVER_URL);
 });
 
 // ==========================================
@@ -125,7 +137,15 @@ function createWindow() {
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     });
 
-    mainWindow.loadFile(path.join(__dirname, 'app', 'index.html'));
+    // v4.0.0 CUTOVER: novi UI sa servera (ne vise lokalni app/index.html)
+    mainWindow.loadURL(SERVER_URL);
+
+    // Ako server nije dostupan — lokalni offline ekran (poruka + retry), ne bijeli ekran.
+    // errorCode -3 = ABORTED (npr. redirect/reload u toku) — ignorisi, nije prava greska.
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        if (!isMainFrame || errorCode === -3) return;
+        mainWindow.loadFile(path.join(__dirname, 'offline.html'));
+    });
 
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
@@ -136,9 +156,13 @@ function createWindow() {
     });
 
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        if (url.startsWith('blob:') || url.startsWith('data:')) {
+        // Novi UI stampa zapisnik/potvrde preko window.open('','_blank') + w.print()
+        // (url = 'about:blank') i otvara PDF/Excel kao blob:/data:. Sve to mora ostati
+        // U APP-u (ne shell), inace stampa pukne ili se otvori prazan browser tab.
+        if (!url || url === 'about:blank' || url.startsWith('blob:') || url.startsWith('data:')) {
             return { action: 'allow' };
         }
+        // Pravi eksterni linkovi (npr. lager_url dobavljaca) → sistemski browser.
         shell.openExternal(url);
         return { action: 'deny' };
     });
