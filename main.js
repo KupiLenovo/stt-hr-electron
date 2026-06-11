@@ -3,6 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
 let mainWindow;
+let rucnaProvjera = false; // v4.0.1: true dok korisnik rucno klikne "Provjeri azuriranja" (vidljiv feedback)
 
 // ==========================================
 // CLOUD SERVER INFO
@@ -35,22 +36,66 @@ function setupAutoUpdater() {
 
     autoUpdater.on('update-available', (info) => {
         if (mainWindow) mainWindow.webContents.send('update-available', info);
+        if (rucnaProvjera) {
+            dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Azuriranje',
+                message: `Dostupno je novo azuriranje (v${info.version}).`,
+                detail: 'Preuzimam u pozadini — javicu kad bude spremno za instalaciju.'
+            });
+        }
     });
 
     autoUpdater.on('download-progress', (progress) => {
         if (mainWindow) mainWindow.webContents.send('update-progress', progress);
     });
 
+    // v4.0.1: vidljiv feedback kad je korisnik RUCNO provjerio i nema novog azuriranja
+    autoUpdater.on('update-not-available', () => {
+        if (rucnaProvjera) {
+            rucnaProvjera = false;
+            dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Azuriranje',
+                message: 'Koristite najnoviju verziju.',
+                detail: `STT Business Manager v${app.getVersion()}`
+            });
+        }
+    });
+
     autoUpdater.on('update-downloaded', (info) => {
         if (mainWindow) mainWindow.webContents.send('update-downloaded', info);
+        // Restart ponuda samo na rucnu provjeru; auto-download tiho instalira na izlazu.
+        if (rucnaProvjera) {
+            rucnaProvjera = false;
+            dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Azuriranje spremno',
+                message: `Azuriranje (v${info.version}) je preuzeto.`,
+                detail: 'Restartujte aplikaciju da primijenite.',
+                buttons: ['Restartuj sad', 'Kasnije'],
+                defaultId: 0,
+                cancelId: 1
+            }).then((r) => { if (r.response === 0) autoUpdater.quitAndInstall(); });
+        }
     });
 
     autoUpdater.on('error', (err) => {
         if (process.argv.includes('--dev')) console.error('Updater error:', err);
+        if (rucnaProvjera) {
+            rucnaProvjera = false;
+            dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Azuriranje',
+                message: 'Nije moguce provjeriti azuriranja.',
+                detail: 'Provjeri internet konekciju pa pokusaj ponovo.'
+            });
+        }
     });
 
-    // Provjera 3s nakon pokretanja (daje app vremena da se ucita)
+    // Auto-provjera 3s nakon pokretanja (tiha — daje app vremena da se ucita)
     setTimeout(() => {
+        rucnaProvjera = false;
         autoUpdater.checkForUpdates().catch(() => {});
     }, 3000);
 }
@@ -170,14 +215,10 @@ function buildMenu() {
             { label: 'Osvjezi', accelerator: 'F5', click: () => { if (mainWindow) mainWindow.reload(); } },
             { type: 'separator' },
             { label: 'Provjeri azuriranja', click: () => {
-                autoUpdater.checkForUpdates().catch(() => {
-                    dialog.showMessageBox(mainWindow, {
-                        type: 'info',
-                        title: 'Azuriranje',
-                        message: 'Nije moguce provjeriti azuriranja.',
-                        detail: 'Provjeri internet konekciju.'
-                    });
-                });
+                // v4.0.1: rucna provjera daje vidljiv rezultat (azurni / dostupno / spremno / greska)
+                // preko autoUpdater evenata (update-not-available / available / downloaded / error).
+                rucnaProvjera = true;
+                autoUpdater.checkForUpdates().catch(() => {}); // gresku pokazuje 'error' event
             }},
             { type: 'separator' },
             { label: 'DevTools', accelerator: 'F12', click: () => { if (mainWindow) mainWindow.webContents.toggleDevTools(); } },
