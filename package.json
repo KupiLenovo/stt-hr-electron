@@ -63,7 +63,7 @@
       "provider": "github",
       "owner": "KupiLenovo",
       "repo": "stt-hr-electron",
-      "private": true,
+      "private": false,
       "releaseType": "release"
     }
   },

@@ -21,20 +21,12 @@ const SERVER_URL = process.env.STT_SERVER_URL || `http://${CLOUD_SERVER_IP}:${CL
 // AUTO-UPDATER
 // ==========================================
 function setupAutoUpdater() {
-    // SIGURNOSNI TODO (v3.7.0 audit):
-    // Ovaj GitHub PAT token je hardkodiran u source-u. Bilo ko sa pristupom GitHub
-    // repu ili ko otpakuje .exe (app.asar nije sifrovan) moze citati private repo
-    // KupiLenovo/stt-hr-electron i mozda jos. Plan:
-    //   1) Revoke token na github.com/settings/tokens
-    //   2) Generisi novi sa SAMO 'repo' read scope na ovom repo-u
-    //   3) Razmotri da repo bude PUBLIC (tada token nije potreban uopste)
-    //   4) Ili: token preko process.env.GH_TOKEN pri build-u (electron-builder env)
+    // v4.0.0: repo je PUBLIC → auto-update ne treba token (rijesen stari hardkodirani
+    // PAT iz v3.7.0 audita). Stari token revoke-ovati na github.com/settings/tokens.
     autoUpdater.setFeedURL({
         provider: 'github',
         owner: 'KupiLenovo',
-        repo: 'stt-hr-electron',
-        private: true,
-        token: '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'
+        repo: 'stt-hr-electron'
     });
 
     autoUpdater.autoDownload = true;
