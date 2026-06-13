@@ -104,6 +104,27 @@ ipcMain.on('install-update', () => {
     autoUpdater.quitAndInstall();
 });
 
+// ==========================================
+// C-FISKALNI — drajver (TANAK omotač oko lib/fiskalni/tring.js). Renderer poziva preko invoke.
+// Sva logika u lib-u; ovdje samo HTTP na localhost:8085 (TFS). Greška/timeout → vraćamo objekat, ne bacamo.
+// ==========================================
+const { napraviDrajver } = require('./fiskalni-drajver');
+const fiskalni = napraviDrajver(process.env.FISKALNI_DRAJVER || 'tring');
+const fiskalniHandler = (fn) => async (_e, arg) => {
+    try { return await fn(arg); }
+    catch (e) { return { uspjeh: false, status: 'greska', greska: { poruka: e.message } }; }
+};
+ipcMain.handle('fiskalni:test', fiskalniHandler(() => fiskalni.testVeze()));
+ipcMain.handle('fiskalni:status', fiskalniHandler(() => fiskalni.statusUredjaja()));
+ipcMain.handle('fiskalni:init', fiskalniHandler((a) => fiskalni.inicijalizacija(a && a.op, a && a.loz)));
+ipcMain.handle('fiskalni:fiskalizuj', fiskalniHandler((racun) => fiskalni.fiskalizuj(racun)));
+ipcMain.handle('fiskalni:reklamiraj', fiskalniHandler((a) => fiskalni.reklamiraj(a.racun, a.original_broj)));
+ipcMain.handle('fiskalni:unos-novca', fiskalniHandler((a) => fiskalni.unosNovca(a.vrsta, a.iznos_fening)));
+ipcMain.handle('fiskalni:povrat-novca', fiskalniHandler((a) => fiskalni.povratNovca(a.vrsta, a.iznos_fening)));
+ipcMain.handle('fiskalni:presjek', fiskalniHandler(() => fiskalni.presjekStanja()));
+ipcMain.handle('fiskalni:dnevni', fiskalniHandler(() => fiskalni.dnevniIzvjestaj()));
+ipcMain.handle('fiskalni:osnovne', fiskalniHandler(() => fiskalni.osnovneInformacije()));
+
 // v4.0.0: offline ekran "Pokusaj ponovo" dugme — ponovo ucitaj novi UI sa servera
 ipcMain.on('retry-connection', () => {
     if (mainWindow) mainWindow.loadURL(SERVER_URL);
