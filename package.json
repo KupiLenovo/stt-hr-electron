@@ -1,6 +1,6 @@
 {
   "name": "stt-hr",
-  "version": "4.1.1",
+  "version": "4.1.2",
   "description": "STT Business Manager — kompletan poslovni sistem za STT d.o.o. Sarajevo",
   "main": "main.js",
   "author": "STT d.o.o. Sarajevo",
@@ -27,6 +27,10 @@
       "offline.html",
       "fiskalni-drajver.js",
       "lib/**/*"
+    ],
+    "asarUnpack": [
+      "**/*.node",
+      "**/node_modules/better-sqlite3/**"
     ],
     "win": {
       "target": [
@@ -70,6 +74,7 @@
     }
   },
   "dependencies": {
+    "better-sqlite3": "^11.10.0",
     "electron-updater": "^6.8.3"
   }
 }

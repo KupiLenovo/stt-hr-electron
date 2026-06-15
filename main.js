@@ -125,6 +125,19 @@ ipcMain.handle('fiskalni:presjek', fiskalniHandler(() => fiskalni.presjekStanja(
 ipcMain.handle('fiskalni:dnevni', fiskalniHandler(() => fiskalni.dnevniIzvjestaj()));
 ipcMain.handle('fiskalni:osnovne', fiskalniHandler(() => fiskalni.osnovneInformacije()));
 
+// ==========================================
+// C-POS skelet Faza 2 — LOKALNI KEŠ + OFFLINE QUEUE (better-sqlite3). Init u createWindow (treba userData).
+// Renderer vozi sync (ima JWT); ovdje samo lokalna baza. Greška → {ok:false}, ne bacamo.
+// ==========================================
+const posKes = require('./lib/pos-kes');
+const posHandler = (fn) => async (_e, arg) => { try { return { ok: true, ...fn(arg) }; } catch (e) { return { ok: false, greska: e.message }; } };
+ipcMain.handle('pos:spreman', () => ({ ok: true, spreman: posKes.spreman() }));
+ipcMain.handle('pos:katalog-save', posHandler((a) => posKes.spremiKatalog(a.skladiste_id, a.artikli)));
+ipcMain.handle('pos:katalog-get', posHandler((a) => posKes.citajKatalog(a.skladiste_id)));
+ipcMain.handle('pos:queue-add', posHandler((racun) => posKes.dodajURed(racun)));
+ipcMain.handle('pos:queue-pending', posHandler(() => posKes.nesinhronizovani()));
+ipcMain.handle('pos:queue-mark', posHandler((a) => posKes.oznaciPoslan(a.lokalni_uid, a.server_id)));
+
 // v4.0.0: offline ekran "Pokusaj ponovo" dugme — ponovo ucitaj novi UI sa servera
 ipcMain.on('retry-connection', () => {
     if (mainWindow) mainWindow.loadURL(SERVER_URL);
@@ -178,6 +191,7 @@ ipcMain.on('system-notif', (event, { naslov, poruka, stranica }) => {
 // KREIRANJE PROZORA
 // ==========================================
 function createWindow() {
+    try { posKes.init(app.getPath('userData')); } catch (e) { if (process.argv.includes('--dev')) console.error('pos-kes init:', e.message); }
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,

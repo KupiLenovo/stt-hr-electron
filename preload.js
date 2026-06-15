@@ -30,3 +30,14 @@ contextBridge.exposeInMainWorld('fiskalniDrajver', {
     dnevniIzvjestaj: () => ipcRenderer.invoke('fiskalni:dnevni'),
     osnovneInformacije: () => ipcRenderer.invoke('fiskalni:osnovne'),
 });
+
+// C-POS skelet Faza 2: lokalni keš + offline queue most (renderer → main → better-sqlite3).
+// Dostupan SAMO u desktop appu (browser = undefined → POS radi online-only, bez offline keša).
+contextBridge.exposeInMainWorld('posOffline', {
+    dostupan: true,
+    spremiKatalog: (skladiste_id, artikli) => ipcRenderer.invoke('pos:katalog-save', { skladiste_id, artikli }),
+    citajKatalog: (skladiste_id) => ipcRenderer.invoke('pos:katalog-get', { skladiste_id }),
+    dodajURed: (racun) => ipcRenderer.invoke('pos:queue-add', racun),
+    nesinhronizovani: () => ipcRenderer.invoke('pos:queue-pending'),
+    oznaciPoslan: (lokalni_uid, server_id) => ipcRenderer.invoke('pos:queue-mark', { lokalni_uid, server_id }),
+});
