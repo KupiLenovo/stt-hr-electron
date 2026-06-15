@@ -4,7 +4,7 @@
 const http = require('http');
 const tring = require('./lib/fiskalni/tring');
 
-const TFS_HOST = process.env.TRING_HOST || 'localhost';
+const TFS_HOST = process.env.TRING_HOST || '127.0.0.1'; // IPv4 eksplicitno — 'localhost' razrijesi na IPv6 ::1 (Node 17+), a TFS slusa IPv4 -> ECONNREFUSED ::1:8085
 const TFS_PORT = Number(process.env.TRING_PORT) || 8085;
 
 // Jedini "neverifikovani" dio: HTTP POST XML na TFS. Vraća {status, raw} ili baca (veza pukla).
@@ -48,7 +48,7 @@ class TringDrajver {
         try { const { status } = await getRaw('/'); return { ok: status >= 200 && status < 500, poruka: `TFS odgovorio (HTTP ${status})` }; }
         catch (e) { return { ok: false, poruka: 'TFS nedostupan: ' + e.message }; }
     }
-    async statusUredjaja() { return this._posalji(tring.KOMANDE.status, tring.buildZahtjev(++brojZahtjeva, 0)); }
+    async statusUredjaja() { return this._posalji(tring.KOMANDE.status, tring.buildPrazno()); }
     async inicijalizacija(op = 0, loz = 0) { return this._posalji(tring.KOMANDE.inicijalizacija, tring.buildInicijalizacijaXml(op, loz)); }
     async fiskalizuj(racun) { return this._posalji(tring.KOMANDE.fiskalni, tring.buildRacunXml({ ...racun, broj_zahtjeva: ++brojZahtjeva, tip: 'fiskalni' })); }
     async reklamiraj(racun, originalBroj) { return this._posalji(tring.KOMANDE.reklamirani, tring.buildRacunXml({ ...racun, broj_zahtjeva: ++brojZahtjeva, tip: 'reklamirani', original_broj: originalBroj })); }
@@ -56,7 +56,7 @@ class TringDrajver {
     async povratNovca(vrsta, iznosFening) { return this._posalji(tring.KOMANDE.povratNovca, tring.buildNovacXml(vrsta, iznosFening)); }
     async presjekStanja() { return this._posalji(tring.KOMANDE.presjek, tring.buildZahtjev(++brojZahtjeva, 3)); }
     async dnevniIzvjestaj() { return this._posalji(tring.KOMANDE.dnevni, tring.buildZahtjev(++brojZahtjeva, 4)); }
-    async osnovneInformacije() { return this._posalji(tring.KOMANDE.osnovne, tring.buildZahtjev(++brojZahtjeva, 0)); }
+    async osnovneInformacije() { return this._posalji(tring.KOMANDE.osnovne, tring.buildPrazno()); }
 }
 
 // EsetDrajver — BUDUĆA implementacija (CPF API kad izađe 2027). Isti interface; dokaz da apstrakcija drži.
