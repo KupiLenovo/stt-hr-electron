@@ -58,7 +58,7 @@ function setupAutoUpdater() {
                 type: 'info',
                 title: 'Azuriranje',
                 message: 'Koristite najnoviju verziju.',
-                detail: `STT Business Manager v${app.getVersion()}`
+                detail: `aiERP v${app.getVersion()}`
             });
         }
     });
@@ -197,7 +197,7 @@ function createWindow() {
         height: 900,
         minWidth: 800,
         minHeight: 600,
-        title: 'STT Business Manager',
+        title: 'aiERP — poslovni sistem',
         backgroundColor: '#DEECF9',
         webPreferences: {
             nodeIntegration: false,
@@ -262,7 +262,7 @@ function buildMenu() {
                 dialog.showMessageBox(mainWindow, {
                     type: 'info',
                     title: 'Server Info',
-                    message: 'STT Business Manager - Cloud Server',
+                    message: 'aiERP - Cloud Server',
                     detail: `Status: Aktivan\nServer: ${CLOUD_SERVER_IP}:${CLOUD_SERVER_PORT}\nLokacija: DigitalOcean Frankfurt\n\nSvi racunari se spajaju na ovaj cloud server.`
                 });
             }},
