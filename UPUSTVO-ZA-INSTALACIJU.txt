@@ -47,8 +47,9 @@ interneta i pošalju se kad se veza vrati).
    računar ga zapamti).
 
 2. Izaberi svoje ime i unesi PIN.
-   Pri PRVOJ prijavi PIN je 0000 — aplikacija odmah traži da
-   postaviš svoj.
+   Pri PRVOJ prijavi unosiš privremeni PIN koji ti je dao voditelj
+   (nasumičan, nikad 0000) — aplikacija, i kiosk za evidenciju rada,
+   odmah traže da postaviš svoj.
 
 3. Poslije 5 pogrešnih PIN-ova zaredom nalog se privremeno zaključa
    (1 minut, pa duže). Voditelj ga odmah otključa resetom PIN-a.
