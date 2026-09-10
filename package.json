@@ -1,12 +1,13 @@
 {
   "name": "stt-hr",
-  "version": "4.1.3",
+  "version": "4.2.0",
   "description": "aiERP — modularni poslovni sistem (ERP) za STT d.o.o. Sarajevo",
   "main": "main.js",
   "author": "STT d.o.o. Sarajevo",
   "private": true,
   "scripts": {
     "start": "electron .",
+    "test": "node --test test/server-adresa.test.js",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac"
   },
@@ -25,6 +26,7 @@
       "main.js",
       "preload.js",
       "offline.html",
+      "povezivanje.html",
       "fiskalni-drajver.js",
       "lib/**/*"
     ],

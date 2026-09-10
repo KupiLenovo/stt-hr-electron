@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>STT Business Manager — Nema veze</title>
+<title>aiERP — Nema veze</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
@@ -51,6 +51,9 @@
   button:active { transform: translateY(1px); }
   button:disabled { opacity: 0.6; cursor: default; }
   .status { margin-top: 18px; font-size: 12px; color: #64748b; min-height: 16px; }
+  .link { display: inline-block; margin-top: 14px; font-size: 13px; color: #1D4ED8; text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+  [hidden] { display: none !important; }
   .spin { display: inline-block; width: 13px; height: 13px; vertical-align: -2px; margin-right: 6px;
     border: 2px solid #cbd5e1; border-top-color: #1D4ED8; border-radius: 50%; animation: r 0.7s linear infinite; }
   @keyframes r { to { transform: rotate(360deg); } }
@@ -67,21 +70,31 @@
       </svg>
     </div>
     <h1>Nema veze sa serverom</h1>
-    <p>Aplikacija ne moze da se poveze sa STT serverom.<br>Provjeri internet konekciju pa pokusaj ponovo.</p>
-    <button id="retry" onclick="pokusaj()">Pokusaj ponovo</button>
+    <p>Aplikacija ne može da se poveže sa serverom firme<span id="server"></span>.<br>Provjeri internet konekciju pa pokušaj ponovo.</p>
+    <button id="retry" onclick="pokusaj()">Pokušaj ponovo</button>
     <div class="status" id="status"></div>
+    <a href="#" id="promijeni" class="link" hidden>Promijeni adresu servera</a>
   </div>
 <script>
   var btn = document.getElementById('retry');
-  var status = document.getElementById('status');
+  var stanje = document.getElementById('status');   // NE „status": to je window.status (string), element bi se izgubio
+  // v4.2.0: adresa servera firme dolazi iz main procesa (?server=…); ako je pogrešno upisana ili se
+  // firma preselila, odavde se ide na ekran za povezivanje (samo lokalni ekrani imaju aierpPostavke)
+  var server = new URLSearchParams(location.search).get('server');
+  if (server) document.getElementById('server').textContent = ' (' + server.replace(/^https?:\/\//, '') + ')';
+  var promijeni = document.getElementById('promijeni');
+  if (window.aierpPostavke) {
+    promijeni.hidden = false;
+    promijeni.addEventListener('click', function (e) { e.preventDefault(); window.aierpPostavke.otvoriPovezivanje(); });
+  }
   function pokusaj() {
     btn.disabled = true;
-    status.innerHTML = '<span class="spin"></span>Povezivanje...';
+    stanje.innerHTML = '<span class="spin"></span>Povezivanje…';
     if (window.electronAPI && window.electronAPI.retryConnection) {
       window.electronAPI.retryConnection();
     }
     // Ako server i dalje pada, main proces nas vrati na ovaj ekran (did-fail-load) → reset dugmeta.
-    setTimeout(function () { btn.disabled = false; status.textContent = ''; }, 4000);
+    setTimeout(function () { btn.disabled = false; stanje.textContent = ''; }, 4000);
   }
   // Tihi auto-retry svakih 12s — ako se server vrati, app se sam oporavi bez klika.
   setInterval(function () {

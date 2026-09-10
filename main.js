@@ -1,22 +1,124 @@
-const { app, BrowserWindow, Menu, shell, dialog, Notification, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, Notification, ipcMain, net, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
+const fs = require('fs');
+const { pathToFileURL } = require('url');
+const { normalizujAdresu, STARI_SERVER, STT_SERVER } = require('./lib/server-adresa');
+const LOKALNI_EKRANI = pathToFileURL(__dirname + path.sep).href;   // file:///…/aiERP/resources/app.asar/
 
 let mainWindow;
 let rucnaProvjera = false; // v4.0.1: true dok korisnik rucno klikne "Provjeri azuriranja" (vidljiv feedback)
 
-// ==========================================
-// CLOUD SERVER INFO
-// ==========================================
-const CLOUD_SERVER_IP = '46.101.96.28';
-const CLOUD_SERVER_PORT = 3737;
+// Razvoj/test: odvojen profil (npr. „prvo pokretanje" bez diranja pravog). Mora prije svega ostalog.
+if (process.env.AIERP_USER_DATA) app.setPath('userData', process.env.AIERP_USER_DATA);
 
-// v4.0.0 CUTOVER: Electron vise ne ucitava lokalni app/index.html (stari UI),
-// nego NOVI UI direktno sa servera. URL je konfigurabilan preko env varijable
-// da prelazak na domenu bude 1 linija + minor release.
-// TODO (B.2 Batch 5): kad app.aierp.ba dobije A-record + TLS (Caddy),
-//   default postaje 'https://app.aierp.ba'. IP ostaje fallback tokom tranzicije.
-const SERVER_URL = process.env.STT_SERVER_URL || `http://${CLOUD_SERVER_IP}:${CLOUD_SERVER_PORT}`;
+// ==========================================
+// SERVER FIRME (v4.2.0)
+// ==========================================
+// Do 4.1.3 adresa je bila zakucana na http://46.101.96.28:3737 — STT-ov server, NESIFROVANO, pa je
+// takav exe mogao koristiti samo STT. Sad je adresa postavka ovog racunara (userData/aierp-server.json):
+//   - nova instalacija pri prvom pokretanju pita adresu firme (povezivanje.html);
+//   - stara STT instalacija tiho prelazi na https://app.aierp.ba i prenosi localStorage (prelazSaStareVerzije);
+//   - STT_SERVER_URL (env) i dalje nadjacava sve — samo za razvoj.
+const KONFIG = () => path.join(app.getPath('userData'), 'aierp-server.json');
+// Trag stare verzije se hvata PRIJE nego sto Chromium otvori profil: 4.0–4.1.x su uvijek ucitavale web app,
+// a web app cita localStorage → folder „Local Storage" postoji samo ako je aplikacija vec radila ovdje.
+const STARA_INSTALACIJA = !fs.existsSync(KONFIG()) && fs.existsSync(path.join(app.getPath('userData'), 'Local Storage'));
+
+function snimljenaAdresa() {
+    try { return normalizujAdresu(JSON.parse(fs.readFileSync(KONFIG(), 'utf8')).url).url || null; }
+    catch { return null; }
+}
+function snimiAdresu(url, dodatno = {}) {
+    fs.mkdirSync(app.getPath('userData'), { recursive: true });
+    fs.writeFileSync(KONFIG(), JSON.stringify({ url, snimljeno: new Date().toISOString(), verzija: app.getVersion(), ...dodatno }, null, 2));
+}
+function trenutniServer() {
+    const env = process.env.STT_SERVER_URL;
+    return env ? env.replace(/\/+$/, '') : snimljenaAdresa();
+}
+
+// Procitaj/upisi localStorage jednog origina BEZ mreze: sesija za trenutak servira praznu stranicu na tom
+// originu (protocol.handle), pa se nad njom izvrsi JS. localStorage je vezan za origin — ovo je jedini
+// nacin da prijava, zapamcen pristupni kod i registracija kiosk uredjaja predju sa starog na novi origin.
+async function naOriginu(origin, js) {
+    const sema = new URL(origin).protocol.slice(0, -1);
+    const adresa = origin + '/__aierp_prenos';
+    const ses = session.defaultSession;
+    ses.protocol.handle(sema, (req) => (req.url === adresa
+        ? new Response('<!doctype html><meta charset="utf-8"><title>aiERP</title>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
+        : net.fetch(req, { bypassCustomProtocolHandlers: true })));
+    const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    try {
+        await win.loadURL(adresa);
+        return await win.webContents.executeJavaScript(js);
+    } finally {
+        win.destroy();
+        ses.protocol.unhandle(sema);
+    }
+}
+
+// Prvo pokretanje 4.2.0 poslije auto-update sa 4.1.x. Svaka instalacija starija od 4.2.0 je STT-ova
+// (drugih kupaca jos nema), pa ide na https://app.aierp.ba bez pitanja. Vraca false ako ovo NIJE
+// koristena 4.1.x instalacija (stari origin prazan) — tada ekran za povezivanje pita kao za novu.
+// Prenos localStorage je „najbolje sto moze": ako padne, aplikacija ipak radi — samo se prijava i kod
+// unesu ponovo; a ako se stari origin ne da ni procitati, racunar je najvjerovatnije STT-ov.
+let prelazUToku = false;   // skriveni prozori prelaza nisu „svi prozori zatvoreni" (vidi window-all-closed)
+async function prelazSaStareVerzije() {
+    prelazUToku = true;
+    try { return await prelaz(); } finally { prelazUToku = false; }
+}
+async function prelaz() {
+    let stari;
+    try {
+        stari = JSON.parse(await naOriginu(STARI_SERVER,
+            'JSON.stringify(Object.fromEntries(Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).map((k) => [k, localStorage.getItem(k)])))'));
+    } catch (e) {
+        snimiAdresu(STT_SERVER, { prelaz_sa: STARI_SERVER, preneseno_kljuceva: 0, greska_prenosa: e.message });
+        return true;
+    }
+    if (!Object.keys(stari).length) return false;
+    let preneseno = 0;
+    let greska = null;
+    try {
+        preneseno = await naOriginu(STT_SERVER,
+            `(function (d) { var n = 0; for (var k in d) { if (localStorage.getItem(k) === null) { localStorage.setItem(k, d[k]); n++; } } return n; })(${JSON.stringify(stari)})`);
+        session.defaultSession.flushStorageData();
+    } catch (e) { greska = e.message; }
+    snimiAdresu(STT_SERVER, { prelaz_sa: STARI_SERVER, preneseno_kljuceva: preneseno, ...(greska ? { greska_prenosa: greska } : {}) });
+    return true;
+}
+
+function otvoriPovezivanje() {
+    if (mainWindow) mainWindow.loadFile(path.join(__dirname, 'povezivanje.html'));
+}
+function ucitajServer() {
+    const url = trenutniServer();
+    if (!mainWindow) return;
+    if (url) mainWindow.loadURL(url); else otvoriPovezivanje();
+}
+
+// IPC za izbor servera prima SAMO lokalne ekrane aplikacije (file://). Web app sa servera ne smije
+// mijenjati adresu — stranica koja moze preusmjeriti app na drugi server moze preusmjeriti i prijavu.
+const izLokalneStranice = (e) => { try { return new URL(e.senderFrame.url).protocol === 'file:'; } catch { return false; } };
+ipcMain.handle('server:trenutni', (e) => (izLokalneStranice(e) ? { url: trenutniServer(), verzija: app.getVersion() } : {}));
+ipcMain.on('server:otvori-povezivanje', (e) => { if (izLokalneStranice(e)) otvoriPovezivanje(); });
+ipcMain.handle('server:povezi', async (e, unos) => {
+    if (!izLokalneStranice(e)) return { ok: false, poruka: 'Nije dozvoljeno.' };
+    const n = normalizujAdresu(unos);
+    if (n.greska) return { ok: false, poruka: n.poruka };
+    // /api/ping je javni odziv aiERP servera — potvrda da na toj adresi stvarno radi aiERP
+    try {
+        const r = await net.fetch(n.url + '/api/ping', { signal: AbortSignal.timeout(10000), cache: 'no-store' });
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || j.ok !== true) return { ok: false, poruka: 'Na toj adresi se javlja server, ali nije aiERP.' };
+    } catch {
+        return { ok: false, poruka: 'Server na toj adresi se ne javlja. Provjeri adresu i internet.' };
+    }
+    snimiAdresu(n.url);
+    if (mainWindow) mainWindow.loadURL(n.url);
+    return { ok: true, url: n.url };
+});
 
 // ==========================================
 // AUTO-UPDATER
@@ -139,9 +241,7 @@ ipcMain.handle('pos:queue-pending', posHandler(() => posKes.nesinhronizovani()))
 ipcMain.handle('pos:queue-mark', posHandler((a) => posKes.oznaciPoslan(a.lokalni_uid, a.server_id)));
 
 // v4.0.0: offline ekran "Pokusaj ponovo" dugme — ponovo ucitaj novi UI sa servera
-ipcMain.on('retry-connection', () => {
-    if (mainWindow) mainWindow.loadURL(SERVER_URL);
-});
+ipcMain.on('retry-connection', () => ucitajServer());
 
 // ==========================================
 // SYSTEM NOTIFIKACIJE
@@ -209,14 +309,29 @@ function createWindow() {
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     });
 
-    // v4.0.0 CUTOVER: novi UI sa servera (ne vise lokalni app/index.html)
-    mainWindow.loadURL(SERVER_URL);
+    // v4.2.0: UI sa servera FIRME (postavka ovog racunara); bez postavke → ekran za povezivanje
+    ucitajServer();
 
     // Ako server nije dostupan — lokalni offline ekran (poruka + retry), ne bijeli ekran.
     // errorCode -3 = ABORTED (npr. redirect/reload u toku) — ignorisi, nije prava greska.
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
         if (!isMainFrame || errorCode === -3) return;
-        mainWindow.loadFile(path.join(__dirname, 'offline.html'));
+        mainWindow.loadFile(path.join(__dirname, 'offline.html'), { query: { server: trenutniServer() || '' } });
+    });
+
+    // v4.2.0: prozor ostaje na serveru firme. Preload daje stranici fiskalni printer i POS kes, pa
+    // tudja stranica u ovom prozoru ne smije ni da se otvori — eksterni link ide u sistemski browser.
+    // (loadURL/loadFile iz main procesa ne prolaze ovdje — samo navigacija koju pokrene stranica.)
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        let cilj;
+        try { cilj = new URL(url); } catch { return event.preventDefault(); }
+        // vlastiti lokalni ekrani (povezivanje, offline) — web stranica do file:// ionako ne moze (Chromium)
+        if (cilj.protocol === 'file:' && url.startsWith(LOKALNI_EKRANI)) return;
+        const server = trenutniServer();
+        if (server && cilj.origin === new URL(server).origin) return;
+        event.preventDefault();
+        // web → sistemski browser; mailto:/tel: (mail i telefon partnera) → sistemske aplikacije
+        if (['https:', 'http:', 'mailto:', 'tel:'].includes(cilj.protocol)) shell.openExternal(url);
     });
 
     mainWindow.once('ready-to-show', () => {
@@ -259,12 +374,25 @@ function buildMenu() {
             { label: 'DevTools', accelerator: 'F12', click: () => { if (mainWindow) mainWindow.webContents.toggleDevTools(); } },
             { type: 'separator' },
             { label: 'Info o serveru', click: () => {
+                const url = trenutniServer();
                 dialog.showMessageBox(mainWindow, {
                     type: 'info',
-                    title: 'Server Info',
-                    message: 'aiERP - Cloud Server',
-                    detail: `Status: Aktivan\nServer: ${CLOUD_SERVER_IP}:${CLOUD_SERVER_PORT}\nLokacija: DigitalOcean Frankfurt\n\nSvi racunari se spajaju na ovaj cloud server.`
+                    title: 'Server firme',
+                    message: 'aiERP — server firme',
+                    detail: `Server: ${url || 'nije postavljen'}\nVeza: ${url && url.startsWith('https://') ? 'šifrovana (https)' : 'nešifrovana'}\nVerzija aplikacije: ${app.getVersion()}`
                 });
+            }},
+            { label: 'Promijeni server firme…', click: async () => {
+                const r = await dialog.showMessageBox(mainWindow, {
+                    type: 'question',
+                    title: 'Promijeni server firme',
+                    message: 'Povezati ovaj računar s drugim serverom?',
+                    detail: `Sada: ${trenutniServer() || 'nije postavljen'}\n\nTreba samo kad se firma seli na drugi server ili se aplikacija instalira za drugu firmu.`,
+                    buttons: ['Promijeni', 'Odustani'],
+                    defaultId: 1,
+                    cancelId: 1
+                });
+                if (r.response === 0) otvoriPovezivanje();
             }},
             ...(!isMac ? [{ type: 'separator' }, { role: 'quit', label: 'Zatvori' }] : [])
         ]},
@@ -282,8 +410,17 @@ function buildMenu() {
 // ==========================================
 // APP LIFECYCLE
 // ==========================================
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     Menu.setApplicationMenu(buildMenu());
+    // v4.2.0: prvi start poslije 4.1.x → STT server + prenos postavki; prvi start nove instalacije →
+    // zapis bez adrese, da odluka „stara/nova" pada samo jednom (ekran za povezivanje dalje sam pita)
+    // Ništa od ovoga ne smije spriječiti otvaranje prozora: bez postavke → ekran za povezivanje.
+    if (!process.env.STT_SERVER_URL && !fs.existsSync(KONFIG())) {
+        try {
+            const bilaStara = STARA_INSTALACIJA && await prelazSaStareVerzije();
+            if (!bilaStara) snimiAdresu(null);
+        } catch (e) { if (process.argv.includes('--dev')) console.error('prvi start:', e.message); }
+    }
     createWindow();
     setupAutoUpdater();
 
@@ -293,5 +430,8 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+    // v4.2.0: prelaz sa 4.1.x otvara i zatvara skrivene prozore PRIJE glavnog — to nije izlazak iz
+    // aplikacije (bez ove provjere app.quit() je prekidao prenos postavki na pola)
+    if (prelazUToku) return;
     if (process.platform !== 'darwin') app.quit();
 });

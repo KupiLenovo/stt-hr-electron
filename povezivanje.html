@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aiERP — Povezivanje s firmom</title>
+<!--
+  v4.2.0: prvo pokretanje nove instalacije (i meni „Promijeni server firme…"). Adresa servera je postavka
+  OVOG racunara (userData/aierp-server.json) — isti exe radi za svaku firmu. Namjerno bez localStorage:
+  main.js po postojanju „Local Storage" foldera prepoznaje staru (4.1.x) STT instalaciju.
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #DEECF9;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    width: 100%;
+    max-width: 440px;
+    margin: 24px;
+    padding: 36px 36px 28px;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(29, 78, 216, 0.12), 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; -webkit-user-select: none; user-select: none; }
+  .wordmark { font-size: 26px; font-weight: 700; letter-spacing: -0.04em; }
+  .wordmark .ai { background: linear-gradient(135deg, #2563EB, #7C3AED); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1 { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
+  .uvod { font-size: 14px; line-height: 1.55; color: #475569; margin-bottom: 22px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+  .polje { display: flex; align-items: center; border: 1.5px solid #cbd5e1; border-radius: 10px; background: #f8fafc; transition: border-color 0.15s, box-shadow 0.15s; }
+  .polje:focus-within { border-color: #1D4ED8; box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.15); background: #fff; }
+  .polje .sema { padding-left: 12px; font-size: 14px; color: #94a3b8; -webkit-user-select: none; user-select: none; }
+  .polje .sema[hidden] + input { padding-left: 12px; }
+  input {
+    flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+    padding: 12px 12px 12px 2px; font-size: 15px; color: #0f172a;
+  }
+  .dugmad { display: flex; gap: 10px; margin-top: 18px; }
+  button {
+    border: none; border-radius: 10px; padding: 12px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+  }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .glavno { flex: 1; background: #1D4ED8; color: #fff; }
+  .glavno:hover:not(:disabled) { background: #1e40af; }
+  .sporedno { background: #eef2f7; color: #334155; }
+  .sporedno:hover:not(:disabled) { background: #e2e8f0; }
+  .status { margin-top: 14px; min-height: 20px; font-size: 13px; line-height: 1.45; color: #64748b; }
+  .status.greska { color: #b91c1c; }
+  .status.ok { color: #047857; }
+  .spin { display: inline-block; width: 13px; height: 13px; vertical-align: -2px; margin-right: 6px;
+    border: 2px solid #cbd5e1; border-top-color: #1D4ED8; border-radius: 50%; animation: r 0.7s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  .dno { display: flex; justify-content: space-between; gap: 12px; margin-top: 22px; padding-top: 16px; border-top: 1px solid #eef2f7; font-size: 12px; color: #94a3b8; }
+  .dno .brava { display: inline-flex; align-items: center; gap: 5px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand" aria-label="aiERP">
+      <svg width="40" height="40" viewBox="0 0 72 72" aria-hidden="true">
+        <defs>
+          <linearGradient id="orb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563EB"/><stop offset="1" stop-color="#7C3AED"/></linearGradient>
+          <clipPath id="naprijed"><rect x="0" y="36" width="72" height="36"/></clipPath>
+        </defs>
+        <ellipse cx="36" cy="36" rx="28" ry="11" fill="none" stroke="url(#orb)" stroke-width="2.3" transform="rotate(-18 36 36)"/>
+        <g stroke="#fff" stroke-width="0.6" stroke-linejoin="round" transform="translate(8 8.4)">
+          <polygon points="28,8 36.5,12.9 28,17.8 19.5,12.9" fill="#3B82F6"/>
+          <polygon points="36.5,12.9 45,17.8 36.5,22.7 28,17.8" fill="#8B5CF6"/>
+          <polygon points="28,17.8 36.5,22.7 28,27.6 19.5,22.7" fill="#2DD4BF"/>
+          <polygon points="19.5,12.9 28,17.8 19.5,22.7 11,17.8" fill="#FBBF24"/>
+          <polygon points="11,17.8 19.5,22.7 19.5,32.5 11,27.6" fill="#B45309"/>
+          <polygon points="19.5,22.7 28,27.6 28,37.4 19.5,32.5" fill="#1D4ED8"/>
+          <polygon points="11,27.6 19.5,32.5 19.5,42.3 11,37.4" fill="#0F766E"/>
+          <polygon points="19.5,32.5 28,37.4 28,47.2 19.5,42.3" fill="#6D28D9"/>
+          <polygon points="28,27.6 36.5,22.7 36.5,32.5 28,37.4" fill="#0D9488"/>
+          <polygon points="36.5,22.7 45,17.8 45,27.6 36.5,32.5" fill="#7C3AED"/>
+          <polygon points="28,37.4 36.5,32.5 36.5,42.3 28,47.2" fill="#2563EB"/>
+          <polygon points="36.5,32.5 45,27.6 45,37.4 36.5,42.3" fill="#D97706"/>
+        </g>
+        <ellipse cx="36" cy="36" rx="28" ry="11" fill="none" stroke="url(#orb)" stroke-width="2.3" transform="rotate(-18 36 36)" clip-path="url(#naprijed)"/>
+        <circle cx="60.8" cy="33.7" r="3.3" fill="#7C3AED"/>
+        <circle cx="59.7" cy="32.6" r="1" fill="#C4B5FD"/>
+      </svg>
+      <span class="wordmark"><span class="ai">ai</span><span style="color:#DC2626">E</span><span style="color:#0D9488">R</span><span style="color:#D97706">P</span></span>
+    </div>
+
+    <h1>Poveži aplikaciju sa svojom firmom</h1>
+    <p class="uvod">Upiši adresu servera svoje firme. Radi se samo jednom na ovom računaru — poslije se aplikacija otvara direktno.</p>
+
+    <form id="forma" autocomplete="off" novalidate>
+      <label for="adresa">Adresa servera</label>
+      <div class="polje">
+        <span class="sema">https://</span>
+        <input id="adresa" name="adresa" type="text" inputmode="url" spellcheck="false" placeholder="firma.aierp.ba" autofocus>
+      </div>
+      <div class="dugmad">
+        <button type="button" class="sporedno" id="nazad" hidden>Nazad</button>
+        <button type="submit" class="glavno" id="povezi">Poveži</button>
+      </div>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+    </form>
+
+    <div class="dno">
+      <span class="brava">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        Veza sa serverom je uvijek šifrovana
+      </span>
+      <span id="verzija"></span>
+    </div>
+  </main>
+<script>
+  var forma = document.getElementById('forma');
+  var unos = document.getElementById('adresa');
+  var dugme = document.getElementById('povezi');
+  var nazad = document.getElementById('nazad');
+  var stanje = document.getElementById('status');   // NE „status": to je window.status (string), element bi se izgubio
+  var api = window.aierpPostavke;
+
+  function poruka(tekst, vrsta, spin) {
+    stanje.className = 'status' + (vrsta ? ' ' + vrsta : '');
+    stanje.textContent = tekst;
+    if (spin) stanje.insertAdjacentHTML('afterbegin', '<span class="spin"></span>');
+  }
+
+  // Mijenja se postojeca adresa (meni) → upisana je, a „Nazad" vraca na nju bez izmjene
+  if (api) {
+    api.trenutni().then(function (r) {
+      if (r && r.verzija) document.getElementById('verzija').textContent = 'aiERP v' + r.verzija;
+      if (r && r.url) {
+        unos.value = r.url.replace(/^https:\/\//, '');
+        prefiks();
+        nazad.hidden = false;
+        unos.select();
+      }
+    });
+  }
+  nazad.addEventListener('click', function () {
+    if (window.electronAPI && window.electronAPI.retryConnection) window.electronAPI.retryConnection();
+  });
+
+  // Upisan cijeli URL s https:// → polje pokazuje samo adresu (prefiks je vec ispred); neka druga
+  // shema (http://…) → prefiks se sakrije da ne pise „https://http://", a main.js je odbije s porukom
+  var sema = document.querySelector('.polje .sema');
+  function prefiks() { sema.hidden = /^[a-z][a-z0-9+.-]*:\/\//i.test(unos.value); }
+  unos.addEventListener('input', function () {
+    if (/^https:\/\//i.test(unos.value)) unos.value = unos.value.replace(/^https:\/\//i, '');
+    prefiks();
+    if (stanje.classList.contains('greska')) poruka('');
+  });
+  unos.addEventListener('blur', prefiks);
+
+  forma.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!api) { poruka('Ovaj ekran radi samo u desktop aplikaciji aiERP.', 'greska'); return; }
+    var adresa = unos.value.trim();
+    if (!adresa) { poruka('Upiši adresu servera svoje firme.', 'greska'); unos.focus(); return; }
+    dugme.disabled = true;
+    poruka('Provjeravam server…', '', true);
+    api.povezi(adresa).then(function (r) {
+      if (r && r.ok) { poruka('Povezano — otvaram aplikaciju…', 'ok', true); return; }
+      poruka((r && r.poruka) || 'Povezivanje nije uspjelo.', 'greska');
+      dugme.disabled = false;
+      unos.focus();
+    }).catch(function () {
+      poruka('Povezivanje nije uspjelo.', 'greska');
+      dugme.disabled = false;
+    });
+  });
+</script>
+</body>
+</html>

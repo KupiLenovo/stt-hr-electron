@@ -1,87 +1,71 @@
-# STT HR Menadžment — Electron Klijent
+# aiERP — Electron (desktop) klijent
 
 ## Šta je ovo
 
-Desktop aplikacija (Electron) za upravljanje HR procesima u STT d.o.o. Sarajevo. Aplikaciju koriste više lokacija (STUP - sjedište, Tutto Capsule SCC, Tutto Capsule Merkator, Kupilenovo Shop SCC, VP Skladište).
+Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, better-sqlite3) i auto-update.
 
-**Verzija:** 2.0.0 (cloud client only — bez lokalnog server-a)
+**Verzija:** 4.2.0
 
-## Arhitektura
+## Server firme (v4.2.0) — adresa NIJE zakucana
 
-Klijent-server arhitektura preko HTTP-a:
-
-```
-┌──────────────────────┐         HTTPS/HTTP        ┌────────────────────────┐
-│  Electron Klijent    │ ────────────────────────> │  DigitalOcean Cloud    │
-│  (ovaj projekt)      │   API calls (REST)        │  46.101.96.28:3737     │
-│                      │ <──────────────────────── │  Express + SQLite      │
-│  app/index.html      │   JSON responses          │  /opt/stt-hr/server.js │
-└──────────────────────┘                            └────────────────────────┘
-```
-
-**Klijent NE drži podatke lokalno.** Sve ide preko REST API-ja na cloud.
+- Do 4.1.3 je bila zakucana na `http://46.101.96.28:3737` — STT-ov server, **nešifrovano** (PIN i token internetom kao čist tekst), pa je exe mogao koristiti samo STT.
+- Od 4.2.0 adresa je postavka računara: `userData/aierp-server.json` (`{ "url": "https://…" }`). `userData` = `%APPDATA%\stt-hr` (ime iz polja `name` u package.json — `productName` je u `build` sekciji, pa ne utiče na folder; **ne mijenjati `name`**, profil bi „nestao").
+- **Nova instalacija** → `povezivanje.html` pita adresu (npr. `firma.aierp.ba`; jedna riječ = `<kod>.aierp.ba`), provjeri `GET /api/ping` → `{ok:true}` pa snimi. Samo https (http samo za localhost).
+- **Stara STT instalacija (4.1.x)** → tiho `https://app.aierp.ba` + prenos localStorage sa starog origina (prijava, `aierp-pristup`, `stt-device` kiosk veza): `main.js → prelazSaStareVerzije()`, bez mreže (`protocol.handle` servira praznu stranicu na originu). Trag stare verzije se hvata PRIJE nego Chromium otvori profil (on sam pravi „Local Storage" folder na startu).
+- Meni: **Aplikacija → Promijeni server firme…** i **Info o serveru**; offline ekran ima „Promijeni adresu servera".
+- IPC za izbor servera prima samo lokalne ekrane (`file://`) — web app sa servera ne smije mijenjati adresu. Prozor je zaključan na origin servera (`will-navigate`); eksterni linkovi idu u sistemski browser.
+- Razvoj: `STT_SERVER_URL` nadjačava sve; `AIERP_USER_DATA` daje odvojen profil (test prvog pokretanja).
 
 ## Struktura foldera
 
 ```
 stt-hr-electron/
-├── main.js                    # Electron main process (BrowserWindow, menu, IPC)
-├── preload.js                 # Preload bridge (Node API exposed to renderer)
-├── package.json               # v2.0.0, samo electron + electron-builder
-├── app/
-│   ├── index.html             # ~9006 linija, monolithic HTML+React (Babel CDN)
-│   ├── index.html.backup      # backup od prije cloud migracije
-│   └── ...
-├── build/
-│   └── icon.png               # app ikona
-├── dist/                      # build output (.exe, win-unpacked/)
-├── main.js.backup             # pre-cloud-migration main.js
-└── package.json.backup        # pre-cloud-migration package.json
+├── main.js               # main process: prozor, meni, auto-update, IPC, server firme + prelaz 4.1.x
+├── preload.js            # most prema rendereru: electronAPI, fiskalniDrajver, posOffline, aierpPostavke (samo file://)
+├── povezivanje.html      # ekran „Poveži aplikaciju sa svojom firmom" (v4.2.0) — MORA biti u build.files
+├── offline.html          # „Nema veze sa serverom" + promjena adrese
+├── fiskalni-drajver.js   # Tring TFS na localhost:8085 (lib/fiskalni/tring.js)
+├── lib/pos-kes.js        # offline kasa (better-sqlite3, userData/pos-kes.db)
+├── lib/server-adresa.js  # normalizacija adrese servera (čist Node — test/server-adresa.test.js)
+├── installer.nsh         # NSIS (ASCII!) — od 4.2.0 samo briše stara firewall pravila
+└── build/                # ikone za electron-builder (ne ide u app.asar)
 ```
 
 ## Tehnologije
 
-- **Electron 28.3.0** — desktop wrapper
-- **electron-builder 24.13.3** — pakovanje u .exe
-- **React 18 (preko Babel CDN)** — frontend, sve u jednom HTML fajlu
-- **Vanilla JS + Tailwind via CDN** — styling
+- **Electron 28** · **electron-builder 24** (NSIS + DMG) · **electron-updater** (GitHub Releases, javni repo)
+- **UI nije ovdje** — to je `client-v2` (React + Vite) u server repou; desktop ga učitava sa servera firme.
 
-⚠️ **NEMA build koraka za frontend.** Sve je u `app/index.html` direktno, Babel transpiluje JSX in-browser. Promjene su instant — F5 u app reload-uje.
+## Server (drugi repo)
 
-## Cloud server info
+- **STT server:** `https://app.aierp.ba` (nginx ispred Node-a na DigitalOcean dropletu)
+- **Repo:** https://github.com/KupiLenovo/stt-hr-server (private), lokalno `C:\Users\rober\stt-hr-server`
+- Nova ruta ide u taj repo, ne ovdje.
 
-- **IP:** `46.101.96.28`
-- **Port:** `3737`
-- **Tech:** Node.js 20 + Express + better-sqlite3 + helmet + CORS
-- **Repo:** https://github.com/KupiLenovo/stt-hr-server (private)
-- **Lokalni clone (na ovom laptopu):** `C:\Users\rober\stt-hr-server`
-- **API_URL u klijentu:** `http://46.101.96.28:3737`
-- **86 routes** — Centrala, Evidencija rada, Polog pazara, Dopuna MP/VP, Sales Leadovi, Servisni prijem, Loyalty, Vozila, Odmori...
-
-Ako trebaš dodati novu route — to ide u `server.js` u tom drugom repo-u (`C:\Users\rober\stt-hr-server`), ne ovdje.
-
-## Build i deploy klijenta
+## Build, test i izdanje
 
 ```cmd
-:: Dev mode (live test)
-npm start
+npm ci
+npm start          :: iz koda
+npm test           :: testovi adrese servera (lib/server-adresa.js)
 
-:: Production build (.exe instaler)
-npm run build:win
-
-:: Output: dist/STT HR Setup 2.0.0.exe (~76 MB)
+:: izdanje = tag; GitHub Actions pravi Windows + Mac instalaciju i OBJAVI release
+:: (instalirane aplikacije ga odmah vide) — zato tag tek kad je sve provjereno
+git tag vX.Y.Z && git push origin vX.Y.Z
 ```
+
+Lokalna provjera pakovanja bez UAC-a: `npx electron-builder --win --dir -c.npmRebuild=false -c.win.requestedExecutionLevel=asInvoker -c.directories.output=dist-test` (pravi build traži administratora — `requestedExecutionLevel: requireAdministrator`).
 
 ## Stilske konvencije
 
-1. **NE editovati `index.html.backup`, `main.js.backup`, `package.json.backup`** — to su backup fajlovi od prije cloud migracije.
-2. **Komentari na bosanskom/hrvatskom su OK** ali bez ćiriličnih i specijalnih karaktera (problem sa NSIS instalerom). Koristi: ć→c, č→c, š→s, ž→z, đ→dj.
-3. **Bosnian language UI** — sve UI string-ove pisati na bosanskom (ne hrvatskom, ne srpskom).
-4. **API_URL je hardkodiran** na `46.101.96.28:3737` ali postoji fallback u `getSavedServerIP()` koji čita iz `localStorage.stt_server_ip`.
-5. **Auto-migration logic** — ako je u localStorage `localhost` ili `127.0.0.1`, automatski se prebacuje na cloud IP. Ne dirati tu logiku.
-6. **NE dodavati nove npm dependencies** osim ako je apsolutno neophodno. Klijent treba ostati lagan (76 MB instaler).
+1. **`installer.nsh` samo ASCII** (NSIS): ć→c, č→c, š→s, ž→z, đ→dj. JS i HTML su UTF-8 — tu ide pravi bosanski.
+2. **Bosnian language UI** — sve UI string-ove pisati na bosanskom (ne hrvatskom, ne srpskom).
+3. **Adresa servera se NIKAD ne zakucava** u kod — isti exe radi za svaku firmu (vidi „Server firme").
+4. **Lokalni ekrani (povezivanje, offline) ne koriste localStorage** — po postojanju „Local Storage" foldera main.js prepoznaje staru 4.1.x instalaciju.
+5. **U inline skriptama ne koristiti globalno ime `status`** (i sl. `name`, `top`) — `var status` je `window.status` (string) i element se izgubi. Obje stranice su to imale.
+6. **NE dodavati nove npm dependencies** osim ako je apsolutno neophodno. Klijent treba ostati lagan.
 
-## Kontekst — šta je promijenjeno u v2.0.0
+## Historija — v2.0.0 (stari UI u app/index.html, prije v4.0.0 cutovera)
 
 - ❌ Uklonjen lokalni server (`fork('server/server.js')` iz main.js)
 - ❌ Uklonjeni server-only deps (`better-sqlite3`, `express`, `cors`, `exceljs`, `pdfkit`)

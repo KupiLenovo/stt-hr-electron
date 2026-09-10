@@ -16,6 +16,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     retryConnection: () => ipcRenderer.send('retry-connection'),
 });
 
+// v4.2.0: izbor servera firme — SAMO lokalni ekrani aplikacije (povezivanje, offline). Web app sa servera
+// ovo ne dobija: stranica koja moze promijeniti adresu servera moze preusmjeriti i prijavu (main.js to
+// provjerava i sam, po adresi stranice koja salje zahtjev).
+if (location.protocol === 'file:') {
+    contextBridge.exposeInMainWorld('aierpPostavke', {
+        trenutni: () => ipcRenderer.invoke('server:trenutni'),
+        povezi: (adresa) => ipcRenderer.invoke('server:povezi', adresa),
+        otvoriPovezivanje: () => ipcRenderer.send('server:otvori-povezivanje'),
+    });
+}
+
 // C-Fiskalni: drajver most (renderer → main → localhost:8085 TFS). Dostupan SAMO u desktop appu (browser = undefined).
 contextBridge.exposeInMainWorld('fiskalniDrajver', {
     dostupan: true,

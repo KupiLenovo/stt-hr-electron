@@ -1,170 +1,103 @@
 ================================================================
-  STT HR MENADŽMENT SISTEM — UPUSTVO ZA INSTALACIJU OD NULE
+  aiERP — DESKTOP APLIKACIJA: INSTALACIJA I PRVO POKRETANJE
 ================================================================
-  Verzija: 1.0 | STT d.o.o. Sarajevo
-================================================================
-
-PREDUVJETI (instalirati SAMO na PC-u gdje se radi build):
-----------------------------------------------------------
-1. Node.js 20 LTS
-   Preuzmi sa: https://nodejs.org
-   Klikni "20.x.x LTS" -> Next -> Next -> Finish
-
-2. Python 3.8+
-   Preuzmi sa: https://python.org/downloads
-   VAZNO: Pri instalaciji oznaci "Add Python to PATH"
-
-3. Developer Mode (Windows 11)
-   Start -> Settings -> System -> For developers
-   -> Developer Mode -> ON
-   (potrebno da bi build radio ispravno)
-
-================================================================
-  KORAK 1 — BUILD APLIKACIJE
-  (radi se jednom, na bilo kom PC-u sa Node.js)
+  Za verziju 4.2.0 i noviju | STT d.o.o. Sarajevo
 ================================================================
 
-1. Preuzmi ZIP fajl i raspakiraj ga
-   (desni klik na ZIP -> Extract All)
-
-2. Otvori folder "stt-hr-electron" u Windows Exploreru
-
-3. Klikni na address bar (traka sa putanjom gore),
-   ukucaj "cmd" i pritisni Enter
-   -> otvori se Command Prompt u tom folderu
-
-4. Ukucaj i cekaj (1-3 minute):
-      npm install
-
-5. Ukucaj i cekaj (3-5 minuta):
-      npm run build:win
-
-6. Kada zavrsi, u folderu "dist\" pronadi:
-      STT HR Setup 1.0.0.exe
-
-   NAPOMENA: Ako build stane sa greskom "symbolic link",
-   provjeri da li je Developer Mode ukljucen (korak 3 preduvjeta)
-   i ponovi npm run build:win.
+KAKO RADI
+---------
+aiERP je cloud sistem: podaci su na serveru firme, a desktop
+aplikacija je prozor prema tom serveru, uz vezu sa fiskalnim
+printerom i offline kasu (računi se čuvaju lokalno dok nema
+interneta i pošalju se kad se veza vrati).
 
 ================================================================
-  KORAK 2 — INSTALACIJA NA GLAVNI PC (STUP)
-  (ovaj PC cuva sve podatke i mora biti uvijek upaljen)
+  1) INSTALACIJA
 ================================================================
 
-1. Kopiraj "STT HR Setup 1.0.0.exe" na STUP racunar
+1. Preuzmi instalaciju (fajl "aiERP Setup X.Y.Z.exe"):
+   https://github.com/KupiLenovo/stt-hr-electron/releases/latest
 
-2. Desni klik -> "Pokreni kao administrator"
-   (obavezno — automatski otvara firewall port 3737)
+2. Pokreni je i potvrdi administratorska prava.
 
-3. Slijedi instalacijski wizard (Next -> Next -> Install)
-
-4. Pokreni STT HR aplikaciju
-
-5. Na prvom ekranu odaberi:
-      "Glavni racunar (STUP)"
-
-6. Pojavljuje se upustvo za Port Forwarding.
-   Uradi sljedece (jednom zauvijek):
-
-   a) Na STUP PC-u otvori CMD i ukucaj:
-         ipconfig
-      Zapamti "IPv4 Address" (npr. 192.168.1.105)
-      Ovo je LOKALNA IP adresa STUP PC-a.
-
-   b) Udi u router admin panel
-      (u browseru otvori: 192.168.1.1 ili 192.168.0.1)
-      Pronadi "DHCP Reservation" ili "Static DHCP"
-      -> Dodaj rezervaciju za STUP PC sa gore zapamcenom IP
-      (tako STUP PC uvijek dobija istu lokalnu IP)
-
-   c) Pronadi "Port Forwarding" (ili NAT / Virtual Server)
-      -> Dodaj novo pravilo:
-         Naziv:         STT HR
-         Protocol:      TCP
-         External port: 3737
-         Internal IP:   [lokalna IP iz koraka a]
-         Internal port: 3737
-      -> Snimi
-
-   d) Pronadi JAVNU IP adresu STUP-a:
-      Otvori browser i idi na: https://whatismyip.com
-      Zapisi tu IP adresu — koristit ce je ostale lokacije.
-      Primjer: 89.172.45.12
-
-7. Klikni "Razumijem, nastavi na prijavu"
-
-8. Odaberi lokaciju -> odaberi svoje ime -> unesi PIN
-
-   NAPOMENA: Svaki radnik pri PRVOJ prijavi koristi PIN 0000
-   i bit ce zatrazeno postavljanje novog 4-cifrenog PIN-a.
+3. Prati korake instalacije. Na desktopu se pojavi prečica "aiERP".
 
 ================================================================
-  KORAK 3 — INSTALACIJA NA OSTALE RACUNARE
-  (SCC, Merkator Lozionicka, i sve ostale lokacije)
+  2) PRVO POKRETANJE — POVEZIVANJE S FIRMOM
 ================================================================
 
-1. Kopiraj "STT HR Setup 1.0.0.exe" na svaki lokalni racunar
+1. Pokreni aiERP.
 
-2. Desni klik -> "Pokreni kao administrator" -> instaliraj
+2. Na ekranu "Poveži aplikaciju sa svojom firmom" upiši adresu
+   servera svoje firme, npr.:   firma.aierp.ba
+   (za STT d.o.o.:              app.aierp.ba)
 
-3. Pokreni STT HR aplikaciju
+3. Klikni "Poveži". Aplikacija provjeri da na toj adresi radi
+   aiERP server i od tada se otvara direktno.
 
-4. Na prvom ekranu odaberi:
-      "Lokalni racunar (Maloprodaja)"
-
-5. Upisi JAVNU IP adresu STUP racunara (iz Koraka 2d)
-   Primjer: 89.172.45.12
-
-6. Klikni "Spoji se"
-   -> Ako je uspjesno: prikazuje se ekran za odabir lokacije
-   -> Ako ne radi: provjeri da li je STUP PC upaljen i
-      da li je IP adresa ispravna
-
-7. Ova postavka se pamti automatski.
-   Sljedeci put aplikacija se direktno spaja.
+   - Veza je uvijek šifrovana (https). Adresa bez https se ne prihvata.
+   - Adresa se kasnije mijenja preko menija:
+       Aplikacija -> Promijeni server firme...
 
 ================================================================
-  KORAK 4 — POSTAVLJANJE PIN-OVA ZA RADNIKE
+  3) PRIJAVA
 ================================================================
 
-Svaki radnik pri prvoj prijavi:
-1. Odabere svoju lokaciju
-2. Klikne svoje ime
-3. Unese privremeni PIN: 0000
-4. App trazi postavljanje novog PIN-a
-5. Upise zeljeni 4-cifreni PIN dva puta
+1. Unesi pristupni kod radnog prostora (dobiješ ga od administratora;
+   računar ga zapamti).
 
-Admin moze resetovati PIN bilo kom radniku:
--> Otvori "Radnici" u meniju
--> Klikni zuto dugme sa kljucem pored radnika
--> PIN se resetuje na 0000
+2. Izaberi svoje ime i unesi PIN.
+   Pri PRVOJ prijavi PIN je 0000 — aplikacija odmah traži da
+   postaviš svoj.
 
-Radnik moze promijeniti vlastiti PIN:
--> Sidebar (lijevi meni) -> dno -> "Promijeni PIN"
+3. Poslije 5 pogrešnih PIN-ova zaredom nalog se privremeno zaključa
+   (1 minut, pa duže). Voditelj ga odmah otključa resetom PIN-a.
 
 ================================================================
-  VAZNE NAPOMENE
+  4) AŽURIRANJE
 ================================================================
 
-STUP PC:
-- Mora biti UPALJEN dok rade ostale lokacije
-- STT HR aplikacija mora biti POKRENUTA
-- Preporucujemo postavljanje na Windows autostart
-
-BAZA PODATAKA:
-- Cuva se na STUP PC-u:
-  C:\Users\[korisnik]\AppData\Roaming\STT-HR\stt-hr.db
-- NE brisati ovaj fajl!
-- Radi BACKUP jednom sedmicno:
-  Kopiraj stt-hr.db na USB ili Google Drive
-
-AKO NESTO NE RADI:
-- IP servera se moze promijeniti u sidebar -> "Promijeni server"
-- Ako STUP PC promijeni lokalnu IP, azuriraj Port Forwarding
-- Ako zaboravis PIN -> kontaktiraj admina za reset
+Aplikacija se ažurira sama: nova verzija se preuzme u pozadini i
+instalira pri sljedećem zatvaranju aplikacije.
+Ručno: Aplikacija -> Provjeri ažuriranja.
 
 ================================================================
-  KONTAKT ZA PODRSKU
+  AKO NEŠTO NE RADI
+================================================================
+
+- "Nema veze sa serverom": provjeri internet — aplikacija sama
+  pokušava ponovo svakih nekoliko sekundi. Ako se firma preselila
+  na drugi server, klikni "Promijeni adresu servera".
+- Zaboravljen PIN: administrator ili voditelj ga resetuje na
+  profilu radnika.
+- Adresa servera i verzija aplikacije: Aplikacija -> Info o serveru.
+
+================================================================
+  NADOGRADNJA SA VERZIJE 4.1.x (samo STT)
+================================================================
+
+Računari sa verzijom 4.1.x sami pređu na https://app.aierp.ba pri
+prvom pokretanju verzije 4.2.0. Prijava, zapamćen pristupni kod i
+veza kiosk uređaja se prenesu — niko ništa ne upisuje.
+
+================================================================
+  ZA RAZVOJ
+================================================================
+
+  npm ci          instalacija zavisnosti
+  npm start       pokretanje iz koda
+  npm test        testovi adrese servera
+
+  STT_SERVER_URL=https://...   nadjačava adresu servera (samo razvoj)
+  AIERP_USER_DATA=<folder>     odvojen profil (npr. test "prvog pokretanja")
+
+  Izdanje: podigni verziju u package.json, pa
+    git tag vX.Y.Z && git push origin vX.Y.Z
+  GitHub Actions napravi Windows i Mac instalaciju i objavi release;
+  instalirane aplikacije ga vide pri sljedećoj provjeri ažuriranja.
+
+================================================================
+  KONTAKT ZA PODRŠKU
 ================================================================
 
   IT / Razvoj: Eldin Hota
