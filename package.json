@@ -7,7 +7,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/server-adresa.test.js",
+    "test": "node --test test/server-adresa.test.js test/bez-http.test.js",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac"
   },

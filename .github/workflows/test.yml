@@ -1,0 +1,20 @@
+name: Testovi
+
+# Build & Release (build.yml) se pokreće SAMO na tag v*, pa testovi do sada nisu trčali ni na jednom pushu —
+# čuvar koji nikad ne čuva. Ovdje se vrte na svakoj grani i svakom PR-u; ništa se ne gradi ni ne objavljuje.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # Bez `npm ci`: testovi su čist Node (bez Electrona), a `npm ci` bi povlačio cijeli electron paket.
+      - name: Testovi (adresa servera + zabrana nešifrovane veze)
+        run: npm test
