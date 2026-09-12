@@ -259,9 +259,11 @@ function showSystemNotif(naslov, poruka, stranica) {
             mainWindow.show();
             mainWindow.focus();
             if (stranica && mainWindow.webContents) {
-                mainWindow.webContents.executeJavaScript(`
-                    window._navigateTo && window._navigateTo('${stranica}');
-                `).catch(() => {});
+                // e2 (revizija): `stranica` dolazi s renderera preko IPC-a bez provjere — u string se ubacuje kao
+                // JSON literal, ne golim umetanjem u kod (apostrof u imenu stranice = ubrizgan JS).
+                mainWindow.webContents.executeJavaScript(
+                    `window._navigateTo && window._navigateTo(${JSON.stringify(String(stranica))});`
+                ).catch(() => {});
             }
         }
     });
@@ -275,11 +277,15 @@ ipcMain.on('save-html', async (event, { html, filename }) => {
         show: false,
         webPreferences: { nodeIntegration: false, contextIsolation: true }
     });
+    // e2 (revizija): skriveni prozor se zatvarao SAMO iz callbacka print(); ako `did-finish-load` nikad ne stigne
+    // (pokvaren HTML, prekinut load) ostajao je zauvijek. Sad se zatvara i na grešku učitavanja i po roku.
+    const zatvori = () => { if (!printWin.isDestroyed()) printWin.close(); };
+    const rok = setTimeout(zatvori, 120000);
+    printWin.on('closed', () => clearTimeout(rok));
+    printWin.webContents.once('did-fail-load', zatvori);
     printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
     printWin.webContents.once('did-finish-load', () => {
-        printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
-            printWin.close();
-        });
+        printWin.webContents.print({ silent: false, printBackground: true }, () => zatvori());
     });
 });
 
@@ -302,7 +308,12 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: false,
+            // e2 (nezavisna revizija III): `webSecurity: false` je stajao od prvog commita (2.0.0), kad se UI učitavao
+            // s file:// i pozivao cloud server cross-origin. Od 4.2.0 UI dolazi SA SERVERA (same-origin), /api/ping
+            // ide kroz main (net.fetch), a fiskalni drajver kroz IPC — nijedan renderer ne treba zaobići same-origin.
+            // Isključena same-origin politika bi tuđem sadržaju (iframe, blob: prozor s naslijeđenim preloadom) otvorila
+            // put do fiskalnog printera i lokalne baze kase. Default je true; piše se izričito da se ne vrati slučajno.
+            webSecurity: true,
             preload: path.join(__dirname, 'preload.js'),
         },
         show: false,
