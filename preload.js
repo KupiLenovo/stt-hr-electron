@@ -1,4 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const fs = require('fs');
+const path = require('path');
+
+// C-Fiskalni (MAL-03): verzija protokola iz kanonskog lib/fiskalni/tring.js + sha bajt-po-bajt kopije (lib/fiskalni/tring.sha256).
+// Kasa (pos.tsx) poredi verziju s potrebnom i pokaže traku ako je instalirani desktop stariji. Čist read, bez I/O prema uređaju.
+let PROTOKOL = { verzija: null, sha: null };
+try {
+    const tring = require('./lib/fiskalni/tring');
+    const sha = fs.readFileSync(path.join(__dirname, 'lib', 'fiskalni', 'tring.sha256'), 'utf8').trim().split(/\s+/)[0] || null;
+    PROTOKOL = { verzija: tring.PROTOKOL_VERZIJA || null, sha };
+} catch { /* van desktopa ili fajl nedostupan → ostaje null */ }
 
 contextBridge.exposeInMainWorld('electronAPI', {
     showNotification: (naslov, poruka, stranica) => {
@@ -30,6 +41,7 @@ if (location.protocol === 'file:') {
 // C-Fiskalni: drajver most (renderer → main → localhost:8085 TFS). Dostupan SAMO u desktop appu (browser = undefined).
 contextBridge.exposeInMainWorld('fiskalniDrajver', {
     dostupan: true,
+    protokol: PROTOKOL,   // { verzija, sha } — kasa poredi s potrebnom verzijom protokola
     testVeze: () => ipcRenderer.invoke('fiskalni:test'),
     statusUredjaja: () => ipcRenderer.invoke('fiskalni:status'),
     inicijalizacija: (op = 0, loz = 0) => ipcRenderer.invoke('fiskalni:init', { op, loz }),

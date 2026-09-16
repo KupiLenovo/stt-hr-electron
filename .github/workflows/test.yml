@@ -15,6 +15,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      # Bez `npm ci`: testovi su čist Node (bez Electrona), a `npm ci` bi povlačio cijeli electron paket.
-      - name: Testovi (adresa servera + zabrana nešifrovane veze)
+      # MAL-03: pos-kes testovi traže better-sqlite3 (prod dep). --omit=dev preskače Electron (dev dep) → CI ostaje lagan.
+      # Node 20 ima prebuild za better-sqlite3; lokalno (Node 22+) testovi padnu na ugrađeni node:sqlite adapter, bez instalacije.
+      - name: Instaliraj prod ovisnosti (better-sqlite3, bez Electrona)
+        run: npm ci --omit=dev
+      - name: Testovi (adresa servera, fiskalni tring/drajver, pos-kes, zabrana nešifrovane veze)
         run: npm test

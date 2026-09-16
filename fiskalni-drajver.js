@@ -6,9 +6,11 @@ const tring = require('./lib/fiskalni/tring');
 
 const TFS_HOST = process.env.TRING_HOST || '127.0.0.1'; // IPv4 eksplicitno — 'localhost' razrijesi na IPv6 ::1 (Node 17+), a TFS slusa IPv4 -> ECONNREFUSED ::1:8085
 const TFS_PORT = Number(process.env.TRING_PORT) || 8085;
+// TFS KomandTimeOut = 30 s; desktop čeka 12 s (odgovor za 35 s = timeout → veza_pukla). Test podešava kraće preko env.
+const TFS_TIMEOUT_MS = Number(process.env.TRING_TIMEOUT_MS) || 12000;
 
 // Jedini "neverifikovani" dio: HTTP POST XML na TFS. Vraća {status, raw} ili baca (veza pukla).
-function postXml(putanja, xml, timeoutMs = 12000) {
+function postXml(putanja, xml, timeoutMs = TFS_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
         const body = Buffer.from(xml, 'utf8');
         const req = http.request({ host: TFS_HOST, port: TFS_PORT, path: putanja, method: 'POST', headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': body.length } }, (res) => {

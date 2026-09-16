@@ -1,0 +1,4 @@
+# MAL-03: lib/fiskalni/tring.js je BAJT-PO-BAJT kopija serverskog kanonskog fajla (stt-hr-server, fiskalni-ogledalo CI).
+# LF na svakoj platformi da SHA i poređenje budu deterministični bez obzira na core.autocrlf.
+lib/fiskalni/tring.js text eol=lf
+lib/fiskalni/tring.sha256 text eol=lf
