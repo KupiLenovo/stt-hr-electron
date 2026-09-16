@@ -20,6 +20,7 @@ const RACUN = { stavke: [{ naziv: 'Kafa', cijena_fening: 250, stopa_oznaka: 'E',
 
 let server, drajver;
 let next = null;   // { body?, status?, delayMs?, drop? } — postavlja se prije svakog poziva drajvera
+let zadnji = null; // { path, body } zadnjeg POST-a — za provjeru XML-a novih komandi
 
 before(async () => {
     server = http.createServer((req, res) => {
@@ -27,6 +28,7 @@ before(async () => {
         let data = '';
         req.on('data', (c) => { data += c; });
         req.on('end', () => {
+            zadnji = { path: req.url, body: data };
             const n = next || {}; next = null;
             if (n.drop) { req.socket.destroy(); return; }                            // prekid veze
             const posalji = () => { try { if (!res.writableEnded) { res.writeHead(n.status || 200, { 'Content-Type': 'text/xml' }); res.end(n.body != null ? n.body : ODG.ok); } } catch { /* socket zatvoren (timeout) */ } };
@@ -119,4 +121,32 @@ test('DRAJVER.10 osnovneInformacije → parsirani odgovori (ibfm, last_BF) za op
 test('DRAJVER.11 testVeze — GET / → ok true', async () => {
     const r = await drajver.testVeze();
     assert.equal(r.ok, true);
+});
+
+// MAL-04 — nove komande drajvera.
+test('DRAJVER.12 duplikatRacuna → POST /stampatiduplikatracuna s <BrojRacuna>', async () => {
+    next = { body: ODG.ok };
+    await drajver.duplikatRacuna(77, 'fiskalni');
+    assert.equal(zadnji.path, '/stampatiduplikatracuna');
+    assert.match(zadnji.body, /<BrojRacuna>77<\/BrojRacuna>/);
+});
+
+test('DRAJVER.13 periodicniIzvjestaj → POST /stampatiperiodicniizvjestaj s DatumOd/DatumDo', async () => {
+    next = { body: ODG.praznZ };
+    await drajver.periodicniIzvjestaj('01.09.2026', '16.09.2026');
+    assert.equal(zadnji.path, '/stampatiperiodicniizvjestaj');
+    assert.match(zadnji.body, /<DatumOd>01\.09\.2026<\/DatumOd>/);
+    assert.match(zadnji.body, /<DatumDo>16\.09\.2026<\/DatumDo>/);
+});
+
+test('DRAJVER.14 provjeriRezim → uređaj bez polja režima → maloprodaja null (ne blokira)', async () => {
+    next = { body: ODG.osnovne };   // nema polja režima
+    const r = await drajver.provjeriRezim();
+    assert.equal(r.uspjeh, true);
+    assert.equal(r.maloprodaja, null, 'nepoznat režim ne blokira otvaranje kase');
+});
+
+test('DRAJVER.15 podrazumijevani TFS rok = 35 s (bilo 12 s) — usklađeno s KomandTimeOut 30 s', () => {
+    const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'fiskalni-drajver.js'), 'utf8');
+    assert.match(src, /TRING_TIMEOUT_MS\)\s*\|\|\s*35000/, 'default rok mora biti 35000 ms');
 });

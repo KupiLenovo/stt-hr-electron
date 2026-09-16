@@ -52,6 +52,12 @@ contextBridge.exposeInMainWorld('fiskalniDrajver', {
     presjekStanja: () => ipcRenderer.invoke('fiskalni:presjek'),
     dnevniIzvjestaj: () => ipcRenderer.invoke('fiskalni:dnevni'),
     osnovneInformacije: () => ipcRenderer.invoke('fiskalni:osnovne'),
+    // MAL-04: naplati je JEDINI put računa do uređaja (protokol ≥ 4.3.0) — main upiše račun na disk (pos-kes.db) PRIJE štampe,
+    // pošalje, upiše rezultat i TEK ONDA vrati. Kasa poslije javi serveru. duplikat/periodicni/rezim: nove komande uređaja.
+    naplati: (posiljka) => ipcRenderer.invoke('fiskalni:naplati', posiljka),
+    duplikat: (broj, tip = 'fiskalni') => ipcRenderer.invoke('fiskalni:duplikat', { broj, tip }),
+    periodicniOdDo: (od, doDatum) => ipcRenderer.invoke('fiskalni:periodicni', { od, do: doDatum }),
+    provjeriRezim: () => ipcRenderer.invoke('fiskalni:rezim'),
 });
 
 // C-POS skelet Faza 2: lokalni keš + offline queue most (renderer → main → better-sqlite3).

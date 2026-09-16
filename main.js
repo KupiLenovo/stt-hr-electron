@@ -240,6 +240,17 @@ ipcMain.handle('pos:queue-add', posHandler((racun) => posKes.dodajURed(racun)));
 ipcMain.handle('pos:queue-pending', posHandler(() => posKes.nesinhronizovani()));
 ipcMain.handle('pos:queue-mark', posHandler((a) => posKes.oznaciPoslan(a.lokalni_uid, a.server_id)));
 
+// ==========================================
+// C-FISKALNI MOST (MAL-04) — račun na disk PRIJE štampe, oporavak pri startu, žurnal. Sva logika u lib/fiskalni-most.js.
+// fiskalni:naplati je JEDINI put računa do uređaja za protokol ≥ 4.3.0 (renderer tek poslije javi serveru).
+// ==========================================
+const { napraviMost } = require('./lib/fiskalni-most');
+const fiskalniMost = napraviMost({ drajver: fiskalni, posKes });
+ipcMain.handle('fiskalni:naplati', fiskalniHandler((p) => fiskalniMost.naplati(p)));
+ipcMain.handle('fiskalni:duplikat', fiskalniHandler((a) => fiskalniMost.duplikat(a)));
+ipcMain.handle('fiskalni:periodicni', fiskalniHandler((a) => fiskalniMost.periodicni(a)));
+ipcMain.handle('fiskalni:rezim', fiskalniHandler(() => fiskalniMost.provjeriRezim()));
+
 // v4.0.0: offline ekran "Pokusaj ponovo" dugme — ponovo ucitaj novi UI sa servera
 ipcMain.on('retry-connection', () => ucitajServer());
 
@@ -297,7 +308,13 @@ ipcMain.on('system-notif', (event, { naslov, poruka, stranica }) => {
 // KREIRANJE PROZORA
 // ==========================================
 function createWindow() {
-    try { posKes.init(app.getPath('userData')); } catch (e) { if (process.argv.includes('--dev')) console.error('pos-kes init:', e.message); }
+    try {
+        posKes.init(app.getPath('userData'));
+        // MAL-04: PRVO razriješi račune poslane uređaju bez potvrde (pad usred štampe / istek) — čita SAMO brojač, BEZ nove štampe.
+        // Best-effort i bez blokiranja prozora; renderer poslije (sinhronizuj) šalje razriješene rezultate serveru.
+        fiskalniMost.oporaviRedove().catch((e) => { if (process.argv.includes('--dev')) console.error('oporavak reda:', e.message); });
+        try { posKes.zurnalProred(90); posKes.redProred(90); } catch { /* prored žurnala/reda nije kritičan */ }
+    } catch (e) { if (process.argv.includes('--dev')) console.error('pos-kes init:', e.message); }
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,

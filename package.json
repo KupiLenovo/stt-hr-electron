@@ -7,7 +7,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/server-adresa.test.js test/bez-http.test.js test/sigurnost.test.js test/tring.test.js test/tring-sha.test.js test/fiskalni-drajver.test.js test/pos-kes.test.js",
+    "test": "node --test test/server-adresa.test.js test/bez-http.test.js test/sigurnost.test.js test/tring.test.js test/tring-sha.test.js test/fiskalni-drajver.test.js test/pos-kes.test.js test/oporavak.test.js test/pos-kes-mal04.test.js test/fiskalni-most.test.js",
     "test:emulator": "node scripts/test-emulator.js",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac"

@@ -6,8 +6,9 @@ const tring = require('./lib/fiskalni/tring');
 
 const TFS_HOST = process.env.TRING_HOST || '127.0.0.1'; // IPv4 eksplicitno — 'localhost' razrijesi na IPv6 ::1 (Node 17+), a TFS slusa IPv4 -> ECONNREFUSED ::1:8085
 const TFS_PORT = Number(process.env.TRING_PORT) || 8085;
-// TFS KomandTimeOut = 30 s; desktop čeka 12 s (odgovor za 35 s = timeout → veza_pukla). Test podešava kraće preko env.
-const TFS_TIMEOUT_MS = Number(process.env.TRING_TIMEOUT_MS) || 12000;
+// MAL-04: rok čekanja usklađen s TFS KomandTimeOut = 30 s → 35 s (bilo 12 s). Kraći rok je pukao dok uređaj još štampa i
+// slao račun drugi put; sad istek/prekid uvijek znači 'nepoznato' (nikad automatska ponovna štampa). Test podešava kraće preko env.
+const TFS_TIMEOUT_MS = Number(process.env.TRING_TIMEOUT_MS) || 35000;
 
 // Jedini "neverifikovani" dio: HTTP POST XML na TFS. Vraća {status, raw} ili baca (veza pukla).
 function postXml(putanja, xml, timeoutMs = TFS_TIMEOUT_MS) {
@@ -36,6 +37,23 @@ function getRaw(putanja, timeoutMs = 5000) {
 
 let brojZahtjeva = Math.floor((process.hrtime.bigint ? Number(process.hrtime.bigint() % 100000n) : 1));
 
+// MAL-04 — komande koje NISU u kanonskom tring.KOMANDE (tring.js je SHA-ogledalo prema serveru, ne dira se).
+// ⚠ Tačan endpoint/oblik XML-a za duplikat potvrđuje se na Tring emulatoru (Eldinov korak) — CI ide na snimljenim odgovorima.
+const KOMANDE_MAL04 = { duplikat: '/stampatiduplikatracuna' };
+const HEADER = tring.buildPrazno();   // '<?xml version="1.0" encoding="utf-8"?>' (bez kopije logike iz tring.js)
+const sanBroj = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '') || '0';
+const sanDatum = (v) => String(v == null ? '' : v).replace(/[^0-9.\-]/g, '').slice(0, 10);   // dd.mm.yyyy ili yyyy-mm-dd
+
+// Duplikat (kopija) fiskalnog/reklamiranog računa po BrojRacuna — reprint, ne kreira novi fiskalni zapis.
+function buildDuplikatXml(broj, tip) {
+    const vrsta = tip === 'reklamirani' ? 2 : 0;   // isti razdvoj kao original (VrstaZahtjeva)
+    return `${HEADER}\n<Zahtjev><BrojZahtjeva>${++brojZahtjeva}</BrojZahtjeva><VrstaZahtjeva>${vrsta}</VrstaZahtjeva><Kopija>1</Kopija><BrojRacuna>${sanBroj(broj)}</BrojRacuna></Zahtjev>`;
+}
+// Periodični izvještaj od–do (postojeći endpoint tring.KOMANDE.periodicni + raspon datuma).
+function buildPeriodicniXml(od, doDatum) {
+    return `${HEADER}\n<Zahtjev><BrojZahtjeva>${++brojZahtjeva}</BrojZahtjeva><VrstaZahtjeva>5</VrstaZahtjeva><DatumOd>${sanDatum(od)}</DatumOd><DatumDo>${sanDatum(doDatum)}</DatumDo></Zahtjev>`;
+}
+
 class TringDrajver {
     get tip() { return 'tring'; }
     // izvrši komandu: pošalji XML, parsiraj odgovor; veza pukla → offline signal
@@ -59,6 +77,18 @@ class TringDrajver {
     async presjekStanja() { return this._posalji(tring.KOMANDE.presjek, tring.buildZahtjev(++brojZahtjeva, 3)); }
     async dnevniIzvjestaj() { return this._posalji(tring.KOMANDE.dnevni, tring.buildZahtjev(++brojZahtjeva, 4)); }
     async osnovneInformacije() { return this._posalji(tring.KOMANDE.osnovne, tring.buildPrazno()); }
+    // MAL-04: duplikat po BrojRacuna (fiskalni/reklamirani), periodični od–do, provjera režima rada.
+    async duplikatRacuna(broj, tip = 'fiskalni') { return this._posalji(KOMANDE_MAL04.duplikat, buildDuplikatXml(broj, tip)); }
+    async periodicniIzvjestaj(od, doDatum) { return this._posalji(tring.KOMANDE.periodicni, buildPeriodicniXml(od, doDatum)); }
+    // Režim rada uređaja mora biti Maloprodaja pri otvaranju kase. Uređaj koji ne vraća polje → maloprodaja=null (ne blokiraj).
+    async provjeriRezim() {
+        const r = await this._posalji(tring.KOMANDE.osnovne, tring.buildPrazno());
+        const o = (r && r.odgovori) || {};
+        const sirovi = o.RezimRada ?? o.Rezim ?? o.NacinRada ?? o.mode ?? o.Mode ?? null;
+        const s = String(sirovi == null ? '' : sirovi).trim().toLowerCase();
+        const maloprodaja = /maloprod|retail/.test(s) ? true : (/veleprod|obuk|trening|servis|training/.test(s) ? false : null);
+        return { ...r, rezim: sirovi == null ? null : String(sirovi), maloprodaja };
+    }
 }
 
 // EsetDrajver — BUDUĆA implementacija (CPF API kad izađe 2027). Isti interface; dokaz da apstrakcija drži.
