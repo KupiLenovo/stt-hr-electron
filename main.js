@@ -312,7 +312,9 @@ function createWindow() {
         posKes.init(app.getPath('userData'));
         // MAL-04: PRVO razriješi račune poslane uređaju bez potvrde (pad usred štampe / istek) — čita SAMO brojač, BEZ nove štampe.
         // Best-effort i bez blokiranja prozora; renderer poslije (sinhronizuj) šalje razriješene rezultate serveru.
-        fiskalniMost.oporaviRedove().catch((e) => { if (process.argv.includes('--dev')) console.error('oporavak reda:', e.message); });
+        // Kaos test (4.3.0): prvo (sinhrono) red ostavljen usred naplate → greska/nepoznato, da ga sync ne pošalje kao nefiskalizovan.
+        fiskalniMost.zateceno();
+        fiskalniMost.pokretanje().catch((e) => { if (process.argv.includes('--dev')) console.error('oporavak reda:', e.message); });
         try { posKes.zurnalProred(90); posKes.redProred(90); } catch { /* prored žurnala/reda nije kritičan */ }
     } catch (e) { if (process.argv.includes('--dev')) console.error('pos-kes init:', e.message); }
     mainWindow = new BrowserWindow({

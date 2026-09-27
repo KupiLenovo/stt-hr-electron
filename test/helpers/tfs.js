@@ -26,6 +26,17 @@ function racunOkXml(broj, iznosF = 500, datum = '27.09.2023') {
         `</Odgovori><VrstaOdgovora>OK</VrstaOdgovora></KasaOdgovor>`;
 }
 
+// Odbijen zahtjev (§11): greška po imenu + kod, VrstaOdgovora Greska — uređaj NIJE štampao.
+function greskaXml(ime = 'PRINTER_ERR_NO_PAPER', kod = 503) {
+    return `<KasaOdgovor><Odgovori><Odgovor><Naziv>${ime}</Naziv><Vrijednost>${kod}</Vrijednost></Odgovor></Odgovori>` +
+        `<VrstaOdgovora>Greska</VrstaOdgovora></KasaOdgovor>`;
+}
+// Opšti KasaOdgovor (§4) iz parova Naziv → Vrijednost.
+function odgovorXml(parovi = {}, vrsta = 'OK') {
+    const o = Object.entries(parovi).map(([n, v]) => `<Odgovor><Naziv>${n}</Naziv><Vrijednost>${v}</Vrijednost></Odgovor>`).join('');
+    return `<KasaOdgovor><Odgovori>${o}</Odgovori><VrstaOdgovora>${vrsta}</VrstaOdgovora></KasaOdgovor>`;
+}
+
 function napraviTFS() {
     const zahtjevi = [];        // { path, body } — svaki primljeni POST
     const plan = {};            // path → [ {body?,status?,delayMs?,drop?} ] (potroši se redom)
@@ -59,4 +70,4 @@ function napraviTFS() {
     return api;
 }
 
-module.exports = { napraviTFS, osnovneXml, racunOkXml };
+module.exports = { napraviTFS, osnovneXml, racunOkXml, greskaXml, odgovorXml };
