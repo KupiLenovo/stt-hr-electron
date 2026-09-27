@@ -10,29 +10,36 @@ const TFS_PORT = Number(process.env.TRING_PORT) || 8085;
 // slao račun drugi put; sad istek/prekid uvijek znači 'nepoznato' (nikad automatska ponovna štampa). Test podešava kraće preko env.
 const TFS_TIMEOUT_MS = Number(process.env.TRING_TIMEOUT_MS) || 35000;
 
-// Jedini "neverifikovani" dio: HTTP POST XML na TFS. Vraća {status, raw} ili baca (veza pukla).
-function postXml(putanja, xml, timeoutMs = TFS_TIMEOUT_MS) {
+// Odgovor TFS-a: tijelo do kraja ILI greška. Kaos test (4.3.0): TFS koji pukne USRED odgovora (zaglavlje poslano, tijelo prekinuto)
+// ranije nije javljao ništa — ni 'end' ni grešku zahtjeva, a tajmer neaktivnosti umre sa soketom — pa je naplata visila zauvijek.
+// Sad: prekinut odgovor = veza pukla (→ 'nepoznato'), a ukupni rok (timeoutMs) važi i kad TFS kaplje bajt po bajt.
+function zahtjev(opcije, body, timeoutMs, porukaIsteka) {
     return new Promise((resolve, reject) => {
-        const body = Buffer.from(xml, 'utf8');
-        const req = http.request({ host: TFS_HOST, port: TFS_PORT, path: putanja, method: 'POST', headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': body.length } }, (res) => {
+        let gotovo = false;
+        const kraj = (fn, v) => { if (gotovo) return; gotovo = true; clearTimeout(rok); fn(v); };
+        const req = http.request(opcije, (res) => {
             let data = ''; res.setEncoding('utf8');
             res.on('data', (c) => { data += c; });
-            res.on('end', () => resolve({ status: res.statusCode, raw: data }));
+            res.on('end', () => kraj(resolve, { status: res.statusCode, raw: data }));
+            res.on('aborted', () => kraj(reject, new Error('TFS je prekinuo odgovor (veza pukla usred odgovora)')));
+            res.on('error', (e) => kraj(reject, e));
+            res.on('close', () => { if (!res.complete) kraj(reject, new Error('TFS je prekinuo odgovor (veza pukla usred odgovora)')); });
         });
-        req.on('error', reject);
-        req.setTimeout(timeoutMs, () => req.destroy(new Error('TFS timeout (uređaj/server nedostupan)')));
-        req.write(body); req.end();
-    });
-}
-function getRaw(putanja, timeoutMs = 5000) {
-    return new Promise((resolve, reject) => {
-        const req = http.request({ host: TFS_HOST, port: TFS_PORT, path: putanja, method: 'GET' }, (res) => {
-            let data = ''; res.setEncoding('utf8'); res.on('data', (c) => { data += c; }); res.on('end', () => resolve({ status: res.statusCode, raw: data }));
-        });
-        req.on('error', reject);
-        req.setTimeout(timeoutMs, () => req.destroy(new Error('TFS timeout')));
+        const rok = setTimeout(() => req.destroy(new Error(porukaIsteka)), timeoutMs);
+        req.on('error', (e) => kraj(reject, e));
+        req.setTimeout(timeoutMs, () => req.destroy(new Error(porukaIsteka)));
+        if (body) req.write(body);
         req.end();
     });
+}
+// Jedini "neverifikovani" dio: HTTP POST XML na TFS. Vraća {status, raw} ili baca (veza pukla).
+function postXml(putanja, xml, timeoutMs = TFS_TIMEOUT_MS) {
+    const body = Buffer.from(xml, 'utf8');
+    return zahtjev({ host: TFS_HOST, port: TFS_PORT, path: putanja, method: 'POST', headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': body.length } },
+        body, timeoutMs, 'TFS timeout (uređaj/server nedostupan)');
+}
+function getRaw(putanja, timeoutMs = 5000) {
+    return zahtjev({ host: TFS_HOST, port: TFS_PORT, path: putanja, method: 'GET' }, null, timeoutMs, 'TFS timeout');
 }
 
 let brojZahtjeva = Math.floor((process.hrtime.bigint ? Number(process.hrtime.bigint() % 100000n) : 1));

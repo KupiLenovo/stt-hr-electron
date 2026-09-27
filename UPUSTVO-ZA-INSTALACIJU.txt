@@ -63,6 +63,25 @@ instalira pri sljedećem zatvaranju aplikacije.
 Ručno: Aplikacija -> Provjeri ažuriranja.
 
 ================================================================
+  VERZIJA 4.3.0 — FISKALNA KASA
+================================================================
+
+- Traka "Ažuriraj aplikaciju": kasa je pokaže kad je na računaru
+  starija verzija od 4.3.0. Zatvori aplikaciju (ažuriranje se
+  instalira pri zatvaranju) ili je ponovo instaliraj — dok traka
+  stoji, kasa radi po starom.
+- Svaki račun se PRVO upiše na disk računara, pa tek onda ide na
+  fiskalni uređaj. Pad aplikacije ili nestanak struje ne briše
+  prodaju, a računi bez interneta čekaju i pošalju se sami.
+- Ako uređaj ne odgovori na vrijeme, kasa javi da je račun
+  "možda odštampan". NE štampaj ga ponovo: za minut klikni
+  "Provjeri na uređaju" na vrhu kase.
+- Pri pokretanju aplikacija sama provjeri račune ostale bez
+  odgovora — čita samo brojač uređaja, ništa ne štampa. Kad se po
+  brojaču ne može odlučiti (npr. poslije su išli drugi računi),
+  voditelj upiše broj sa trake uređaja.
+
+================================================================
   AKO NEŠTO NE RADI
 ================================================================
 
@@ -87,7 +106,12 @@ veza kiosk uređaja se prenesu — niko ništa ne upisuje.
 
   npm ci          instalacija zavisnosti
   npm start       pokretanje iz koda
-  npm test        testovi adrese servera
+  npm test        svi testovi (adresa servera, fiskalni drajver,
+                  red kase, kaos test: simulator Tring uređaja,
+                  gašenje aplikacije/TFS-a, rad bez interneta)
+  node scripts/kaos-sa-serverom.js
+                  jednokratno: 10 offline računa prema pravom
+                  serveru (treba stt-hr-server pored ovog repoa)
 
   STT_SERVER_URL=https://...   nadjačava adresu servera (samo razvoj)
   AIERP_USER_DATA=<folder>     odvojen profil (npr. test "prvog pokretanja")
