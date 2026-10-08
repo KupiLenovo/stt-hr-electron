@@ -69,4 +69,21 @@ contextBridge.exposeInMainWorld('posOffline', {
     dodajURed: (racun) => ipcRenderer.invoke('pos:queue-add', racun),
     nesinhronizovani: () => ipcRenderer.invoke('pos:queue-pending'),
     oznaciPoslan: (lokalni_uid, server_id) => ipcRenderer.invoke('pos:queue-mark', { lokalni_uid, server_id }),
+    // MAL-20: kasa bez interneta — paket kase u keš računara, offline prijava PIN-om (72 h, samo prodaja i smjena), tiha obnova prijave
+    kasaPaketSpremi: (paket) => ipcRenderer.invoke('kasa:paket-spremi', paket),
+    kasaStanje: () => ipcRenderer.invoke('kasa:stanje'),
+    kasaKase: () => ipcRenderer.invoke('kasa:kase'),
+    kasaRadnici: (skladiste_id) => ipcRenderer.invoke('kasa:radnici', skladiste_id),
+    kasaPrijava: (u) => ipcRenderer.invoke('kasa:prijava', u),
+    kasaOdjava: () => ipcRenderer.invoke('kasa:odjava'),
+    kasaObrisiRadnike: () => ipcRenderer.invoke('kasa:obrisi-radnike'),
+    kasaObnoviSesiju: () => ipcRenderer.invoke('kasa:obnovi-sesiju'),
+    // MAL-21: smjena na disku kase (otvaranje, zatvaranje, primopredaja) i sync smjene
+    smjenaOtvori: (u) => ipcRenderer.invoke('smjena:otvori', u),
+    smjenaZatvori: (u) => ipcRenderer.invoke('smjena:zatvori', u),
+    smjenaPrimopredaja: (u) => ipcRenderer.invoke('smjena:primopredaja', u),
+    smjenaAktivna: (skladiste_id) => ipcRenderer.invoke('smjena:aktivna', skladiste_id),
+    smjeneNesinhronizovane: () => ipcRenderer.invoke('smjena:nesinhronizovane'),
+    smjenaOznaci: (lokalni_uid, o) => ipcRenderer.invoke('smjena:oznaci', { lokalni_uid, server_id: o && o.server_id, sukob: !!(o && o.sukob) }),
+    smjenaPredajServeru: (lokalni_uid) => ipcRenderer.invoke('smjena:predaj-serveru', lokalni_uid),
 });
