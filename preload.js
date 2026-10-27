@@ -1,15 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const fs = require('fs');
-const path = require('path');
+
+// Preload glavnog prozora radi u SANDBOXU (Electron 20+ zadano; prozor nema `sandbox: false`): `require` ovdje zna samo 'electron'
+// (i events, timers, url) — NE 'fs', 'path' ni lokalne fajlove. Do 4.3.0 je ovdje stajao `require('fs')`: u pravoj aplikaciji to baca
+// „module not found: fs" i preload stane prije ijednog mosta. Podatke s diska zato daje main (lib/preload-podaci.js) sinhrono.
+// test/preload.test.js pokreće ovaj fajl s istim ograničenim `require`.
+let PODACI = {};
+try { PODACI = ipcRenderer.sendSync('preload:podaci') || {}; } catch { /* van desktopa ili main bez kanala → podaci null */ }
 
 // C-Fiskalni (MAL-03): verzija protokola iz kanonskog lib/fiskalni/tring.js + sha bajt-po-bajt kopije (lib/fiskalni/tring.sha256).
 // Kasa (pos.tsx) poredi verziju s potrebnom i pokaže traku ako je instalirani desktop stariji. Čist read, bez I/O prema uređaju.
-let PROTOKOL = { verzija: null, sha: null };
-try {
-    const tring = require('./lib/fiskalni/tring');
-    const sha = fs.readFileSync(path.join(__dirname, 'lib', 'fiskalni', 'tring.sha256'), 'utf8').trim().split(/\s+/)[0] || null;
-    PROTOKOL = { verzija: tring.PROTOKOL_VERZIJA || null, sha };
-} catch { /* van desktopa ili fajl nedostupan → ostaje null */ }
+const PROTOKOL = (PODACI.protokol && typeof PODACI.protokol === 'object') ? PODACI.protokol : { verzija: null, sha: null };
 
 contextBridge.exposeInMainWorld('electronAPI', {
     showNotification: (naslov, poruka, stranica) => {
@@ -62,11 +62,35 @@ contextBridge.exposeInMainWorld('fiskalniDrajver', {
 
 // C-POS skelet Faza 2: lokalni keš + offline queue most (renderer → main → better-sqlite3).
 // Dostupan SAMO u desktop appu (browser = undefined → POS radi online-only, bez offline keša).
-contextBridge.exposeInMainWorld('posOffline', {
+// MAL-2 (N-1): most se gradi iz UGOVORA (lib/kasa-offline-ugovor.json, bajt-ista kopija serverskog; imena metoda daje main) —
+// izlaže se samo ono što je u ugovoru. Novo svojstvo/metoda mosta prvo ide u ugovor (oba repoa), pa tek onda ovdje.
+// test/kasa-offline-ugovor.test.js drži: svaka metoda ovdje je u ugovoru, obavezne i one koje klijent zove postoje, broj argumenata.
+const POS_OFFLINE = {
     dostupan: true,
     spremiKatalog: (skladiste_id, artikli) => ipcRenderer.invoke('pos:katalog-save', { skladiste_id, artikli }),
     citajKatalog: (skladiste_id) => ipcRenderer.invoke('pos:katalog-get', { skladiste_id }),
     dodajURed: (racun) => ipcRenderer.invoke('pos:queue-add', racun),
     nesinhronizovani: () => ipcRenderer.invoke('pos:queue-pending'),
     oznaciPoslan: (lokalni_uid, server_id) => ipcRenderer.invoke('pos:queue-mark', { lokalni_uid, server_id }),
-});
+    // MAL-20: kasa bez interneta — paket kase u keš računara, offline prijava PIN-om (72 h, samo prodaja i smjena), tiha obnova prijave
+    kasaPaketSpremi: (paket) => ipcRenderer.invoke('kasa:paket-spremi', paket),
+    kasaStanje: () => ipcRenderer.invoke('kasa:stanje'),
+    kasaKase: () => ipcRenderer.invoke('kasa:kase'),
+    kasaRadnici: (skladiste_id) => ipcRenderer.invoke('kasa:radnici', skladiste_id),
+    kasaPrijava: (u) => ipcRenderer.invoke('kasa:prijava', u),
+    kasaOdjava: () => ipcRenderer.invoke('kasa:odjava'),
+    kasaObrisiRadnike: () => ipcRenderer.invoke('kasa:obrisi-radnike'),
+    kasaObnoviSesiju: () => ipcRenderer.invoke('kasa:obnovi-sesiju'),
+    // MAL-21: smjena na disku kase (otvaranje, zatvaranje, primopredaja) i sync smjene
+    smjenaOtvori: (u) => ipcRenderer.invoke('smjena:otvori', u),
+    smjenaZatvori: (u) => ipcRenderer.invoke('smjena:zatvori', u),
+    smjenaPrimopredaja: (u) => ipcRenderer.invoke('smjena:primopredaja', u),
+    smjenaAktivna: (skladiste_id) => ipcRenderer.invoke('smjena:aktivna', skladiste_id),
+    smjeneNesinhronizovane: () => ipcRenderer.invoke('smjena:nesinhronizovane'),
+    smjenaOznaci: (lokalni_uid, o) => ipcRenderer.invoke('smjena:oznaci', { lokalni_uid, server_id: o && o.server_id, sukob: !!(o && o.sukob) }),
+    smjenaPredajServeru: (lokalni_uid) => ipcRenderer.invoke('smjena:predaj-serveru', lokalni_uid),
+};
+const metodeUgovora = PODACI.ugovor && Array.isArray(PODACI.ugovor.metode) ? PODACI.ugovor.metode : Object.keys(POS_OFFLINE);
+const posOffline = {};
+for (const ime of metodeUgovora) if (Object.prototype.hasOwnProperty.call(POS_OFFLINE, ime)) posOffline[ime] = POS_OFFLINE[ime];
+contextBridge.exposeInMainWorld('posOffline', posOffline);

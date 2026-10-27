@@ -2,3 +2,6 @@
 # LF na svakoj platformi da SHA i poređenje budu deterministični bez obzira na core.autocrlf.
 lib/fiskalni/tring.js text eol=lf
 lib/fiskalni/tring.sha256 text eol=lf
+# MAL-2 (N-1): lib/kasa-offline-ugovor.json je BAJT-PO-BAJT kopija serverskog ugovora offline mosta (offline-ogledalo CI).
+lib/kasa-offline-ugovor.json text eol=lf
+lib/kasa-offline-ugovor.sha256 text eol=lf

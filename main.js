@@ -206,6 +206,11 @@ ipcMain.on('install-update', () => {
     autoUpdater.quitAndInstall();
 });
 
+// Preload je u sandboxu (ne može čitati fajlove) — podatke s diska mu daje main, jednom, sinhrono (lib/preload-podaci.js).
+const { podaciZaPreload } = require('./lib/preload-podaci');
+const PODACI_PRELOAD = podaciZaPreload();
+ipcMain.on('preload:podaci', (e) => { e.returnValue = PODACI_PRELOAD; });
+
 // ==========================================
 // C-FISKALNI — drajver (TANAK omotač oko lib/fiskalni/tring.js). Renderer poziva preko invoke.
 // Sva logika u lib-u; ovdje samo HTTP na localhost:8085 (TFS). Greška/timeout → vraćamo objekat, ne bacamo.
@@ -220,7 +225,7 @@ ipcMain.handle('fiskalni:test', fiskalniHandler(() => fiskalni.testVeze()));
 ipcMain.handle('fiskalni:status', fiskalniHandler(() => fiskalni.statusUredjaja()));
 ipcMain.handle('fiskalni:init', fiskalniHandler((a) => fiskalni.inicijalizacija(a && a.op, a && a.loz)));
 ipcMain.handle('fiskalni:fiskalizuj', fiskalniHandler((racun) => fiskalni.fiskalizuj(racun)));
-ipcMain.handle('fiskalni:reklamiraj', fiskalniHandler((a) => fiskalni.reklamiraj(a.racun, a.original_broj)));
+ipcMain.handle('fiskalni:reklamiraj', fiskalniHandler((a) => (!kasaOffline.dozvoljeno(offlineSesija, 'povrat') ? OFFLINE_POVRAT : fiskalni.reklamiraj(a.racun, a.original_broj))));
 ipcMain.handle('fiskalni:unos-novca', fiskalniHandler((a) => fiskalni.unosNovca(a.vrsta, a.iznos_fening)));
 ipcMain.handle('fiskalni:povrat-novca', fiskalniHandler((a) => fiskalni.povratNovca(a.vrsta, a.iznos_fening)));
 ipcMain.handle('fiskalni:presjek', fiskalniHandler(() => fiskalni.presjekStanja()));
@@ -241,18 +246,110 @@ ipcMain.handle('pos:queue-pending', posHandler(() => posKes.nesinhronizovani()))
 ipcMain.handle('pos:queue-mark', posHandler((a) => posKes.oznaciPoslan(a.lokalni_uid, a.server_id)));
 
 // ==========================================
+// MAL-20 / MAL-21 — KASA BEZ INTERNETA: keš radnje po računaru, offline prijava PIN-om (72 h od zadnje veze, samo prodaja i smjena),
+// smjena na disku kase i tiha obnova prijave kad se veza vrati. Logika u lib/kasa-offline.js (ista pos-kes.db), ekran kase iz kopije
+// client-v2 builda (lib/lokalna-kasa.js) kad se server ne javi.
+// ==========================================
+const kasaOffline = require('./lib/kasa-offline');
+const lokalnaKasa = require('./lib/lokalna-kasa');
+const LJUSKA = () => path.join(app.getPath('userData'), 'kasa-ljuska');
+let offlineSesija = null;          // { radnik_id, skladiste_id, od, vazi_do, pin (Buffer) } — samo u memoriji, PIN nikad na disk
+let lokalnaKasaAktivna = false;    // prozor radi nad kopijom ekrana kase (protocol.handle na originu servera)
+let zadnjeOsvjezavanjeLjuske = 0;
+ipcMain.handle('kasa:paket-spremi', posHandler((paket) => kasaOffline.spremiPaket(paket)));
+ipcMain.handle('kasa:stanje', posHandler(() => ({ ...kasaOffline.stanje(), lokalna_kasa: lokalnaKasaAktivna, sesija: offlineSesija ? { radnik_id: offlineSesija.radnik_id, od: offlineSesija.od } : null })));
+ipcMain.handle('kasa:kase', posHandler(() => ({ kase: kasaOffline.kase() })));
+ipcMain.handle('kasa:radnici', posHandler((skladisteId) => ({ radnici: kasaOffline.radnici(skladisteId) })));
+ipcMain.handle('kasa:prijava', async (_e, u) => {
+    try {
+        const r = kasaOffline.prijava(u || {});
+        if (!r.ok) return r;
+        offlineSesija = kasaOffline.ocistiSesiju(offlineSesija) || kasaOffline.napraviSesiju(r, u.pin);
+        // PLT-13: offline sesija ne dijeli token — kolačić prijave prethodnog korisnika se briše, da zahtjevi bez interneta (pa ni prvi poslije
+        // veze) ne odu u ime nekog drugog. Novi kolačić dolazi tihom obnovom (kasa:obnovi-sesiju).
+        const server = trenutniServer();
+        if (server) await session.defaultSession.cookies.remove(server, 'stt_token').catch(() => {});
+        return { ok: true, radnik: r.radnik, skladiste_id: r.skladiste_id, dozvole: r.dozvole, vazi_do: r.vazi_do };
+    } catch (e) { return { ok: false, error: 'greska', poruka: e.message }; }
+});
+ipcMain.handle('kasa:odjava', () => { offlineSesija = kasaOffline.ocistiSesiju(offlineSesija); return { ok: true }; });
+ipcMain.handle('kasa:obrisi-radnike', posHandler(() => { offlineSesija = kasaOffline.ocistiSesiju(offlineSesija); return kasaOffline.obrisiRadnike(); }));
+ipcMain.handle('kasa:obnovi-sesiju', async () => {
+    const server = trenutniServer();
+    const r = await kasaOffline.obnoviPrijavu({ server, sesija: offlineSesija, dohvati: async (url, init) => {
+        const odg = await net.fetch(url, { ...init, credentials: 'include', signal: AbortSignal.timeout(10000) });
+        return { ok: odg.ok, status: odg.status, json: await odg.json().catch(() => null) };
+    } });
+    if (r.ok) {
+        offlineSesija = kasaOffline.ocistiSesiju(offlineSesija);
+        kasaOffline.zabiljeziVezu();
+        ugasiLokalnuKasu();   // veza je tu: dalje sve ide sa servera (stranica ostaje otvorena, bez ponovnog učitavanja)
+    }
+    return r;
+});
+ipcMain.handle('smjena:otvori', posHandler((u) => kasaOffline.otvoriSmjenu(u)));
+ipcMain.handle('smjena:zatvori', posHandler((u) => kasaOffline.zatvoriSmjenu(u)));
+ipcMain.handle('smjena:primopredaja', posHandler((u) => kasaOffline.primopredaja(u)));
+ipcMain.handle('smjena:aktivna', posHandler((skladisteId) => ({ smjena: kasaOffline.aktivnaSmjena(skladisteId) })));
+ipcMain.handle('smjena:nesinhronizovane', posHandler(() => ({ smjene: kasaOffline.nesinhronizovaneSmjene().map((x) => ({ ...x, tijelo: kasaOffline.tijeloSynca(x) })) })));
+ipcMain.handle('smjena:oznaci', posHandler((a) => kasaOffline.oznaciSmjenu(a.lokalni_uid, { server_id: a.server_id, sukob: a.sukob })));
+ipcMain.handle('smjena:predaj-serveru', posHandler((uid) => kasaOffline.predajServeru(uid)));
+
+// Lokalna kasa: kopija ekrana kase servirana na originu servera — localStorage, kasa i dnevnik štampe ostaju isti; /api/* ide na mrežu.
+function otvoriLokalnuKasu() {
+    const server = trenutniServer();
+    if (!server || !mainWindow) return false;
+    const origin = new URL(server).origin;
+    const sema = new URL(server).protocol.slice(0, -1);
+    const dir = LJUSKA();
+    try { session.defaultSession.protocol.unhandle(sema); } catch { /* nije bio postavljen */ }
+    session.defaultSession.protocol.handle(sema, (req) => {
+        try {
+            const u = new URL(req.url);
+            if (u.origin === origin) {
+                const o = lokalnaKasa.odgovor(dir, u.pathname);
+                if (o) return new Response(o.tijelo, { headers: { 'content-type': o.tip, 'cache-control': 'no-store' } });
+            }
+        } catch { /* ide na mrežu */ }
+        return net.fetch(req, { bypassCustomProtocolHandlers: true });
+    });
+    lokalnaKasaAktivna = true;
+    mainWindow.loadURL(lokalnaKasa.adresaKase(server));
+    return true;
+}
+function ugasiLokalnuKasu() {
+    if (!lokalnaKasaAktivna) return;
+    const server = trenutniServer();
+    try { if (server) session.defaultSession.protocol.unhandle(new URL(server).protocol.slice(0, -1)); } catch { /* već ugašen */ }
+    lokalnaKasaAktivna = false;
+}
+// Poslije uspješnog učitavanja servera: kopija ekrana kase se osvježi u pozadini (najviše jednom u 30 min; samo kad se build promijeni).
+function osvjeziLjuskuUPozadini() {
+    const server = trenutniServer();
+    if (!server || lokalnaKasaAktivna || Date.now() - zadnjeOsvjezavanjeLjuske < 30 * 60 * 1000) return;
+    zadnjeOsvjezavanjeLjuske = Date.now();
+    lokalnaKasa.osvjeziLjusku({ server, dir: LJUSKA(), dohvati: async (url) => {
+        const r = await net.fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(20000) });
+        const bajtovi = Buffer.from(await r.arrayBuffer());
+        return { ok: r.ok, status: r.status, bajtovi, tekst: bajtovi.toString('utf8') };
+    } }).catch((e) => { if (process.argv.includes('--dev')) console.error('kasa-ljuska:', e.message); });
+}
+
+// ==========================================
 // C-FISKALNI MOST (MAL-04) — račun na disk PRIJE štampe, oporavak pri startu, žurnal. Sva logika u lib/fiskalni-most.js.
 // fiskalni:naplati je JEDINI put računa do uređaja za protokol ≥ 4.3.0 (renderer tek poslije javi serveru).
 // ==========================================
 const { napraviMost } = require('./lib/fiskalni-most');
 const fiskalniMost = napraviMost({ drajver: fiskalni, posKes });
-ipcMain.handle('fiskalni:naplati', fiskalniHandler((p) => fiskalniMost.naplati(p)));
+// MAL-20: offline sesija smije samo prodaju i smjenu — povrat (reklamirani račun) na uređaj ne ide dok radnik nije prijavljen na serveru
+const OFFLINE_POVRAT = { uspjeh: false, status: 'greska', greska: { kod: 'offline_samo_prodaja', poruka: 'Bez interneta kasa radi samo prodaju i smjenu — povrat i storno idu kad se veza vrati.' } };
+ipcMain.handle('fiskalni:naplati', fiskalniHandler((p) => ((p && p.tip === 'reklamirani' && !kasaOffline.dozvoljeno(offlineSesija, 'povrat')) ? OFFLINE_POVRAT : fiskalniMost.naplati(p))));
 ipcMain.handle('fiskalni:duplikat', fiskalniHandler((a) => fiskalniMost.duplikat(a)));
 ipcMain.handle('fiskalni:periodicni', fiskalniHandler((a) => fiskalniMost.periodicni(a)));
 ipcMain.handle('fiskalni:rezim', fiskalniHandler(() => fiskalniMost.provjeriRezim()));
 
 // v4.0.0: offline ekran "Pokusaj ponovo" dugme — ponovo ucitaj novi UI sa servera
-ipcMain.on('retry-connection', () => ucitajServer());
+ipcMain.on('retry-connection', () => { ugasiLokalnuKasu(); ucitajServer(); });
 
 // ==========================================
 // SYSTEM NOTIFIKACIJE
@@ -310,6 +407,7 @@ ipcMain.on('system-notif', (event, { naslov, poruka, stranica }) => {
 function createWindow() {
     try {
         posKes.init(app.getPath('userData'));
+        kasaOffline.init(posKes.baza());   // MAL-20/21: keš radnje, offline prijava i smjena nad istom pos-kes.db
         // MAL-04: PRVO razriješi račune poslane uređaju bez potvrde (pad usred štampe / istek) — čita SAMO brojač, BEZ nove štampe.
         // Best-effort i bez blokiranja prozora; renderer poslije (sinhronizuj) šalje razriješene rezultate serveru.
         // Kaos test (4.3.0): prvo (sinhrono) red ostavljen usred naplate → greska/nepoznato, da ga sync ne pošalje kao nefiskalizovan.
@@ -344,9 +442,20 @@ function createWindow() {
 
     // Ako server nije dostupan — lokalni offline ekran (poruka + retry), ne bijeli ekran.
     // errorCode -3 = ABORTED (npr. redirect/reload u toku) — ignorisi, nije prava greska.
+    // MAL-20: računar kase s kešom radnje (radnici, rok 72 h od zadnje veze) i kopijom ekrana kase otvara LOKALNU KASU — radnik se prijavi
+    // PIN-om i prodaje bez interneta. Ostali (ili kad ni lokalna kasa ne uspije) dobijaju offline.html kao i do sada.
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
         if (!isMainFrame || errorCode === -3) return;
-        mainWindow.loadFile(path.join(__dirname, 'offline.html'), { query: { server: trenutniServer() || '' } });
+        const server = trenutniServer();
+        let odluka = 'offline';
+        try { odluka = lokalnaKasaAktivna ? 'offline' : lokalnaKasa.odlukaPriGresci({ server, stanjeKesa: kasaOffline.stanje(), ljuska: lokalnaKasa.ljuskaSpremna(LJUSKA(), server) }); } catch { odluka = 'offline'; }
+        if (odluka === 'lokalna_kasa' && otvoriLokalnuKasu()) return;
+        ugasiLokalnuKasu();
+        mainWindow.loadFile(path.join(__dirname, 'offline.html'), { query: { server: server || '' } });
+    });
+    // Server se učitao: kopija ekrana kase za dane bez interneta (u pozadini, ne koči prozor)
+    mainWindow.webContents.on('did-finish-load', () => {
+        try { const server = trenutniServer(); if (server && mainWindow.webContents.getURL().startsWith(server)) osvjeziLjuskuUPozadini(); } catch { /* nije kritično */ }
     });
 
     // v4.2.0: prozor ostaje na serveru firme. Preload daje stranici fiskalni printer i POS kes, pa
