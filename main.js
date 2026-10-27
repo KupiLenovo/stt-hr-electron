@@ -206,6 +206,11 @@ ipcMain.on('install-update', () => {
     autoUpdater.quitAndInstall();
 });
 
+// Preload je u sandboxu (ne može čitati fajlove) — podatke s diska mu daje main, jednom, sinhrono (lib/preload-podaci.js).
+const { podaciZaPreload } = require('./lib/preload-podaci');
+const PODACI_PRELOAD = podaciZaPreload();
+ipcMain.on('preload:podaci', (e) => { e.returnValue = PODACI_PRELOAD; });
+
 // ==========================================
 // C-FISKALNI — drajver (TANAK omotač oko lib/fiskalni/tring.js). Renderer poziva preko invoke.
 // Sva logika u lib-u; ovdje samo HTTP na localhost:8085 (TFS). Greška/timeout → vraćamo objekat, ne bacamo.

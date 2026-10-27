@@ -1,15 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const fs = require('fs');
-const path = require('path');
+
+// Preload glavnog prozora radi u SANDBOXU (Electron 20+ zadano; prozor nema `sandbox: false`): `require` ovdje zna samo 'electron'
+// (i events, timers, url) — NE 'fs', 'path' ni lokalne fajlove. Do 4.3.0 je ovdje stajao `require('fs')`: u pravoj aplikaciji to baca
+// „module not found: fs" i preload stane prije ijednog mosta. Podatke s diska zato daje main (lib/preload-podaci.js) sinhrono.
+// test/preload.test.js pokreće ovaj fajl s istim ograničenim `require`.
+let PODACI = {};
+try { PODACI = ipcRenderer.sendSync('preload:podaci') || {}; } catch { /* van desktopa ili main bez kanala → podaci null */ }
 
 // C-Fiskalni (MAL-03): verzija protokola iz kanonskog lib/fiskalni/tring.js + sha bajt-po-bajt kopije (lib/fiskalni/tring.sha256).
 // Kasa (pos.tsx) poredi verziju s potrebnom i pokaže traku ako je instalirani desktop stariji. Čist read, bez I/O prema uređaju.
-let PROTOKOL = { verzija: null, sha: null };
-try {
-    const tring = require('./lib/fiskalni/tring');
-    const sha = fs.readFileSync(path.join(__dirname, 'lib', 'fiskalni', 'tring.sha256'), 'utf8').trim().split(/\s+/)[0] || null;
-    PROTOKOL = { verzija: tring.PROTOKOL_VERZIJA || null, sha };
-} catch { /* van desktopa ili fajl nedostupan → ostaje null */ }
+const PROTOKOL = (PODACI.protokol && typeof PODACI.protokol === 'object') ? PODACI.protokol : { verzija: null, sha: null };
 
 contextBridge.exposeInMainWorld('electronAPI', {
     showNotification: (naslov, poruka, stranica) => {
