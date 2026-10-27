@@ -4,7 +4,7 @@
 
 Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, better-sqlite3) i auto-update.
 
-**Verzija:** 4.3.0
+**Verzija:** 4.4.0 (kasa bez interneta, ugovor offline mosta)
 
 ## Server firme (v4.2.0) — adresa NIJE zakucana
 
@@ -22,10 +22,13 @@ Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama;
 stt-hr-electron/
 ├── main.js               # main process: prozor, meni, auto-update, IPC, server firme + prelaz 4.1.x
 ├── preload.js            # most prema rendereru: electronAPI, fiskalniDrajver, posOffline, aierpPostavke (samo file://)
+│                         #   SANDBOX: require samo 'electron' — podatke s diska daje main (lib/preload-podaci.js, sendSync)
 ├── povezivanje.html      # ekran „Poveži aplikaciju sa svojom firmom" (v4.2.0) — MORA biti u build.files
 ├── offline.html          # „Nema veze sa serverom" + promjena adrese
 ├── fiskalni-drajver.js   # Tring TFS na localhost:8085 (lib/fiskalni/tring.js)
 ├── lib/pos-kes.js        # offline kasa (better-sqlite3, userData/pos-kes.db)
+├── lib/kasa-offline.js   # kasa bez interneta (4.4.0): keš radnje, offline prijava PIN-om, smjena na disku, tijeloSynca
+├── lib/kasa-offline-ugovor.json  # ugovor mosta posOffline — BAJT-PO-BAJT kopija serverskog (+ .sha256); mijenja se u OBA repoa
 ├── lib/server-adresa.js  # normalizacija adrese servera (čist Node — test/server-adresa.test.js)
 ├── installer.nsh         # NSIS (ASCII!) — od 4.2.0 samo briše stara firewall pravila
 └── build/                # ikone za electron-builder (ne ide u app.asar)
@@ -65,6 +68,8 @@ Lokalna provjera pakovanja bez UAC-a: `npx electron-builder --win --dir -c.npmRe
 4. **Lokalni ekrani (povezivanje, offline) ne koriste localStorage** — po postojanju „Local Storage" foldera main.js prepoznaje staru 4.1.x instalaciju.
 5. **U inline skriptama ne koristiti globalno ime `status`** (i sl. `name`, `top`) — `var status` je `window.status` (string) i element se izgubi. Obje stranice su to imale.
 6. **NE dodavati nove npm dependencies** osim ako je apsolutno neophodno. Klijent treba ostati lagan.
+7. **Most `window.posOffline` samo iz ugovora** (`lib/kasa-offline-ugovor.json`, kopija serverskog — CI `offline-ogledalo` u server repou poredi desktop main bajt po bajt). Nova metoda/polje: prvo ugovor u OBA repoa (desktop PR se spaja prvi), pa preload; `test/kasa-offline-ugovor.test.js` veže ugovor za preload, `tijeloSynca` i red računa. Uputa: server repo `docs/desktop/offline-ugovor.md`.
+8. **Preload je u sandboxu** — u `preload.js` nikad `require` osim `'electron'` (`test/preload.test.js`); fajlove čita main.
 
 ## Historija — v2.0.0 (stari UI u app/index.html, prije v4.0.0 cutovera)
 

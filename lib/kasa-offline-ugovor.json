@@ -1,0 +1,512 @@
+{
+  "ugovor": "kasa-offline-most",
+  "verzija": 1,
+  "opis": [
+    "Ugovor offline mosta kase: desktop aplikacija izlaže window.posOffline (preload), web kasa (client-v2) ga zove, a server prima sinhronizaciju smjena i računa iz dana bez interneta.",
+    "Kanonski fajl je u serverskom repou (lib/kasa-offline-ugovor.json); desktop drži bajt-istu kopiju na istoj putanji. CI posao offline-ogledalo poredi kopiju s desktop main granom.",
+    "Izmjena mosta ide ovim redom: prvo ugovor i desktop (grana/PR), pa klijent i server u istom PR-u s ovim fajlom. Test G4930 pada kad se klijent ili server promijene, a ugovor ne.",
+    "u_desktopu: false = metoda budućeg izdanja desktopa (nema je ni na jednoj desktop grani); klijent je provjerava prije poziva. prazno: izostaje = desktop polje ne šalje kad je prazno (s.x || undefined)."
+  ],
+  "most": {
+    "globalno": "window.posOffline",
+    "metode": {
+      "citajKatalog": {
+        "obavezna": true,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "id",
+            "tip": "number"
+          }
+        ]
+      },
+      "dodajURed": {
+        "obavezna": true,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "r",
+            "tip": "unknown",
+            "polja": [
+              "kasa_uredjaj",
+              "kes_verzija",
+              "kolicina_potvrdjena",
+              "korpa_id",
+              "kupac_id",
+              "kupon_kod",
+              "lokalni_uid",
+              "loyalty_kupac_id",
+              "placanja",
+              "popust_odobrenje_id",
+              "popust_razlog",
+              "razlog_ispod_nabavne",
+              "skladiste_id",
+              "smjena_id",
+              "smjena_lokalni_uid",
+              "stavke",
+              "trazi_odobrenje"
+            ]
+          }
+        ]
+      },
+      "dostupan": {
+        "obavezna": true,
+        "klijent_zove": false,
+        "svojstvo": "boolean"
+      },
+      "kasaKase": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": []
+      },
+      "kasaObnoviSesiju": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": []
+      },
+      "kasaObrisiRadnike": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": []
+      },
+      "kasaOdjava": {
+        "obavezna": false,
+        "klijent_zove": false,
+        "argumenti": []
+      },
+      "kasaPaketSpremi": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "paket",
+            "tip": "unknown"
+          }
+        ]
+      },
+      "kasaPrijava": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "u",
+            "tip": "{ skladiste_id: number; radnik_id: number; pin: string }",
+            "polja": [
+              "pin",
+              "radnik_id",
+              "skladiste_id"
+            ]
+          }
+        ]
+      },
+      "kasaRadnici": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "skladisteId",
+            "tip": "number"
+          }
+        ]
+      },
+      "kasaStanje": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": []
+      },
+      "korpaObrisi": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "kljuc",
+            "tip": "string"
+          }
+        ],
+        "u_desktopu": false
+      },
+      "korpaSpremi": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "k",
+            "tip": "{ kljuc: string; skladiste_id: number; vrsta: string; naziv: string; sadrzaj: unknown }",
+            "polja": [
+              "kljuc",
+              "naziv",
+              "sadrzaj",
+              "skladiste_id",
+              "vrsta"
+            ]
+          }
+        ],
+        "u_desktopu": false
+      },
+      "korpeCitaj": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "skladiste_id",
+            "tip": "number"
+          }
+        ],
+        "u_desktopu": false
+      },
+      "nesinhronizovani": {
+        "obavezna": true,
+        "klijent_zove": true,
+        "argumenti": []
+      },
+      "oznaciPoslan": {
+        "obavezna": true,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "uid",
+            "tip": "string"
+          },
+          {
+            "ime": "serverId",
+            "tip": "number | null"
+          }
+        ]
+      },
+      "smjenaAktivna": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "skladisteId",
+            "tip": "number"
+          }
+        ]
+      },
+      "smjenaOtvori": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "u",
+            "tip": "{ skladiste_id: number; radnik_id: number; pocetni_fond_fening: number }",
+            "polja": [
+              "pocetni_fond_fening",
+              "radnik_id",
+              "skladiste_id"
+            ]
+          }
+        ]
+      },
+      "smjenaOznaci": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "uid",
+            "tip": "string"
+          },
+          {
+            "ime": "o",
+            "tip": "{ server_id: number | null; sukob: boolean }",
+            "polja": [
+              "server_id",
+              "sukob"
+            ]
+          }
+        ]
+      },
+      "smjenaPredajServeru": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "uid",
+            "tip": "string"
+          }
+        ]
+      },
+      "smjenaPrimopredaja": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "u",
+            "tip": "Record<string, unknown>",
+            "polja": [
+              "lokalni_uid",
+              "prebrojano_fening",
+              "predaje_radnik_id",
+              "preuzima_radnik_id"
+            ]
+          }
+        ]
+      },
+      "smjenaZatvori": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "u",
+            "tip": "Record<string, unknown>",
+            "polja": [
+              "lokalni_uid",
+              "napomena",
+              "otvoreno_at",
+              "otvorio_radnik_id",
+              "pocetni_fond_fening",
+              "prebrojano_fening",
+              "radnik_id",
+              "server_id",
+              "skladiste_id",
+              "uredjaj"
+            ]
+          }
+        ]
+      },
+      "smjeneNesinhronizovane": {
+        "obavezna": false,
+        "klijent_zove": true,
+        "argumenti": []
+      },
+      "spremiKatalog": {
+        "obavezna": true,
+        "klijent_zove": true,
+        "argumenti": [
+          {
+            "ime": "id",
+            "tip": "number"
+          },
+          {
+            "ime": "a",
+            "tip": "Artikal[]"
+          }
+        ]
+      }
+    }
+  },
+  "oblici": {
+    "LokalnaSmjena": {
+      "izvor": "client-v2/src/lib/kasa-offline.ts",
+      "polja": {
+        "lokalni_uid": "string",
+        "skladiste_id": "number",
+        "server_id": "number | null",
+        "status": "'otvorena' | 'zatvorena'",
+        "otvorio_radnik_id": "number | null",
+        "otvoreno_at": "string",
+        "pocetni_fond_fening": "number",
+        "prebrojano_fening": "number | null",
+        "zatvoreno_at": "string | null",
+        "sukob": "number",
+        "zatvorio_radnik_id?": "number | null",
+        "napomena?": "string | null",
+        "napomena_zatvaranja?": "string | null",
+        "uredjaj?": "Record<string, unknown> | null",
+        "tijelo?": "Record<string, unknown>"
+      },
+      "vracaju": [
+        "smjenaAktivna",
+        "smjenaOtvori",
+        "smjenaPrimopredaja",
+        "smjenaZatvori",
+        "smjeneNesinhronizovane"
+      ]
+    },
+    "KasaStanje": {
+      "izvor": "client-v2/src/lib/kasa-offline.ts",
+      "polja": {
+        "spreman": "boolean",
+        "zadnja_veza_at?": "string | null",
+        "rok_do?": "string | null",
+        "istekao?": "boolean",
+        "lokacija_id?": "number | null",
+        "radnika?": "number",
+        "kasa?": "number"
+      },
+      "vracaju": [
+        "kasaStanje"
+      ]
+    },
+    "KasaRadnik": {
+      "izvor": "client-v2/src/lib/kasa-offline.ts",
+      "polja": {
+        "id": "number",
+        "ime": "string",
+        "prezime?": "string | null",
+        "uloga": "'admin' | 'voditelj' | 'radnik'",
+        "lokacija_id?": "number | null"
+      },
+      "vracaju": [
+        "kasaObnoviSesiju",
+        "kasaPrijava",
+        "kasaRadnici"
+      ]
+    },
+    "LokalnaKorpa": {
+      "izvor": "client-v2/src/lib/kasa-korpa.ts",
+      "polja": {
+        "kljuc": "string",
+        "skladiste_id": "number",
+        "vrsta": "'nacrt' | 'parkirana'",
+        "naziv": "string",
+        "sadrzaj": "unknown",
+        "azuriran_at": "string"
+      },
+      "vracaju": [
+        "korpeCitaj"
+      ]
+    },
+    "RacunIzReda": {
+      "izvor": "client-v2/src/lib/kasa-offline.ts",
+      "polja": {
+        "lokalni_uid?": "string",
+        "smjena_lokalni_uid?": "string | null",
+        "[k: string]": "unknown"
+      },
+      "vracaju": [
+        "nesinhronizovani"
+      ]
+    }
+  },
+  "sinhronizacija": {
+    "smjena": {
+      "ruta": "POST /api/v1/maloprodaja/smjena/sync",
+      "tijelo": "smjeneNesinhronizovane().smjene[i].tijelo (pravi desktop iz lokalne smjene) + racuni (dodaje klijent: računi iz reda s istim smjena_lokalni_uid)",
+      "polja": {
+        "lokalni_uid": {
+          "tip": "string",
+          "obavezno": true,
+          "iz": "lokalni_uid"
+        },
+        "smjena_id": {
+          "tip": "number",
+          "iz": "server_id",
+          "ako": "server_id"
+        },
+        "skladiste_id": {
+          "tip": "number",
+          "obavezno": true,
+          "iz": "skladiste_id"
+        },
+        "otvoreno_at": {
+          "tip": "string",
+          "iz": "otvoreno_at"
+        },
+        "otvorio_korisnik_id": {
+          "tip": "number",
+          "iz": "otvorio_radnik_id"
+        },
+        "pocetni_fond_fening": {
+          "tip": "number",
+          "iz": "pocetni_fond_fening"
+        },
+        "napomena": {
+          "tip": "string",
+          "iz": "napomena",
+          "prazno": "izostaje"
+        },
+        "racuni": {
+          "tip": "racun[]",
+          "dodaje": "klijent"
+        },
+        "zatvaranje": {
+          "tip": "objekt",
+          "ako": "status",
+          "jednako": "zatvorena",
+          "polja": {
+            "zatvoreno_at": {
+              "tip": "string",
+              "iz": "zatvoreno_at"
+            },
+            "zatvorio_korisnik_id": {
+              "tip": "number",
+              "iz": "zatvorio_radnik_id"
+            },
+            "prebrojano_fening": {
+              "tip": "number",
+              "iz": "prebrojano_fening"
+            },
+            "napomena": {
+              "tip": "string",
+              "iz": "napomena_zatvaranja",
+              "prazno": "izostaje"
+            },
+            "uredjaj": {
+              "tip": "objekt",
+              "iz": "uredjaj",
+              "ako": "uredjaj"
+            },
+            "razlika_tereti": {
+              "tip": "string",
+              "iz": null,
+              "napomena": "desktop ne šalje; server: nije poslano → radnik"
+            }
+          }
+        }
+      },
+      "izvor_desktop": "stt-hr-electron lib/kasa-offline.js tijeloSynca (grana f11/mal-20-21)"
+    },
+    "racun": {
+      "ruta": "POST /api/v1/maloprodaja/racuni/sync",
+      "tijelo": {
+        "racuni": "racun[]"
+      },
+      "kljuc": "lokalni_uid",
+      "veza_smjene": "smjena_lokalni_uid",
+      "polja_klijenta": [
+        "kasa_uredjaj",
+        "kes_verzija",
+        "kolicina_potvrdjena",
+        "korpa_id",
+        "kupac_id",
+        "kupon_kod",
+        "lokalni_uid",
+        "loyalty_kupac_id",
+        "placanja",
+        "popust_odobrenje_id",
+        "popust_razlog",
+        "razlog_ispod_nabavne",
+        "skladiste_id",
+        "smjena_id",
+        "smjena_lokalni_uid",
+        "stavke",
+        "trazi_odobrenje"
+      ],
+      "polja_iz_reda": [
+        "fiskalni_status",
+        "fiskalni_drajver",
+        "fiskalni_broj",
+        "fiskalni_datum",
+        "fiskalni_vrijeme",
+        "qr_kod",
+        "raw_odgovor",
+        "fiskalni_greska",
+        "fiskalni_potvrda",
+        "uredjaj_prije",
+        "fiskalni_pokusaj_at"
+      ],
+      "polja_servera": [
+        "fiskalni_broj",
+        "fiskalni_datum",
+        "fiskalni_drajver",
+        "fiskalni_greska",
+        "fiskalni_pokusaj_at",
+        "fiskalni_potvrda",
+        "fiskalni_status",
+        "fiskalni_uredjaj",
+        "fiskalni_vrijeme",
+        "lokalni_uid",
+        "popust_odobrenje_id",
+        "qr_kod",
+        "raw_odgovor",
+        "skladiste_id",
+        "smjena_id",
+        "smjena_lokalni_uid",
+        "stavke",
+        "tip",
+        "uredjaj_prije"
+      ]
+    }
+  }
+}

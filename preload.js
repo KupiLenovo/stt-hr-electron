@@ -62,7 +62,10 @@ contextBridge.exposeInMainWorld('fiskalniDrajver', {
 
 // C-POS skelet Faza 2: lokalni keš + offline queue most (renderer → main → better-sqlite3).
 // Dostupan SAMO u desktop appu (browser = undefined → POS radi online-only, bez offline keša).
-contextBridge.exposeInMainWorld('posOffline', {
+// MAL-2 (N-1): most se gradi iz UGOVORA (lib/kasa-offline-ugovor.json, bajt-ista kopija serverskog; imena metoda daje main) —
+// izlaže se samo ono što je u ugovoru. Novo svojstvo/metoda mosta prvo ide u ugovor (oba repoa), pa tek onda ovdje.
+// test/kasa-offline-ugovor.test.js drži: svaka metoda ovdje je u ugovoru, obavezne i one koje klijent zove postoje, broj argumenata.
+const POS_OFFLINE = {
     dostupan: true,
     spremiKatalog: (skladiste_id, artikli) => ipcRenderer.invoke('pos:katalog-save', { skladiste_id, artikli }),
     citajKatalog: (skladiste_id) => ipcRenderer.invoke('pos:katalog-get', { skladiste_id }),
@@ -86,4 +89,8 @@ contextBridge.exposeInMainWorld('posOffline', {
     smjeneNesinhronizovane: () => ipcRenderer.invoke('smjena:nesinhronizovane'),
     smjenaOznaci: (lokalni_uid, o) => ipcRenderer.invoke('smjena:oznaci', { lokalni_uid, server_id: o && o.server_id, sukob: !!(o && o.sukob) }),
     smjenaPredajServeru: (lokalni_uid) => ipcRenderer.invoke('smjena:predaj-serveru', lokalni_uid),
-});
+};
+const metodeUgovora = PODACI.ugovor && Array.isArray(PODACI.ugovor.metode) ? PODACI.ugovor.metode : Object.keys(POS_OFFLINE);
+const posOffline = {};
+for (const ime of metodeUgovora) if (Object.prototype.hasOwnProperty.call(POS_OFFLINE, ime)) posOffline[ime] = POS_OFFLINE[ime];
+contextBridge.exposeInMainWorld('posOffline', posOffline);
