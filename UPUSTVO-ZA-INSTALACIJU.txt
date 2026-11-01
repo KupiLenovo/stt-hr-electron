@@ -18,7 +18,10 @@ interneta i pošalju se kad se veza vrati).
 1. Preuzmi instalaciju (fajl "aiERP Setup X.Y.Z.exe"):
    https://github.com/KupiLenovo/stt-hr-electron/releases/latest
 
-2. Pokreni je i potvrdi administratorska prava.
+2. Pokreni je. Administratorska prava traži samo instalacija "za sve
+   korisnike"; sama aplikacija (od 4.5.0) radi s pravima običnog korisnika.
+   Instalacija još nije potpisana certifikatom, pa Windows može upozoriti
+   "Nepoznat izdavač" -> "Više informacija" -> "Ipak pokreni".
 
 3. Prati korake instalacije. Na desktopu se pojavi prečica "aiERP".
 

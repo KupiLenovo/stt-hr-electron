@@ -1,6 +1,10 @@
-# STT HR Menadžment — Desktop Aplikacija
+# aiERP kasa — desktop aplikacija
 
-Electron aplikacija za Windows i macOS.
+Electron aplikacija za Windows i macOS: prozor aiERP-a s mostom do fiskalnog uređaja (bez zasebnih ekrana za rad).
+Aktuelna dokumentacija (verzija, ugovor mosta, prava, ažuriranje, potpisivanje certifikatom) je u `CLAUDE.md`;
+ostatak ovog fajla je stari opis builda.
+
+> Instalacija i exe NISU potpisani certifikatom (vanjski korak — vidi `CLAUDE.md`, „Prava, ažuriranje i potpis").
 
 ## Preduvjeti (i Windows i macOS)
 
