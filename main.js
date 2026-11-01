@@ -7,7 +7,6 @@ const { normalizujAdresu, STARI_SERVER, STT_SERVER } = require('./lib/server-adr
 const LOKALNI_EKRANI = pathToFileURL(__dirname + path.sep).href;   // file:///…/aiERP/resources/app.asar/
 
 let mainWindow;
-let rucnaProvjera = false; // v4.0.1: true dok korisnik rucno klikne "Provjeri azuriranja" (vidljiv feedback)
 
 // Razvoj/test: odvojen profil (npr. „prvo pokretanje" bez diranja pravog). Mora prije svega ostalog.
 if (process.env.AIERP_USER_DATA) app.setPath('userData', process.env.AIERP_USER_DATA);
@@ -123,6 +122,9 @@ ipcMain.handle('server:povezi', async (e, unos) => {
 // ==========================================
 // AUTO-UPDATER
 // ==========================================
+// PLT-39 N-3 (R62): preuzimanje u pozadini, instalacija TEK na potvrdu korisnika (dijalog s verzijom) — lib/azuriranje.js.
+const { napraviAzuriranje } = require('./lib/azuriranje');
+let azuriranje = null;
 function setupAutoUpdater() {
     // v4.0.0: repo je PUBLIC → auto-update ne treba token (rijesen stari hardkodirani
     // PAT iz v3.7.0 audita). Stari token revoke-ovati na github.com/settings/tokens.
@@ -131,80 +133,19 @@ function setupAutoUpdater() {
         owner: 'KupiLenovo',
         repo: 'stt-hr-electron'
     });
-
-    autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
-    autoUpdater.logger = null; // tiho u produkciji
-
-    autoUpdater.on('update-available', (info) => {
-        if (mainWindow) mainWindow.webContents.send('update-available', info);
-        if (rucnaProvjera) {
-            dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'Azuriranje',
-                message: `Dostupno je novo azuriranje (v${info.version}).`,
-                detail: 'Preuzimam u pozadini — javicu kad bude spremno za instalaciju.'
-            });
-        }
+    azuriranje = napraviAzuriranje({
+        autoUpdater, dialog,
+        prozor: () => mainWindow,
+        verzijaAplikacije: () => app.getVersion(),
+        posalji: (kanal, podaci) => { if (mainWindow) mainWindow.webContents.send(kanal, podaci); },
+        dev: process.argv.includes('--dev'),
     });
-
-    autoUpdater.on('download-progress', (progress) => {
-        if (mainWindow) mainWindow.webContents.send('update-progress', progress);
-    });
-
-    // v4.0.1: vidljiv feedback kad je korisnik RUCNO provjerio i nema novog azuriranja
-    autoUpdater.on('update-not-available', () => {
-        if (rucnaProvjera) {
-            rucnaProvjera = false;
-            dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'Azuriranje',
-                message: 'Koristite najnoviju verziju.',
-                detail: `aiERP v${app.getVersion()}`
-            });
-        }
-    });
-
-    autoUpdater.on('update-downloaded', (info) => {
-        if (mainWindow) mainWindow.webContents.send('update-downloaded', info);
-        // Restart ponuda samo na rucnu provjeru; auto-download tiho instalira na izlazu.
-        if (rucnaProvjera) {
-            rucnaProvjera = false;
-            dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'Azuriranje spremno',
-                message: `Azuriranje (v${info.version}) je preuzeto.`,
-                detail: 'Restartujte aplikaciju da primijenite.',
-                buttons: ['Restartuj sad', 'Kasnije'],
-                defaultId: 0,
-                cancelId: 1
-            }).then((r) => { if (r.response === 0) autoUpdater.quitAndInstall(); });
-        }
-    });
-
-    autoUpdater.on('error', (err) => {
-        if (process.argv.includes('--dev')) console.error('Updater error:', err);
-        if (rucnaProvjera) {
-            rucnaProvjera = false;
-            dialog.showMessageBox(mainWindow, {
-                type: 'error',
-                title: 'Azuriranje',
-                message: 'Nije moguce provjeriti azuriranja.',
-                detail: 'Provjeri internet konekciju pa pokusaj ponovo.'
-            });
-        }
-    });
-
     // Auto-provjera 3s nakon pokretanja (tiha — daje app vremena da se ucita)
-    setTimeout(() => {
-        rucnaProvjera = false;
-        autoUpdater.checkForUpdates().catch(() => {});
-    }, 3000);
+    setTimeout(() => azuriranje.provjeri(), 3000);
 }
 
-ipcMain.on('install-update', () => {
-    autoUpdater.quitAndInstall();
-});
+// Web aplikacija (dugme „Instaliraj") ne instalira direktno — ide kroz isti dijalog potvrde u glavnom procesu.
+ipcMain.on('install-update', () => { if (azuriranje) azuriranje.zahtjevInstalacije(); });
 
 // Preload je u sandboxu (ne može čitati fajlove) — podatke s diska mu daje main, jednom, sinhrono (lib/preload-podaci.js).
 const { podaciZaPreload } = require('./lib/preload-podaci');
@@ -522,8 +463,7 @@ function buildMenu() {
             { label: 'Provjeri azuriranja', click: () => {
                 // v4.0.1: rucna provjera daje vidljiv rezultat (azurni / dostupno / spremno / greska)
                 // preko autoUpdater evenata (update-not-available / available / downloaded / error).
-                rucnaProvjera = true;
-                autoUpdater.checkForUpdates().catch(() => {}); // gresku pokazuje 'error' event
+                if (azuriranje) azuriranje.rucnaProvjera(); // gresku pokazuje 'error' event
             }},
             { type: 'separator' },
             { label: 'DevTools', accelerator: 'F12', click: () => { if (mainWindow) mainWindow.webContents.toggleDevTools(); } },

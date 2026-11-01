@@ -4,7 +4,9 @@
 
 Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, better-sqlite3) i auto-update.
 
-**Verzija:** 4.4.0 (kasa bez interneta, ugovor offline mosta)
+**Verzija:** 4.5.0 (postavke fiskalnog uređaja po računaru, pokretanje bez administratora, ažuriranje na potvrdu)
+
+**Načelo vlasnika (01.11.2026):** desktop je samo prozor aiERP-a s mostom do fiskalnog uređaja — bez zasebnih ekrana za rad. Postavke uređaja, test veze, naplata, Z izvještaj… su ekrani aiERP-a (client-v2); desktop daje samo most i provjeru u glavnom procesu.
 
 ## Server firme (v4.2.0) — adresa NIJE zakucana
 
@@ -16,16 +18,46 @@ Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama;
 - IPC za izbor servera prima samo lokalne ekrane (`file://`) — web app sa servera ne smije mijenjati adresu. Prozor je zaključan na origin servera (`will-navigate`); eksterni linkovi idu u sistemski browser.
 - Razvoj: `STT_SERVER_URL` nadjačava sve; `AIERP_USER_DATA` daje odvojen profil (test prvog pokretanja).
 
+## Fiskalni uređaj — ugovor mosta (v4.5.0, R62)
+
+Ugovor FIS ↔ DSK: `window.fiskalniDrajver` (preload) — postojeće funkcije ostaju, dodato:
+- `verzija` — verzija aplikacije (string). aiERP prepoznaje nove postavke po `typeof fiskalniDrajver.sacuvajPostavke === 'function'`.
+- `postavke()` → `{ proizvodjac: 'tring', host, port, izvor: 'sacuvano'|'zadano'|'env' }` (zadano `127.0.0.1:8085`; env `TRING_HOST`/`TRING_PORT` ima prednost — samo razvoj).
+- `sacuvajPostavke({ proizvodjac, host, port })` → `{ ok: true, postavke }` ili `{ ok: false, greska: 'host_neispravan'|'port_neispravan'|'proizvodjac_nepodrzan', poruka }`.
+  Pamti se **na tom računaru** (`userData/fiskalni-uredjaj.json`), ne na serveru. Dozvoljeno: loopback, privatna LAN adresa (10.x, 172.16–31.x, 192.168.x, IPv6 fc00::/7),
+  ime računara u mreži (jedna riječ, npr. `KASA-1`, ili `.local`/`.lan`/…). **Nikad javna adresa** — provjera u glavnom procesu (`lib/fiskalni-postavke.js`),
+  a drajver je ponavlja pri svakom zahtjevu i provjerava i adresu u koju se ime razriješi. Proizvođač: samo `tring` (`eset` → „uskoro").
+- `testVeze()` → `{ ok, poruka, uredjaj?: { serijski_broj?, ibfm?, sat_uredjaja?, model? } }` — poslije `GET /` čita OsnovneInformacije (bez štampe);
+  polje koje TFS ne da se izostavi. Emulator daje `ibfm`; nazivi za serijski broj, sat i model zavise od firmvera (traži se više BS/EN imena) — **potvrditi na stvarnom uređaju**.
+- Ekran postavki je u aiERP-u (client-v2 `fiskalni-test.tsx`), ne u desktopu. Testovi: `test/fiskalni-postavke.test.js`.
+
+## Prava, ažuriranje i potpis (v4.5.0, PLT-39 N-3 / S-4)
+
+- **Pokretanje s pravima običnog korisnika** (`requestedExecutionLevel: asInvoker`). Do 4.4.0 je bilo `requireAdministrator` (UAC pri svakom pokretanju),
+  a ništa u aplikaciji ne traži administratora: TFS je HTTP na 127.0.0.1/LAN, offline keš je u `userData`. Instalacija „za sve korisnike" sama traži UAC (NSIS);
+  `installer.nsh` briše stara firewall pravila — bez administratora (instalacija samo za mene) to se tiho preskoči, što je u redu.
+- **Ažuriranje se ne instalira samo:** preuzme se u pozadini, pa dijalog s trenutnom i novom verzijom („Instaliraj sada" / „Kasnije", zadano Kasnije).
+  `autoInstallOnAppQuit = false`; `install-update` iz web aplikacije ide kroz isti dijalog (`lib/azuriranje.js`, `test/izdanje.test.js`).
+- **Ime/opis bez firme kupca:** `description` = „aiERP kasa" (Windows to pokazuje kao opis exe-a), `author`/`copyright` neutralni. `name` (`stt-hr`) i `appId`
+  (`ba.stt.business`) se NE mijenjaju — po `name` je folder `userData` (profil, keš kase), po `appId` instalacija prepoznaje staru za ažuriranje.
+- **Potpisivanje certifikatom (code signing) — VANJSKI KORAK, nije urađeno.** Exe i instalacija trenutno NISU potpisani (Windows SmartScreen upozorava
+  „Nepoznat izdavač"). Treba: certifikat za potpis koda (OV ili EV) na pravno lice koje prodaje aiERP; zatim u GitHub Actions tajne `CSC_LINK` (certifikat .pfx, base64)
+  i `CSC_KEY_PASSWORD`; za EV certifikat na USB/HSM tokenu potpis ide kroz `win.sign`/uslugu dobavljača. Za Mac: Apple Developer ID + notarizacija
+  (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`). Kad certifikat postoji, `author` uskladiti s imenom izdavača u certifikatu.
+  Ne izmišljati certifikat niti ga držati u repou.
+
 ## Struktura foldera
 
 ```
 stt-hr-electron/
 ├── main.js               # main process: prozor, meni, auto-update, IPC, server firme + prelaz 4.1.x
-├── preload.js            # most prema rendereru: electronAPI, fiskalniDrajver, posOffline, aierpPostavke (samo file://)
+├── preload.js            # most prema rendereru: electronAPI, fiskalniDrajver (+ postavke, R62), posOffline, aierpPostavke (samo file://)
 │                         #   SANDBOX: require samo 'electron' — podatke s diska daje main (lib/preload-podaci.js, sendSync)
 ├── povezivanje.html      # ekran „Poveži aplikaciju sa svojom firmom" (v4.2.0) — MORA biti u build.files
 ├── offline.html          # „Nema veze sa serverom" + promjena adrese
-├── fiskalni-drajver.js   # Tring TFS na localhost:8085 (lib/fiskalni/tring.js)
+├── fiskalni-drajver.js   # Tring TFS (zadano 127.0.0.1:8085; adresa iz postavki računara) (lib/fiskalni/tring.js)
+├── lib/fiskalni-postavke.js # R62: adresa/port TFS-a po računaru (userData/fiskalni-uredjaj.json), provjera — nikad javna adresa
+├── lib/azuriranje.js     # R62: auto-update — preuzimanje u pozadini, instalacija tek na potvrdu (dijalog s verzijom)
 ├── lib/pos-kes.js        # offline kasa (better-sqlite3, userData/pos-kes.db)
 ├── lib/kasa-offline.js   # kasa bez interneta (4.4.0): keš radnje, offline prijava PIN-om, smjena na disku, tijeloSynca
 ├── lib/kasa-offline-ugovor.json  # ugovor mosta posOffline — BAJT-PO-BAJT kopija serverskog (+ .sha256); mijenja se u OBA repoa
@@ -58,7 +90,7 @@ node scripts/kaos-sa-serverom.js   :: jednokratno, NE CI: 10 offline računa pre
 git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
-Lokalna provjera pakovanja bez UAC-a: `npx electron-builder --win --dir -c.npmRebuild=false -c.win.requestedExecutionLevel=asInvoker -c.directories.output=dist-test` (pravi build traži administratora — `requestedExecutionLevel: requireAdministrator`).
+Lokalna provjera pakovanja: `npx electron-builder --win --dir -c.npmRebuild=false -c.directories.output=dist-test` (od 4.5.0 aplikacija ne traži administratora — `requestedExecutionLevel: asInvoker`).
 
 ## Stilske konvencije
 
