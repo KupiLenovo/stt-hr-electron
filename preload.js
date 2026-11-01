@@ -38,10 +38,17 @@ if (location.protocol === 'file:') {
     });
 }
 
-// C-Fiskalni: drajver most (renderer → main → localhost:8085 TFS). Dostupan SAMO u desktop appu (browser = undefined).
+// C-Fiskalni: drajver most (renderer → main → TFS, zadano 127.0.0.1:8085). Dostupan SAMO u desktop appu (browser = undefined).
 contextBridge.exposeInMainWorld('fiskalniDrajver', {
     dostupan: true,
     protokol: PROTOKOL,   // { verzija, sha } — kasa poredi s potrebnom verzijom protokola
+    // R62 (ugovor mosta FIS ↔ DSK): verzija mosta = verzija aplikacije; aiERP prepoznaje postavke po typeof sacuvajPostavke.
+    verzija: typeof PODACI.verzija === 'string' ? PODACI.verzija : '',
+    // Adresa/port Tring Fiscal Servera NA OVOM RAČUNARU. Provjera (nikad javna adresa) i upis su u glavnom procesu
+    // (lib/fiskalni-postavke.js); ovdje se prosljeđuju samo tri polja, renderer ne dobija pristup fajlovima.
+    postavke: () => ipcRenderer.invoke('fiskalni:postavke'),
+    sacuvajPostavke: (p) => ipcRenderer.invoke('fiskalni:sacuvaj-postavke', { proizvodjac: p && p.proizvodjac, host: p && p.host, port: p && p.port }),
+    // testVeze → { ok, poruka, uredjaj?: { serijski_broj?, ibfm?, sat_uredjaja?, model? } } (šta TFS da)
     testVeze: () => ipcRenderer.invoke('fiskalni:test'),
     statusUredjaja: () => ipcRenderer.invoke('fiskalni:status'),
     inicijalizacija: (op = 0, loz = 0) => ipcRenderer.invoke('fiskalni:init', { op, loz }),

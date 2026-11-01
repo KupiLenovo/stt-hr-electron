@@ -216,7 +216,23 @@ ipcMain.on('preload:podaci', (e) => { e.returnValue = PODACI_PRELOAD; });
 // Sva logika u lib-u; ovdje samo HTTP na localhost:8085 (TFS). Greška/timeout → vraćamo objekat, ne bacamo.
 // ==========================================
 const { napraviDrajver } = require('./fiskalni-drajver');
-const fiskalni = napraviDrajver(process.env.FISKALNI_DRAJVER || 'tring');
+// R62: adresa/port TFS-a su postavka OVOG računara (userData/fiskalni-uredjaj.json); env TRING_HOST/TRING_PORT ostaje za razvoj.
+// Provjera (nikad javna adresa) je ovdje u glavnom procesu — renderer šalje samo { proizvodjac, host, port }.
+const fiskalniPostavke = require('./lib/fiskalni-postavke');
+let postavkeFiskalnog = null;   // keš; obnavlja se na sacuvajPostavke
+const trenutnePostavkeFiskalnog = () => (postavkeFiskalnog || (postavkeFiskalnog = fiskalniPostavke.ucitaj({ dir: app.getPath('userData') })));
+const fiskalni = napraviDrajver(process.env.FISKALNI_DRAJVER || 'tring', { adresa: () => trenutnePostavkeFiskalnog() });
+ipcMain.handle('fiskalni:postavke', () => ({ ...trenutnePostavkeFiskalnog() }));
+ipcMain.handle('fiskalni:sacuvaj-postavke', (_e, ulaz) => {
+    try {
+        const u = ulaz && typeof ulaz === 'object' ? { proizvodjac: ulaz.proizvodjac, host: ulaz.host, port: ulaz.port } : {};
+        const r = fiskalniPostavke.sacuvaj(app.getPath('userData'), u);
+        if (r.ok) postavkeFiskalnog = r.postavke;
+        return r;
+    } catch (e) {
+        return { ok: false, greska: 'host_neispravan', poruka: 'Postavke nisu sačuvane: ' + e.message };
+    }
+});
 const fiskalniHandler = (fn) => async (_e, arg) => {
     try { return await fn(arg); }
     catch (e) { return { uspjeh: false, status: 'greska', greska: { poruka: e.message } }; }

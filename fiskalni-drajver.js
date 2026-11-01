@@ -1,11 +1,15 @@
-// C-Fiskalni — TringDrajver (Electron main). TANAK omotač: build XML (lib) → HTTP POST localhost:8085 → parse (lib).
+// C-Fiskalni — TringDrajver (Electron main). TANAK omotač: build XML (lib) → HTTP POST na TFS (zadano 127.0.0.1:8085, R62: adresa iz postavki računara) → parse (lib).
 // Sva logika je u lib/fiskalni/tring.js (kanonski izvor + CI na serveru). Ovdje samo I/O glue.
 // ⚠️ NEVERIFIKOVANO iz CI-a — testira se protiv Tring Emulatora (Eldin). EsetDrajver = budući CPF (stub).
 const http = require('http');
 const tring = require('./lib/fiskalni/tring');
+const { provjeriHost, dnsProvjera } = require('./lib/fiskalni-postavke');
 
+// Zadana adresa (razvoj/testovi): env TRING_HOST/TRING_PORT ili 127.0.0.1:8085. U aplikaciji main daje adresu iz postavki
+// računara (lib/fiskalni-postavke.js: env → sačuvano → zadano) kroz napraviDrajver(tip, { adresa }).
 const TFS_HOST = process.env.TRING_HOST || '127.0.0.1'; // IPv4 eksplicitno — 'localhost' razrijesi na IPv6 ::1 (Node 17+), a TFS slusa IPv4 -> ECONNREFUSED ::1:8085
 const TFS_PORT = Number(process.env.TRING_PORT) || 8085;
+const ZADANA_ADRESA = () => ({ host: TFS_HOST, port: TFS_PORT });
 // MAL-04: rok čekanja usklađen s TFS KomandTimeOut = 30 s → 35 s (bilo 12 s). Kraći rok je pukao dok uređaj još štampa i
 // slao račun drugi put; sad istek/prekid uvijek znači 'nepoznato' (nikad automatska ponovna štampa). Test podešava kraće preko env.
 const TFS_TIMEOUT_MS = Number(process.env.TRING_TIMEOUT_MS) || 35000;
@@ -15,6 +19,12 @@ const TFS_TIMEOUT_MS = Number(process.env.TRING_TIMEOUT_MS) || 35000;
 // Sad: prekinut odgovor = veza pukla (→ 'nepoznato'), a ukupni rok (timeoutMs) važi i kad TFS kaplje bajt po bajt.
 function zahtjev(opcije, body, timeoutMs, porukaIsteka) {
     return new Promise((resolve, reject) => {
+        // R62: nikad javna adresa — provjera u glavnom procesu i pri svakom zahtjevu (i za env i za ručno izmijenjen fajl);
+        // ime računara se razriješi samo na adresu u lokalnoj mreži (dnsProvjera).
+        if (!provjeriHost(String(opcije.host == null ? '' : opcije.host)).ok) {
+            reject(new Error('Adresa fiskalnog servera nije dozvoljena — samo ovaj računar ili lokalna mreža.')); return;
+        }
+        opcije = { ...opcije, lookup: dnsProvjera };
         let gotovo = false;
         const kraj = (fn, v) => { if (gotovo) return; gotovo = true; clearTimeout(rok); fn(v); };
         const req = http.request(opcije, (res) => {
@@ -33,13 +43,40 @@ function zahtjev(opcije, body, timeoutMs, porukaIsteka) {
     });
 }
 // Jedini "neverifikovani" dio: HTTP POST XML na TFS. Vraća {status, raw} ili baca (veza pukla).
-function postXml(putanja, xml, timeoutMs = TFS_TIMEOUT_MS) {
+function postXml(adresa, putanja, xml, timeoutMs = TFS_TIMEOUT_MS) {
     const body = Buffer.from(xml, 'utf8');
-    return zahtjev({ host: TFS_HOST, port: TFS_PORT, path: putanja, method: 'POST', headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': body.length } },
+    return zahtjev({ host: adresa.host, port: adresa.port, path: putanja, method: 'POST', headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': body.length } },
         body, timeoutMs, 'TFS timeout (uređaj/server nedostupan)');
 }
-function getRaw(putanja, timeoutMs = 5000) {
-    return zahtjev({ host: TFS_HOST, port: TFS_PORT, path: putanja, method: 'GET' }, null, timeoutMs, 'TFS timeout');
+function getRaw(adresa, putanja, timeoutMs = 5000) {
+    return zahtjev({ host: adresa.host, port: adresa.port, path: putanja, method: 'GET' }, null, timeoutMs, 'TFS timeout');
+}
+
+// R62 — podaci uređaja za „Test veze" iz odgovora OsnovneInformacije (§7.9.1). Nazivi polja se razlikuju po firmveru (BS/EN),
+// pa se traži po više imena (bez obzira na velika slova i _). Šta TFS ne da — izostavi se (ne izmišlja se).
+// ⚠ Potvrđuje se na stvarnom uređaju: emulator sigurno daje ibfm; serijski broj, sat i model zavise od firmvera.
+const POLJA_UREDJAJA = {
+    serijski_broj: ['serijskibroj', 'serijskibrojuredjaja', 'serialnumber', 'serialno', 'serial', 'sn'],
+    ibfm: ['ibfm', 'brojuredjaja'],
+    model: ['model', 'modeluredjaja', 'devicemodel', 'tipuredjaja', 'nazivuredjaja'],
+};
+const SAT_UREDJAJA = ['datumvrijeme', 'datetime', 'saturedjaja', 'vrijemeuredjaja', 'devicetime', 'clock'];
+function uredjajIzOdgovora(odgovori) {
+    if (!odgovori || typeof odgovori !== 'object') return null;
+    const m = new Map();
+    for (const [k, v] of Object.entries(odgovori)) {
+        const t = String(v == null ? '' : v).trim();
+        if (t) m.set(String(k).toLowerCase().replace(/[^a-z0-9]/g, ''), t.slice(0, 64));
+    }
+    const nadji = (imena) => { for (const i of imena) if (m.has(i)) return m.get(i); return undefined; };
+    const out = {};
+    for (const [polje, imena] of Object.entries(POLJA_UREDJAJA)) { const v = nadji(imena); if (v) out[polje] = v; }
+    const sat = nadji(SAT_UREDJAJA);
+    const datum = nadji(['datum', 'date', 'datumuredjaja']);
+    const vrijeme = nadji(['vrijeme', 'time']);
+    if (sat) out.sat_uredjaja = sat;
+    else if (datum || vrijeme) out.sat_uredjaja = [datum, vrijeme].filter(Boolean).join(' ');
+    return Object.keys(out).length ? out : null;
 }
 
 let brojZahtjeva = Math.floor((process.hrtime.bigint ? Number(process.hrtime.bigint() % 100000n) : 1));
@@ -62,18 +99,31 @@ function buildPeriodicniXml(od, doDatum) {
 }
 
 class TringDrajver {
+    // opcije.adresa: () => ({ host, port }) — čita se pri SVAKOM zahtjevu (promjena postavki važi odmah, bez restarta)
+    constructor(opcije = {}) { this._adresaFn = typeof opcije.adresa === 'function' ? opcije.adresa : ZADANA_ADRESA; }
     get tip() { return 'tring'; }
+    _adresa() { const a = this._adresaFn() || {}; return { host: a.host, port: Number(a.port) }; }
     // izvrši komandu: pošalji XML, parsiraj odgovor; veza pukla → offline signal
-    async _posalji(putanja, xml) {
-        try { const { raw } = await postXml(putanja, xml); return this._rez(tring.parseKasaOdgovor(raw), false); }
+    async _posalji(putanja, xml, timeoutMs) {
+        try { const { raw } = await postXml(this._adresa(), putanja, xml, timeoutMs); return this._rez(tring.parseKasaOdgovor(raw), false); }
         catch (e) { return { uspjeh: false, status: 'offline_queue', greska: { poruka: e.message }, raw: '', veza_pukla: true }; }
     }
     _rez(p, vezaPukla) {
         return { uspjeh: !!(p && p.uspjeh), status: tring.statusIzRezultata(p, vezaPukla), fiskalni_broj: p && p.fiskalni_broj, fiskalni_datum: p && p.fiskalni_datum, fiskalni_vrijeme: p && p.fiskalni_vrijeme, qr_kod: (p && p.qr_kod) || null, iznos_fening: p && p.iznos_fening, greska: p && p.greska, odgovori: p && p.odgovori, raw: (p && p.raw) || '' };
     }
+    // Test veze: TFS odgovara na GET / → ok. R62: pa pročitaj OsnovneInformacije (bez štampe) → uredjaj { serijski_broj?, ibfm?,
+    // sat_uredjaja?, model? } za registar opreme kase u aiERP-u. Uređaj koji ne odgovori na čitanje → ok bez uredjaj.
     async testVeze() {
-        try { const { status } = await getRaw('/'); return { ok: status >= 200 && status < 500, poruka: `TFS odgovorio (HTTP ${status})` }; }
+        let status;
+        try { ({ status } = await getRaw(this._adresa(), '/')); }
         catch (e) { return { ok: false, poruka: 'TFS nedostupan: ' + e.message }; }
+        const ok = status >= 200 && status < 500;
+        const rez = { ok, poruka: `TFS odgovorio (HTTP ${status})` };
+        if (!ok) return rez;
+        const info = await this._posalji(tring.KOMANDE.osnovne, tring.buildPrazno(), Math.min(TFS_TIMEOUT_MS, 8000));
+        const uredjaj = info && info.uspjeh && !info.veza_pukla ? uredjajIzOdgovora(info.odgovori) : null;
+        if (uredjaj) rez.uredjaj = uredjaj;
+        return rez;
     }
     async statusUredjaja() { return this._posalji(tring.KOMANDE.status, tring.buildPrazno()); }
     async inicijalizacija(op = 0, loz = 0) { return this._posalji(tring.KOMANDE.inicijalizacija, tring.buildInicijalizacijaXml(op, loz)); }
@@ -104,6 +154,6 @@ class EsetDrajver {
     async fiskalizuj() { throw new Error('EsetDrajver još nije implementiran (CPF API, ~2027).'); }
 }
 
-function napraviDrajver(tip) { return tip === 'eset' ? new EsetDrajver() : new TringDrajver(); }
+function napraviDrajver(tip, opcije = {}) { return tip === 'eset' ? new EsetDrajver() : new TringDrajver(opcije); }
 
-module.exports = { TringDrajver, EsetDrajver, napraviDrajver };
+module.exports = { TringDrajver, EsetDrajver, napraviDrajver, uredjajIzOdgovora };
