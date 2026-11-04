@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { normalizujAdresu, STARI_SERVER, STT_SERVER } = require('./lib/server-adresa');
+const ulazFirme = require('./lib/ulaz-firme');
 const LOKALNI_EKRANI = pathToFileURL(__dirname + path.sep).href;   // file:///…/aiERP/resources/app.asar/
 
 let mainWindow;
@@ -17,7 +18,9 @@ if (process.env.AIERP_USER_DATA) app.setPath('userData', process.env.AIERP_USER_
 // ==========================================
 // Do 4.1.3 adresa je bila zakucana na http://46.101.96.28:3737 — STT-ov server, NESIFROVANO, pa je
 // takav exe mogao koristiti samo STT. Sad je adresa postavka ovog racunara (userData/aierp-server.json):
-//   - nova instalacija pri prvom pokretanju pita adresu firme (povezivanje.html);
+//   - nova instalacija pri prvom pokretanju pita ŠIFRU firme (povezivanje.html): ulaz portala (zadano https://aierp.ba,
+//     AIERP_PORTAL_URL ili `portal` u konfiguraciji) daje adresu instance i naziv firme (R68, PLT-45: lib/ulaz-firme.js);
+//     firma na vlastitom serveru i dalje može upisati punu adresu;
 //   - stara STT instalacija tiho prelazi na https://app.aierp.ba i prenosi localStorage (prelazSaStareVerzije);
 //   - STT_SERVER_URL (env) i dalje nadjacava sve — samo za razvoj.
 const KONFIG = () => path.join(app.getPath('userData'), 'aierp-server.json');
@@ -25,13 +28,23 @@ const KONFIG = () => path.join(app.getPath('userData'), 'aierp-server.json');
 // a web app cita localStorage → folder „Local Storage" postoji samo ako je aplikacija vec radila ovdje.
 const STARA_INSTALACIJA = !fs.existsSync(KONFIG()) && fs.existsSync(path.join(app.getPath('userData'), 'Local Storage'));
 
-function snimljenaAdresa() {
-    try { return normalizujAdresu(JSON.parse(fs.readFileSync(KONFIG(), 'utf8')).url).url || null; }
-    catch { return null; }
+function konfiguracija() {
+    try { const k = JSON.parse(fs.readFileSync(KONFIG(), 'utf8')); return k && typeof k === 'object' ? k : {}; }
+    catch { return {}; }
 }
+function snimljenaAdresa() {
+    return normalizujAdresu(konfiguracija().url).url || null;
+}
+// R68 (PLT-45): `portal` (ručno upisan u konfiguraciju, npr. probni portal) preživljava svako snimanje i „Promijeni firmu"
 function snimiAdresu(url, dodatno = {}) {
     fs.mkdirSync(app.getPath('userData'), { recursive: true });
-    fs.writeFileSync(KONFIG(), JSON.stringify({ url, snimljeno: new Date().toISOString(), verzija: app.getVersion(), ...dodatno }, null, 2));
+    const { portal } = konfiguracija();
+    fs.writeFileSync(KONFIG(), JSON.stringify({ url, snimljeno: new Date().toISOString(), verzija: app.getVersion(), ...(portal ? { portal } : {}), ...dodatno }, null, 2));
+}
+// Naziv firme iz ulaza (samo za prikaz) — važi samo dok je adresa ista (STT_SERVER_URL u razvoju ga ne prikazuje)
+function nazivFirme() {
+    const k = konfiguracija();
+    return !process.env.STT_SERVER_URL && k.naziv && snimljenaAdresa() ? String(k.naziv) : null;
 }
 function trenutniServer() {
     const env = process.env.STT_SERVER_URL;
@@ -101,12 +114,27 @@ function ucitajServer() {
 // IPC za izbor servera prima SAMO lokalne ekrane aplikacije (file://). Web app sa servera ne smije
 // mijenjati adresu — stranica koja moze preusmjeriti app na drugi server moze preusmjeriti i prijavu.
 const izLokalneStranice = (e) => { try { return new URL(e.senderFrame.url).protocol === 'file:'; } catch { return false; } };
-ipcMain.handle('server:trenutni', (e) => (izLokalneStranice(e) ? { url: trenutniServer(), verzija: app.getVersion() } : {}));
+ipcMain.handle('server:trenutni', (e) => (izLokalneStranice(e) ? { url: trenutniServer(), naziv: nazivFirme(), sifra: nazivFirme() ? (konfiguracija().sifra || null) : null, verzija: app.getVersion() } : {}));
 ipcMain.on('server:otvori-povezivanje', (e) => { if (izLokalneStranice(e)) otvoriPovezivanje(); });
 ipcMain.handle('server:povezi', async (e, unos) => {
     if (!izLokalneStranice(e)) return { ok: false, poruka: 'Nije dozvoljeno.' };
-    const n = normalizujAdresu(unos);
-    if (n.greska) return { ok: false, poruka: n.poruka };
+    // R68 (PLT-45): jedna riječ = ŠIFRA FIRME → ulaz portala daje adresu instance (samo https://<subdomena>.<domen portala>) i naziv.
+    // Zahtjev ide bez kolačića (credentials: 'omit'); s ulaza se pamti samo adresa i naziv — ulaz ne izdaje token.
+    let n;
+    let firma = {};
+    if (ulazFirme.jeSifra(unos)) {
+        const portal = ulazFirme.portalAdresa({ env: process.env, konfig: konfiguracija() });
+        const u = await ulazFirme.poveziSifrom({ unos, portal, dohvati: async (url, init) => {
+            const odg = await net.fetch(url, { ...init, signal: AbortSignal.timeout(10000) });
+            return { ok: odg.ok, status: odg.status, json: await odg.json().catch(() => null) };
+        } });
+        if (!u.ok) return { ok: false, poruka: u.poruka };
+        n = { url: u.url };
+        firma = { naziv: u.naziv, sifra: u.sifra };
+    } else {
+        n = normalizujAdresu(unos);
+        if (n.greska) return { ok: false, poruka: n.poruka };
+    }
     // /api/ping je javni odziv aiERP servera — potvrda da na toj adresi stvarno radi aiERP
     try {
         const r = await net.fetch(n.url + '/api/ping', { signal: AbortSignal.timeout(10000), cache: 'no-store' });
@@ -115,9 +143,16 @@ ipcMain.handle('server:povezi', async (e, unos) => {
     } catch {
         return { ok: false, poruka: 'Server na toj adresi se ne javlja. Provjeri adresu i internet.' };
     }
-    snimiAdresu(n.url);
+    snimiAdresu(n.url, firma);
     if (mainWindow) mainWindow.loadURL(n.url);
-    return { ok: true, url: n.url };
+    return { ok: true, url: n.url, naziv: firma.naziv || null };
+});
+// R68 (PLT-45): „Promijeni firmu" briše zapamćenu firmu (adresu i naziv). Zapis ostaje (bez adrese), da se računar poslije ne prepozna
+// kao stara 4.1.x instalacija (STARA_INSTALACIJA gleda samo postoji li konfiguracija) — sljedeće pokretanje opet pita šifru.
+ipcMain.handle('server:zaboravi', (e) => {
+    if (!izLokalneStranice(e)) return { ok: false, poruka: 'Nije dozvoljeno.' };
+    snimiAdresu(null, { zaboravljeno: new Date().toISOString() });
+    return { ok: true };
 });
 
 // ==========================================
@@ -518,15 +553,15 @@ function buildMenu() {
                     type: 'info',
                     title: 'Server firme',
                     message: 'aiERP — server firme',
-                    detail: `Server: ${url || 'nije postavljen'}\nVeza: ${url && url.startsWith('https://') ? 'šifrovana (https)' : 'nešifrovana'}\nVerzija aplikacije: ${app.getVersion()}`
+                    detail: `${nazivFirme() ? `Firma: ${nazivFirme()}\n` : ''}Server: ${url || 'nije postavljen'}\nVeza: ${url && url.startsWith('https://') ? 'šifrovana (https)' : 'nešifrovana'}\nVerzija aplikacije: ${app.getVersion()}`
                 });
             }},
-            { label: 'Promijeni server firme…', click: async () => {
+            { label: 'Promijeni firmu…', click: async () => {
                 const r = await dialog.showMessageBox(mainWindow, {
                     type: 'question',
-                    title: 'Promijeni server firme',
-                    message: 'Povezati ovaj računar s drugim serverom?',
-                    detail: `Sada: ${trenutniServer() || 'nije postavljen'}\n\nTreba samo kad se firma seli na drugi server ili se aplikacija instalira za drugu firmu.`,
+                    title: 'Promijeni firmu',
+                    message: 'Povezati ovaj računar s drugom firmom?',
+                    detail: `Sada: ${nazivFirme() ? `${nazivFirme()} (${trenutniServer()})` : (trenutniServer() || 'nije postavljen')}\n\nTreba samo kad se aplikacija instalira za drugu firmu ili se firma seli na drugi server.`,
                     buttons: ['Promijeni', 'Odustani'],
                     defaultId: 1,
                     cancelId: 1

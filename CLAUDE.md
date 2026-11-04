@@ -10,9 +10,9 @@ Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama;
 
 - Do 4.1.3 je bila zakucana na `http://46.101.96.28:3737` — STT-ov server, **nešifrovano** (PIN i token internetom kao čist tekst), pa je exe mogao koristiti samo STT.
 - Od 4.2.0 adresa je postavka računara: `userData/aierp-server.json` (`{ "url": "https://…" }`). `userData` = `%APPDATA%\stt-hr` (ime iz polja `name` u package.json — `productName` je u `build` sekciji, pa ne utiče na folder; **ne mijenjati `name`**, profil bi „nestao").
-- **Nova instalacija** → `povezivanje.html` pita adresu (npr. `firma.aierp.ba`; jedna riječ = `<kod>.aierp.ba`), provjeri `GET /api/ping` → `{ok:true}` pa snimi. Samo https (http samo za localhost).
+- **Nova instalacija** → `povezivanje.html` pita **šifru firme** (R68, PLT-45): `lib/ulaz-firme.js` pita ulaz portala `POST <portal>/api/ulaz {sifra}` (portal zadano `https://aierp.ba`; `AIERP_PORTAL_URL` ili `portal` u `aierp-server.json`), bez kolačića; adresa iz ulaza se prihvata SAMO kao `https://<subdomena>.<domen portala>`; nepoznata/zatvorena → neutralna poruka ulaza. Pamti se `url`, `naziv`, `sifra`. Puna adresa (vlastiti server) i dalje radi. Zatim `GET /api/ping` → `{ok:true}` pa snimi. Samo https (http samo za localhost).
 - **Stara STT instalacija (4.1.x)** → tiho `https://app.aierp.ba` + prenos localStorage sa starog origina (prijava, `aierp-pristup`, `stt-device` kiosk veza): `main.js → prelazSaStareVerzije()`, bez mreže (`protocol.handle` servira praznu stranicu na originu). Trag stare verzije se hvata PRIJE nego Chromium otvori profil (on sam pravi „Local Storage" folder na startu).
-- Meni: **Aplikacija → Promijeni server firme…** i **Info o serveru**; offline ekran ima „Promijeni adresu servera".
+- Meni: **Aplikacija → Promijeni firmu…** i **Info o serveru** (s nazivom firme); offline ekran ima „Promijeni firmu". Na ekranu povezivanja „Nastavi na <naziv>" vraća na zapamćenu firmu, „Promijeni firmu" je briše (`server:zaboravi` — zapis ostaje bez adrese, da se računar ne prepozna kao 4.1.x).
 - IPC za izbor servera prima samo lokalne ekrane (`file://`) — web app sa servera ne smije mijenjati adresu. Prozor je zaključan na origin servera (`will-navigate`); eksterni linkovi idu u sistemski browser.
 - Razvoj: `STT_SERVER_URL` nadjačava sve; `AIERP_USER_DATA` daje odvojen profil (test prvog pokretanja).
 

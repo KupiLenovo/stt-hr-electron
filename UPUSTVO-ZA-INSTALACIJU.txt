@@ -28,16 +28,18 @@ interneta i pošalju se kad se veza vrati).
 
 1. Pokreni aiERP.
 
-2. Na ekranu "Poveži aplikaciju sa svojom firmom" upiši adresu
-   servera svoje firme, npr.:   firma.aierp.ba
-   (za STT d.o.o.:              app.aierp.ba)
+2. Na ekranu "Poveži aplikaciju sa svojom firmom" upiši ŠIFRU
+   svoje firme (daje je administrator firme), npr.:   mojafirma
+   Firma na vlastitom serveru upisuje punu adresu servera.
 
-3. Klikni "Poveži". Aplikacija provjeri da na toj adresi radi
-   aiERP server i od tada se otvara direktno.
+3. Klikni "Poveži". Aplikacija pita ulaz (aierp.ba) gdje je
+   instanca firme, provjeri da tamo radi aiERP server, zapamti
+   adresu i naziv firme i od tada se otvara direktno.
 
    - Veza je uvijek šifrovana (https). Adresa bez https se ne prihvata.
-   - Adresa se kasnije mijenja preko menija:
-       Aplikacija -> Promijeni server firme...
+   - Firma se kasnije mijenja preko menija:
+       Aplikacija -> Promijeni firmu...
+     ("Promijeni firmu" na tom ekranu briše zapamćenu firmu.)
 
 ================================================================
   3) PRIJAVA
@@ -87,7 +89,7 @@ Ručno: Aplikacija -> Provjeri ažuriranja.
 
 - "Nema veze sa serverom": provjeri internet — aplikacija sama
   pokušava ponovo svakih nekoliko sekundi. Ako se firma preselila
-  na drugi server, klikni "Promijeni adresu servera".
+  na drugi server, klikni "Promijeni firmu".
 - Zaboravljen PIN: administrator ili voditelj ga resetuje na
   profilu radnika.
 - Adresa servera i verzija aplikacije: Aplikacija -> Info o serveru.
@@ -114,6 +116,8 @@ veza kiosk uređaja se prenesu — niko ništa ne upisuje.
                   serveru (treba stt-hr-server pored ovog repoa)
 
   STT_SERVER_URL=https://...   nadjačava adresu servera (samo razvoj)
+  AIERP_PORTAL_URL=https://... ulaz za šifru firme (zadano https://aierp.ba;
+                               isto i "portal" u aierp-server.json)
   AIERP_USER_DATA=<folder>     odvojen profil (npr. test "prvog pokretanja")
 
   Izdanje: podigni verziju u package.json, pa
