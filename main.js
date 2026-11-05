@@ -3,8 +3,9 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
-const { normalizujAdresu, STARI_SERVER, STT_SERVER } = require('./lib/server-adresa');
+const { normalizujAdresu, STARI_SERVER } = require('./lib/server-adresa');
 const ulazFirme = require('./lib/ulaz-firme');
+const pauzaFirme = require('./lib/pauza-firme');
 const LOKALNI_EKRANI = pathToFileURL(__dirname + path.sep).href;   // file:///…/aiERP/resources/app.asar/
 
 let mainWindow;
@@ -16,16 +17,19 @@ if (process.env.AIERP_USER_DATA) app.setPath('userData', process.env.AIERP_USER_
 // ==========================================
 // SERVER FIRME (v4.2.0)
 // ==========================================
-// Do 4.1.3 adresa je bila zakucana na http://46.101.96.28:3737 — STT-ov server, NESIFROVANO, pa je
-// takav exe mogao koristiti samo STT. Sad je adresa postavka ovog racunara (userData/aierp-server.json):
+// Do 4.1.3 adresa je bila zakucana na http://46.101.96.28:3737 — server jedne firme, NESIFROVANO, pa je
+// takav exe mogla koristiti samo ta firma. Sad je adresa postavka ovog racunara (userData/aierp-server.json):
 //   - nova instalacija pri prvom pokretanju pita ŠIFRU firme (povezivanje.html): ulaz portala (zadano https://aierp.ba,
 //     AIERP_PORTAL_URL ili `portal` u konfiguraciji) daje adresu instance i naziv firme (R68, PLT-45: lib/ulaz-firme.js);
 //     firma na vlastitom serveru i dalje može upisati punu adresu;
-//   - stara STT instalacija tiho prelazi na https://app.aierp.ba i prenosi localStorage (prelazSaStareVerzije);
+//   - stara instalacija (4.1.x, bez konfiguracije) od 4.6.0 NE prelazi tiho ni na jedan server: dobija ekran „Šifra firme" kao nova
+//     (odluka Eldina 05.11.2026 (10) — proizvod ne pretpostavlja nijednu firmu); zapis pamti samo trag prelaza (prelaz_sa);
 //   - STT_SERVER_URL (env) i dalje nadjacava sve — samo za razvoj.
 const KONFIG = () => path.join(app.getPath('userData'), 'aierp-server.json');
 // Trag stare verzije se hvata PRIJE nego sto Chromium otvori profil: 4.0–4.1.x su uvijek ucitavale web app,
 // a web app cita localStorage → folder „Local Storage" postoji samo ako je aplikacija vec radila ovdje.
+// Od 4.6.0 trag služi samo da ekran povezivanja kaže zašto opet pita (aplikacija je ažurirana) — localStorage starog origina se ne
+// prenosi: prijava i kod starog servera ne smiju završiti na originu firme koju korisnik tek izabere.
 const STARA_INSTALACIJA = !fs.existsSync(KONFIG()) && fs.existsSync(path.join(app.getPath('userData'), 'Local Storage'));
 
 function konfiguracija() {
@@ -51,55 +55,56 @@ function trenutniServer() {
     return env ? env.replace(/\/+$/, '') : snimljenaAdresa();
 }
 
-// Procitaj/upisi localStorage jednog origina BEZ mreze: sesija za trenutak servira praznu stranicu na tom
-// originu (protocol.handle), pa se nad njom izvrsi JS. localStorage je vezan za origin — ovo je jedini
-// nacin da prijava, zapamcen pristupni kod i registracija kiosk uredjaja predju sa starog na novi origin.
-async function naOriginu(origin, js) {
-    const sema = new URL(origin).protocol.slice(0, -1);
-    const adresa = origin + '/__aierp_prenos';
-    const ses = session.defaultSession;
-    ses.protocol.handle(sema, (req) => (req.url === adresa
-        ? new Response('<!doctype html><meta charset="utf-8"><title>aiERP</title>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
-        : net.fetch(req, { bypassCustomProtocolHandlers: true })));
-    const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
-    try {
-        await win.loadURL(adresa);
-        return await win.webContents.executeJavaScript(js);
-    } finally {
-        win.destroy();
-        ses.protocol.unhandle(sema);
-    }
+// ==========================================
+// PAUZIRANA FIRMA (F8, odluka Eldina 05.11.2026 (9)) — logika u lib/pauza-firme.js
+// ==========================================
+// Server pauziranoj firmi odbija svaki upis (423 firma_pauzirana), a čitanje radi. Desktop stanje pauze pamti u aierp-server.json
+// (`pauza`), pa kasa i bez interneta ne prima NOVU prodaju (offline red, naplata bez računa sa servera, nova smjena); pregled radi,
+// a već odštampani računi ostaju u redu na disku i idu serveru kad pauza prestane. Provjera: pri učitavanju servera, svakih 5 min i
+// odmah poslije svakog 423 sa servera firme. Server je sudac — nepoznato (bez interneta) ne mijenja zapamćeno stanje.
+function trenutnaPauza() {
+    return pauzaFirme.iz(konfiguracija(), trenutniServer());
 }
-
-// Prvo pokretanje 4.2.0 poslije auto-update sa 4.1.x. Svaka instalacija starija od 4.2.0 je STT-ova
-// (drugih kupaca jos nema), pa ide na https://app.aierp.ba bez pitanja. Vraca false ako ovo NIJE
-// koristena 4.1.x instalacija (stari origin prazan) — tada ekran za povezivanje pita kao za novu.
-// Prenos localStorage je „najbolje sto moze": ako padne, aplikacija ipak radi — samo se prijava i kod
-// unesu ponovo; a ako se stari origin ne da ni procitati, racunar je najvjerovatnije STT-ov.
-let prelazUToku = false;   // skriveni prozori prelaza nisu „svi prozori zatvoreni" (vidi window-all-closed)
-async function prelazSaStareVerzije() {
-    prelazUToku = true;
-    try { return await prelaz(); } finally { prelazUToku = false; }
+function zapamtiPauzu(p) {
+    const { pauza: _staro, ...ostalo } = konfiguracija();
+    fs.mkdirSync(app.getPath('userData'), { recursive: true });
+    fs.writeFileSync(KONFIG(), JSON.stringify({ ...ostalo, ...(p ? { pauza: p } : {}) }, null, 2));
 }
-async function prelaz() {
-    let stari;
-    try {
-        stari = JSON.parse(await naOriginu(STARI_SERVER,
-            'JSON.stringify(Object.fromEntries(Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).map((k) => [k, localStorage.getItem(k)])))'));
-    } catch (e) {
-        snimiAdresu(STT_SERVER, { prelaz_sa: STARI_SERVER, preneseno_kljuceva: 0, greska_prenosa: e.message });
-        return true;
-    }
-    if (!Object.keys(stari).length) return false;
-    let preneseno = 0;
-    let greska = null;
-    try {
-        preneseno = await naOriginu(STT_SERVER,
-            `(function (d) { var n = 0; for (var k in d) { if (localStorage.getItem(k) === null) { localStorage.setItem(k, d[k]); n++; } } return n; })(${JSON.stringify(stari)})`);
-        session.defaultSession.flushStorageData();
-    } catch (e) { greska = e.message; }
-    snimiAdresu(STT_SERVER, { prelaz_sa: STARI_SERVER, preneseno_kljuceva: preneseno, ...(greska ? { greska_prenosa: greska } : {}) });
-    return true;
+let zadnjaObavijestPauze = 0;
+// Jasna poruka kasirki (sistemski dijalog — kasa sa servera i lokalna kasa ga vide isto). Prigušeno: najviše jednom u minuti.
+function javiPauzu(vrsta = 'prodaja', { uvijek = false } = {}) {
+    const p = trenutnaPauza();
+    if (!p || !mainWindow || (!uvijek && !pauzaFirme.trebaObavijest(zadnjaObavijestPauze))) return;
+    zadnjaObavijestPauze = Date.now();
+    dialog.showMessageBox(mainWindow, { type: 'warning', title: pauzaFirme.PORUKE.naslov, message: pauzaFirme.PORUKE.naslov,
+        detail: pauzaFirme.poruka(p, vrsta), buttons: ['U redu'] }).catch(() => {});
+}
+let provjeraPauzeUToku = null;
+function osvjeziPauzu() {
+    const server = trenutniServer();
+    if (!server) return Promise.resolve(null);
+    if (provjeraPauzeUToku) return provjeraPauzeUToku;
+    const k = konfiguracija();
+    const sifra = !process.env.STT_SERVER_URL && k.sifra ? k.sifra : null;
+    provjeraPauzeUToku = pauzaFirme.provjeri({ server, sifra, portal: sifra ? ulazFirme.portalAdresa({ env: process.env, konfig: k }) : null,
+        dohvati: async (url, init) => {
+            const odg = await net.fetch(url, { ...init, signal: AbortSignal.timeout(10000) });
+            return { ok: odg.ok, status: odg.status, json: await odg.json().catch(() => null) };
+        } }).then((n) => {
+        const staro = trenutnaPauza();
+        const novo = pauzaFirme.sljedece(staro, n, { server });
+        if (n.pauzirana == null || trenutniServer() !== server) return staro;   // niko ne zna ili je firma u međuvremenu promijenjena
+        zapamtiPauzu(novo);
+        if (novo && !staro) javiPauzu('prodaja', { uvijek: true });
+        if (!novo && staro && Notification.isSupported()) new Notification({ title: 'aiERP', body: pauzaFirme.PORUKE.nastavak }).show();
+        return novo;
+    }).catch(() => trenutnaPauza()).finally(() => { provjeraPauzeUToku = null; });
+    return provjeraPauzeUToku;
+}
+let odgodaPauze = null;
+function osvjeziPauzuUskoro(ms = 1500) {
+    if (odgodaPauze) return;
+    odgodaPauze = setTimeout(() => { odgodaPauze = null; osvjeziPauzu(); }, ms);
 }
 
 function otvoriPovezivanje() {
@@ -114,7 +119,13 @@ function ucitajServer() {
 // IPC za izbor servera prima SAMO lokalne ekrane aplikacije (file://). Web app sa servera ne smije
 // mijenjati adresu — stranica koja moze preusmjeriti app na drugi server moze preusmjeriti i prijavu.
 const izLokalneStranice = (e) => { try { return new URL(e.senderFrame.url).protocol === 'file:'; } catch { return false; } };
-ipcMain.handle('server:trenutni', (e) => (izLokalneStranice(e) ? { url: trenutniServer(), naziv: nazivFirme(), sifra: nazivFirme() ? (konfiguracija().sifra || null) : null, verzija: app.getVersion() } : {}));
+ipcMain.handle('server:trenutni', (e) => {
+    if (!izLokalneStranice(e)) return {};
+    const k = konfiguracija();
+    const url = trenutniServer();
+    // 4.6.0: stara (4.1.x) instalacija bez izabrane firme — ekran kaže da je aplikacija ažurirana i da sad pita šifru firme
+    return { url, naziv: nazivFirme(), sifra: nazivFirme() ? (k.sifra || null) : null, verzija: app.getVersion(), stara_verzija: !url && !!k.prelaz_sa && !k.zaboravljeno };
+});
 ipcMain.on('server:otvori-povezivanje', (e) => { if (izLokalneStranice(e)) otvoriPovezivanje(); });
 ipcMain.handle('server:povezi', async (e, unos) => {
     if (!izLokalneStranice(e)) return { ok: false, poruka: 'Nije dozvoljeno.' };
@@ -122,6 +133,7 @@ ipcMain.handle('server:povezi', async (e, unos) => {
     // Zahtjev ide bez kolačića (credentials: 'omit'); s ulaza se pamti samo adresa i naziv — ulaz ne izdaje token.
     let n;
     let firma = {};
+    let ulazPauzirana = false;
     if (ulazFirme.jeSifra(unos)) {
         const portal = ulazFirme.portalAdresa({ env: process.env, konfig: konfiguracija() });
         const u = await ulazFirme.poveziSifrom({ unos, portal, dohvati: async (url, init) => {
@@ -131,6 +143,7 @@ ipcMain.handle('server:povezi', async (e, unos) => {
         if (!u.ok) return { ok: false, poruka: u.poruka };
         n = { url: u.url };
         firma = { naziv: u.naziv, sifra: u.sifra };
+        ulazPauzirana = u.pauzirana === true;
     } else {
         n = normalizujAdresu(unos);
         if (n.greska) return { ok: false, poruka: n.poruka };
@@ -143,7 +156,8 @@ ipcMain.handle('server:povezi', async (e, unos) => {
     } catch {
         return { ok: false, poruka: 'Server na toj adresi se ne javlja. Provjeri adresu i internet.' };
     }
-    snimiAdresu(n.url, firma);
+    // F8: ulaz javlja pauziranu firmu (pauzirana: true) — kasa to zna od prvog trenutka; snimiAdresu briše pauzu prethodne firme
+    snimiAdresu(n.url, { ...firma, ...(firma.sifra && ulazPauzirana ? { pauza: pauzaFirme.sljedece(null, { pauzirana: true, izvor: 'ulaz' }, { server: n.url }) } : {}) });
     if (mainWindow) mainWindow.loadURL(n.url);
     return { ok: true, url: n.url, naziv: firma.naziv || null };
 });
@@ -259,8 +273,10 @@ const fiskalniHandler = (fn) => async (_e, arg) => {
 ipcMain.handle('fiskalni:test', fiskalniHandler(() => fiskalni.testVeze()));
 ipcMain.handle('fiskalni:status', fiskalniHandler(() => fiskalni.statusUredjaja()));
 ipcMain.handle('fiskalni:init', fiskalniHandler((a) => fiskalni.inicijalizacija(a && a.op, a && a.loz)));
-ipcMain.handle('fiskalni:fiskalizuj', fiskalniHandler((racun) => fiskalni.fiskalizuj(racun)));
-ipcMain.handle('fiskalni:reklamiraj', fiskalniHandler((a) => (!kasaOffline.dozvoljeno(offlineSesija, 'povrat') ? OFFLINE_POVRAT : fiskalni.reklamiraj(a.racun, a.original_broj))));
+// F8: stari put drajvera (bez računa i lokalni_uid-a) — dok je firma pauzirana ništa novo ne ide uređaju
+const bezPauzeDrajvera = (fn) => (a) => { const b = pauzaFirme.blokadaDrajvera(trenutnaPauza()); if (b) { javiPauzu('prodaja'); return b; } return fn(a); };
+ipcMain.handle('fiskalni:fiskalizuj', fiskalniHandler(bezPauzeDrajvera((racun) => fiskalni.fiskalizuj(racun))));
+ipcMain.handle('fiskalni:reklamiraj', fiskalniHandler(bezPauzeDrajvera((a) => (!kasaOffline.dozvoljeno(offlineSesija, 'povrat') ? OFFLINE_POVRAT : fiskalni.reklamiraj(a.racun, a.original_broj)))));
 ipcMain.handle('fiskalni:unos-novca', fiskalniHandler((a) => fiskalni.unosNovca(a.vrsta, a.iznos_fening)));
 ipcMain.handle('fiskalni:povrat-novca', fiskalniHandler((a) => fiskalni.povratNovca(a.vrsta, a.iznos_fening)));
 ipcMain.handle('fiskalni:presjek', fiskalniHandler(() => fiskalni.presjekStanja()));
@@ -276,7 +292,12 @@ const posHandler = (fn) => async (_e, arg) => { try { return { ok: true, ...fn(a
 ipcMain.handle('pos:spreman', () => ({ ok: true, spreman: posKes.spreman() }));
 ipcMain.handle('pos:katalog-save', posHandler((a) => posKes.spremiKatalog(a.skladiste_id, a.artikli)));
 ipcMain.handle('pos:katalog-get', posHandler((a) => posKes.citajKatalog(a.skladiste_id)));
-ipcMain.handle('pos:queue-add', posHandler((racun) => posKes.dodajURed(racun)));
+// F8: pauzirana firma — NOV račun ne ulazi u offline red (ponovljen poziv za račun koji je već u redu prolazi)
+ipcMain.handle('pos:queue-add', posHandler((racun) => {
+    const b = pauzaFirme.blokadaReda(trenutnaPauza(), !!(racun && posKes.redRacuna(racun.lokalni_uid)));
+    if (b) { javiPauzu('prodaja'); return b; }
+    return posKes.dodajURed(racun);
+}));
 ipcMain.handle('pos:queue-pending', posHandler(() => posKes.nesinhronizovani()));
 ipcMain.handle('pos:queue-mark', posHandler((a) => posKes.oznaciPoslan(a.lokalni_uid, a.server_id)));
 
@@ -322,9 +343,11 @@ ipcMain.handle('kasa:obnovi-sesiju', async () => {
     }
     return r;
 });
-ipcMain.handle('smjena:otvori', posHandler((u) => kasaOffline.otvoriSmjenu(u)));
+// F8: pauzirana firma — nova smjena (otvaranje, primopredaja) ne; zatvaranje smjene radi
+const bezPauzeSmjene = (fn) => (u) => { const b = pauzaFirme.blokadaSmjene(trenutnaPauza()); if (b) { javiPauzu('smjena'); return b; } return fn(u); };
+ipcMain.handle('smjena:otvori', posHandler(bezPauzeSmjene((u) => kasaOffline.otvoriSmjenu(u))));
 ipcMain.handle('smjena:zatvori', posHandler((u) => kasaOffline.zatvoriSmjenu(u)));
-ipcMain.handle('smjena:primopredaja', posHandler((u) => kasaOffline.primopredaja(u)));
+ipcMain.handle('smjena:primopredaja', posHandler(bezPauzeSmjene((u) => kasaOffline.primopredaja(u))));
 ipcMain.handle('smjena:aktivna', posHandler((skladisteId) => ({ smjena: kasaOffline.aktivnaSmjena(skladisteId) })));
 ipcMain.handle('smjena:nesinhronizovane', posHandler(() => ({ smjene: kasaOffline.nesinhronizovaneSmjene().map((x) => ({ ...x, tijelo: kasaOffline.tijeloSynca(x) })) })));
 ipcMain.handle('smjena:oznaci', posHandler((a) => kasaOffline.oznaciSmjenu(a.lokalni_uid, { server_id: a.server_id, sukob: a.sukob })));
@@ -378,7 +401,18 @@ const { napraviMost } = require('./lib/fiskalni-most');
 const fiskalniMost = napraviMost({ drajver: fiskalni, posKes });
 // MAL-20: offline sesija smije samo prodaju i smjenu — povrat (reklamirani račun) na uređaj ne ide dok radnik nije prijavljen na serveru
 const OFFLINE_POVRAT = { uspjeh: false, status: 'greska', greska: { kod: 'offline_samo_prodaja', poruka: 'Bez interneta kasa radi samo prodaju i smjenu — povrat i storno idu kad se veza vrati.' } };
-ipcMain.handle('fiskalni:naplati', fiskalniHandler((p) => ((p && p.tip === 'reklamirani' && !kasaOffline.dozvoljeno(offlineSesija, 'povrat')) ? OFFLINE_POVRAT : fiskalniMost.naplati(p))));
+// F8: pauzirana firma — naplata bez računa sa servera (offline) ne ide uređaju; račun koji je server upisao (racun_id) znači da firma
+// radi (server je sudac) → štampa se, a stanje pauze se odmah provjerava ponovo
+function naplatiUzPauzu(p) {
+    const pauza = trenutnaPauza();
+    if (pauza) {
+        const b = pauzaFirme.blokadaNaplate(pauza, p, p && p.lokalni_uid ? posKes.redRacuna(p.lokalni_uid) : null);
+        if (b) { javiPauzu('prodaja'); return b; }
+        osvjeziPauzuUskoro(0);
+    }
+    return fiskalniMost.naplati(p);
+}
+ipcMain.handle('fiskalni:naplati', fiskalniHandler((p) => ((p && p.tip === 'reklamirani' && !kasaOffline.dozvoljeno(offlineSesija, 'povrat')) ? OFFLINE_POVRAT : naplatiUzPauzu(p))));
 ipcMain.handle('fiskalni:duplikat', fiskalniHandler((a) => fiskalniMost.duplikat(a)));
 ipcMain.handle('fiskalni:periodicni', fiskalniHandler((a) => fiskalniMost.periodicni(a)));
 ipcMain.handle('fiskalni:rezim', fiskalniHandler(() => fiskalniMost.provjeriRezim()));
@@ -486,11 +520,16 @@ function createWindow() {
         try { odluka = lokalnaKasaAktivna ? 'offline' : lokalnaKasa.odlukaPriGresci({ server, stanjeKesa: kasaOffline.stanje(), ljuska: lokalnaKasa.ljuskaSpremna(LJUSKA(), server) }); } catch { odluka = 'offline'; }
         if (odluka === 'lokalna_kasa' && otvoriLokalnuKasu()) return;
         ugasiLokalnuKasu();
-        mainWindow.loadFile(path.join(__dirname, 'offline.html'), { query: { server: server || '' } });
+        const pauza = trenutnaPauza();
+        mainWindow.loadFile(path.join(__dirname, 'offline.html'), { query: { server: server || '', ...(pauza ? { pauza: pauzaFirme.poruka(pauza, 'prodaja') } : {}) } });
     });
     // Server se učitao: kopija ekrana kase za dane bez interneta (u pozadini, ne koči prozor)
     mainWindow.webContents.on('did-finish-load', () => {
-        try { const server = trenutniServer(); if (server && mainWindow.webContents.getURL().startsWith(server)) osvjeziLjuskuUPozadini(); } catch { /* nije kritično */ }
+        try { const server = trenutniServer(); if (server && mainWindow.webContents.getURL().startsWith(server)) { osvjeziLjuskuUPozadini(); osvjeziPauzu(); } } catch { /* nije kritično */ }
+    });
+    // F8: svaki 423 sa servera firme (firma_pauzirana, ali i modul/licenca — tijelo se ovdje ne vidi) → provjera pauze odmah
+    session.defaultSession.webRequest.onCompleted((d) => {
+        try { const server = trenutniServer(); if (d.statusCode === 423 && server && new URL(d.url).origin === new URL(server).origin) osvjeziPauzuUskoro(); } catch { /* nije kritično */ }
     });
 
     // v4.2.0: prozor ostaje na serveru firme. Preload daje stranici fiskalni printer i POS kes, pa
@@ -553,7 +592,7 @@ function buildMenu() {
                     type: 'info',
                     title: 'Server firme',
                     message: 'aiERP — server firme',
-                    detail: `${nazivFirme() ? `Firma: ${nazivFirme()}\n` : ''}Server: ${url || 'nije postavljen'}\nVeza: ${url && url.startsWith('https://') ? 'šifrovana (https)' : 'nešifrovana'}\nVerzija aplikacije: ${app.getVersion()}`
+                    detail: `${nazivFirme() ? `Firma: ${nazivFirme()}\n` : ''}Server: ${url || 'nije postavljen'}\nVeza: ${url && url.startsWith('https://') ? 'šifrovana (https)' : 'nešifrovana'}\n${trenutnaPauza() ? 'Stanje firme: pauzirana (samo pregled, bez nove prodaje)\n' : ''}Verzija aplikacije: ${app.getVersion()}`
                 });
             }},
             { label: 'Promijeni firmu…', click: async () => {
@@ -584,19 +623,18 @@ function buildMenu() {
 // ==========================================
 // APP LIFECYCLE
 // ==========================================
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
     Menu.setApplicationMenu(buildMenu());
-    // v4.2.0: prvi start poslije 4.1.x → STT server + prenos postavki; prvi start nove instalacije →
-    // zapis bez adrese, da odluka „stara/nova" pada samo jednom (ekran za povezivanje dalje sam pita)
-    // Ništa od ovoga ne smije spriječiti otvaranje prozora: bez postavke → ekran za povezivanje.
+    // Prvi start (nova instalacija ili 4.6.0 poslije 4.1.x): zapis bez adrese, da odluka „stara/nova" pada samo jednom — ekran za
+    // povezivanje dalje sam pita šifru firme. 4.6.0 (odluka 10): stara instalacija više ne ide tiho na server jedne firme; pamti se
+    // samo trag prelaza (ekran kaže da je aplikacija ažurirana). Ništa od ovoga ne smije spriječiti otvaranje prozora.
     if (!process.env.STT_SERVER_URL && !fs.existsSync(KONFIG())) {
-        try {
-            const bilaStara = STARA_INSTALACIJA && await prelazSaStareVerzije();
-            if (!bilaStara) snimiAdresu(null);
-        } catch (e) { if (process.argv.includes('--dev')) console.error('prvi start:', e.message); }
+        try { snimiAdresu(null, STARA_INSTALACIJA ? { prelaz_sa: STARI_SERVER } : {}); }
+        catch (e) { if (process.argv.includes('--dev')) console.error('prvi start:', e.message); }
     }
     createWindow();
     setupAutoUpdater();
+    setInterval(() => { osvjeziPauzu(); }, 5 * 60 * 1000);   // F8: pauza se vidi i dok je ekran otvoren (bez novog učitavanja)
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -604,8 +642,5 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-    // v4.2.0: prelaz sa 4.1.x otvara i zatvara skrivene prozore PRIJE glavnog — to nije izlazak iz
-    // aplikacije (bez ove provjere app.quit() je prekidao prenos postavki na pola)
-    if (prelazUToku) return;
     if (process.platform !== 'darwin') app.quit();
 });

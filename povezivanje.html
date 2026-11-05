@@ -8,7 +8,7 @@
 <!--
   v4.2.0: prvo pokretanje nove instalacije (i meni „Promijeni firmu…"). Adresa servera je postavka
   OVOG racunara (userData/aierp-server.json) — isti exe radi za svaku firmu. Namjerno bez localStorage:
-  main.js po postojanju „Local Storage" foldera prepoznaje staru (4.1.x) STT instalaciju.
+  main.js po postojanju „Local Storage" foldera prepoznaje staru (4.1.x) instalaciju (4.6.0: i ona ovdje bira firmu šifrom).
   R68 (PLT-45): pita se ŠIFRA FIRME — main.js pita ulaz portala (lib/ulaz-firme.js) i pamti adresu instance i naziv firme.
   Puna adresa (firma na vlastitom serveru) i dalje radi. „Nastavi na <naziv>" vraća na zapamćenu firmu, „Promijeni firmu" je briše.
 -->
@@ -100,6 +100,7 @@
     </div>
 
     <h1>Poveži aplikaciju sa svojom firmom</h1>
+    <p class="uvod" id="azurirano" hidden>Aplikacija je ažurirana: firma se sada bira šifrom firme, a ne više stalnom adresom servera.</p>
     <p class="uvod">Upiši šifru svoje firme. Radi se samo jednom na ovom računaru — poslije se aplikacija otvara direktno.</p>
 
     <form id="forma" autocomplete="off" novalidate>
@@ -144,6 +145,7 @@
   if (api) {
     api.trenutni().then(function (r) {
       if (r && r.verzija) document.getElementById('verzija').textContent = 'aiERP v' + r.verzija;
+      if (r && r.stara_verzija) document.getElementById('azurirano').hidden = false;   // 4.6.0: stara (4.1.x) instalacija
       if (r && r.url) {
         unos.value = r.sifra || r.url.replace(/^https:\/\//, '');
         document.getElementById('nastavi-naziv').textContent = r.naziv || r.url.replace(/^https?:\/\//, '');

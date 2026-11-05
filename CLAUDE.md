@@ -11,7 +11,8 @@ Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama;
 - Do 4.1.3 je bila zakucana na `http://46.101.96.28:3737` — STT-ov server, **nešifrovano** (PIN i token internetom kao čist tekst), pa je exe mogao koristiti samo STT.
 - Od 4.2.0 adresa je postavka računara: `userData/aierp-server.json` (`{ "url": "https://…" }`). `userData` = `%APPDATA%\stt-hr` (ime iz polja `name` u package.json — `productName` je u `build` sekciji, pa ne utiče na folder; **ne mijenjati `name`**, profil bi „nestao").
 - **Nova instalacija** → `povezivanje.html` pita **šifru firme** (R68, PLT-45): `lib/ulaz-firme.js` pita ulaz portala `POST <portal>/api/ulaz {sifra}` (portal zadano `https://aierp.ba`; `AIERP_PORTAL_URL` ili `portal` u `aierp-server.json`), bez kolačića; adresa iz ulaza se prihvata SAMO kao `https://<subdomena>.<domen portala>`; nepoznata/zatvorena → neutralna poruka ulaza. Pamti se `url`, `naziv`, `sifra`. Puna adresa (vlastiti server) i dalje radi. Zatim `GET /api/ping` → `{ok:true}` pa snimi. Samo https (http samo za localhost).
-- **Stara STT instalacija (4.1.x)** → tiho `https://app.aierp.ba` + prenos localStorage sa starog origina (prijava, `aierp-pristup`, `stt-device` kiosk veza): `main.js → prelazSaStareVerzije()`, bez mreže (`protocol.handle` servira praznu stranicu na originu). Trag stare verzije se hvata PRIJE nego Chromium otvori profil (on sam pravi „Local Storage" folder na startu).
+- **Stara instalacija (4.1.x)** → od 4.6.0 (odluka 05.11.2026 (10)) ekran „Šifra firme" kao nova, uz napomenu da je aplikacija ažurirana; u zapisu ostaje samo `prelaz_sa`. Nema rezervne adrese nijedne firme u kodu (ranije tiho STT server + prenos localStorage — uklonjeno: prijava starog servera ne smije završiti na originu druge firme; `test/bez-http.test.js` drži da se adresa ne vrati). Trag stare verzije se hvata PRIJE nego Chromium otvori profil (on sam pravi „Local Storage" folder na startu).
+- **Pauzirana firma (4.6.0, odluka (9))** → `lib/pauza-firme.js`: server pauziranoj firmi upis vraća 423 `firma_pauzirana`, meni nosi `pauza`, ulaz `pauzirana: true`. Desktop provjerava (ping ako ga javi → meni → ulaz) pri učitavanju, svakih 5 min i poslije svakog 423, pamti `pauza` u `aierp-server.json` (važi i bez interneta) i tada NE prima novu prodaju: račun u offline red, naplata bez `racun_id` sa servera, stari put drajvera, nova smjena/primopredaja → poruka + sistemski dijalog. Pregled, zatvaranje smjene i red za sync rade; neposlan odštampan račun se ne briše (`redProred`).
 - Meni: **Aplikacija → Promijeni firmu…** i **Info o serveru** (s nazivom firme); offline ekran ima „Promijeni firmu". Na ekranu povezivanja „Nastavi na <naziv>" vraća na zapamćenu firmu, „Promijeni firmu" je briše (`server:zaboravi` — zapis ostaje bez adrese, da se računar ne prepozna kao 4.1.x).
 - IPC za izbor servera prima samo lokalne ekrane (`file://`) — web app sa servera ne smije mijenjati adresu. Prozor je zaključan na origin servera (`will-navigate`); eksterni linkovi idu u sistemski browser.
 - Razvoj: `STT_SERVER_URL` nadjačava sve; `AIERP_USER_DATA` daje odvojen profil (test prvog pokretanja).
@@ -30,6 +31,7 @@ stt-hr-electron/
 ├── lib/kasa-offline.js   # kasa bez interneta (4.4.0): keš radnje, offline prijava PIN-om, smjena na disku, tijeloSynca
 ├── lib/kasa-offline-ugovor.json  # ugovor mosta posOffline — BAJT-PO-BAJT kopija serverskog (+ .sha256); mijenja se u OBA repoa
 ├── lib/server-adresa.js  # normalizacija adrese servera (čist Node — test/server-adresa.test.js)
+├── lib/pauza-firme.js    # pauzirana firma: izvori stanja i blokade nove prodaje (čist Node — test/pauza-firme.test.js)
 ├── installer.nsh         # NSIS (ASCII!) — od 4.2.0 samo briše stara firewall pravila
 └── build/                # ikone za electron-builder (ne ide u app.asar)
 ```
@@ -41,7 +43,7 @@ stt-hr-electron/
 
 ## Server (drugi repo)
 
-- **STT server:** `https://app.aierp.ba` (nginx ispred Node-a na DigitalOcean dropletu)
+- **Instance firmi:** `https://<sifra>.aierp.ba` (portal i ulaz `https://aierp.ba`; nginx ispred Node-a na DigitalOcean dropletu) — adresa se nikad ne piše u kod desktopa
 - **Repo:** https://github.com/KupiLenovo/stt-hr-server (private), lokalno `C:\Users\rober\stt-hr-server`
 - Nova ruta ide u taj repo, ne ovdje.
 

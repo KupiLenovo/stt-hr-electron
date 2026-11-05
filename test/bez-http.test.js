@@ -18,9 +18,8 @@ const pkg = JSON.parse(fs.readFileSync(path.join(KORIJEN, 'package.json'), 'utf8
 
 // Lokalne adrese su dozvoljene (fiskalni drajver je na localhost:8085, razvoj na localhost:3737).
 const LOKALNO = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
-// Jedini dozvoljen izuzetak: stara STT adresa kao KONSTANTA u lib/server-adresa.js. Ona se ne koristi za
-// vezu nego samo kao origin s kojeg se pri prelazu s 4.1.x čita localStorage — i to bez mreže, jer
-// `main.js → naOriginu()` na tu shemu postavi `protocol.handle` koji vrati praznu stranicu.
+// Jedini dozvoljen izuzetak: stara adresa (4.0–4.1.3) kao KONSTANTA u lib/server-adresa.js. Ne koristi se za
+// vezu — od 4.6.0 samo kao trag prelaza u zapisu (prelaz_sa); normalizujAdresu je ionako odbija (http).
 const IZUZETAK = { fajl: 'lib/server-adresa.js', url: 'http://46.101.96.28:3737' };
 
 /** Fajlovi iz `build.files` (podržani su i `lib/**\/*` obrasci). Vraća pune putanje. */
@@ -77,20 +76,29 @@ test('stari ugrađeni klijent (app/index.html) je obrisan i ne pakuje se', () =>
     assert.equal(pkg.build.files.some((f) => f.startsWith('app')), false, 'app/ ne smije ući u build.files');
 });
 
-test('stara (http) adresa se koristi samo za čitanje profila, nikad za vezu', () => {
-    // Izuzetak iznad vrijedi samo dok se STARI_SERVER ne otvara kao običan prozor. Otvara se kroz
-    // `naOriginu()`, koji PRIJE učitavanja postavi `protocol.handle` — stranica dolazi iz memorije,
-    // nijedan zahtjev ne ode na mrežu, pa PIN i token ne mogu procuriti.
+test('stara (http) adresa je samo trag prelaza u zapisu, nikad veza (4.6.0)', () => {
+    // 4.6.0 (odluka Eldina 05.11.2026 (10)): prelaz 4.1.x više ne čita localStorage starog origina i ne ide ni na jedan server —
+    // STARI_SERVER smije stajati samo u zapisu o prelazu (prelaz_sa) i u require-u; nikad u loadURL, net.fetch ni naOriginu.
     const main = fs.readFileSync(path.join(KORIJEN, 'main.js'), 'utf8');
     const upotrebe = kodneLinije(main).filter(({ red }) => /\bSTARI_SERVER\b/.test(red));
-    assert.ok(upotrebe.length > 0, 'prelaz sa 4.1.x mora postojati');
+    assert.ok(upotrebe.length > 0, 'trag prelaza sa 4.1.x postoji');
     for (const { red, broj } of upotrebe) {
-        assert.ok(/naOriginu\(STARI_SERVER|prelaz_sa: STARI_SERVER|require\(/.test(red),
-            `main.js:${broj}: stara adresa smije ići samo u naOriginu() ili u zapis o prelazu — ${red.trim()}`);
+        assert.ok(/prelaz_sa: STARI_SERVER|require\(/.test(red), `main.js:${broj}: stara adresa smije ići samo u zapis o prelazu — ${red.trim()}`);
     }
-    const nao = main.slice(main.indexOf('async function naOriginu'), main.indexOf('async function naOriginu') + 900);
-    assert.match(nao, /protocol\.handle\(/, 'naOriginu mora presresti shemu prije loadURL-a');
-    assert.ok(nao.indexOf('protocol.handle(') < nao.indexOf('loadURL('), 'presretanje mora doći PRIJE učitavanja');
+    assert.doesNotMatch(main, /naOriginu|prelazSaStareVerzije/, 'prenos localStorage na server jedne firme je uklonjen');
+});
+
+test('4.6.0: u instalaciji nema adrese ni rezervne putanje jedne firme (app.aierp.ba, STT_SERVER)', () => {
+    // Proizvod se prodaje firmama — isti exe ne smije tiho voditi na server STT-a (ni u komentaru, da se ne vrati „kao primjer").
+    // STT_SERVER_URL (okruženje, samo za razvoj) ostaje.
+    const nalazi = [];
+    for (const f of fajloviIzBuilda()) {
+        const rel = path.relative(KORIJEN, f).replace(/\\/g, '/');
+        fs.readFileSync(f, 'utf8').split(/\r?\n/).forEach((red, i) => {
+            if (/app\.aierp\.ba/i.test(red) || /\bSTT_SERVER\b(?!_URL)/.test(red)) nalazi.push(`${rel}:${i + 1} → ${red.trim()}`);
+        });
+    }
+    assert.deepEqual(nalazi, []);
 });
 
 test('adresa servera se dobija samo kroz lib/server-adresa.js', () => {
