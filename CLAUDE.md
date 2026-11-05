@@ -4,7 +4,7 @@
 
 Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, better-sqlite3) i auto-update.
 
-**Verzija:** 4.4.0 (kasa bez interneta, ugovor offline mosta)
+**Verzija:** 4.5.0 (šifra firme kroz ulaz portala — R68, PLT-45)
 
 ## Server firme (v4.2.0) — adresa NIJE zakucana
 
