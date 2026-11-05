@@ -6,9 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>aiERP — Povezivanje s firmom</title>
 <!--
-  v4.2.0: prvo pokretanje nove instalacije (i meni „Promijeni server firme…"). Adresa servera je postavka
+  v4.2.0: prvo pokretanje nove instalacije (i meni „Promijeni firmu…"). Adresa servera je postavka
   OVOG racunara (userData/aierp-server.json) — isti exe radi za svaku firmu. Namjerno bez localStorage:
   main.js po postojanju „Local Storage" foldera prepoznaje staru (4.1.x) STT instalaciju.
+  R68 (PLT-45): pita se ŠIFRA FIRME — main.js pita ulaz portala (lib/ulaz-firme.js) i pamti adresu instance i naziv firme.
+  Puna adresa (firma na vlastitom serveru) i dalje radi. „Nastavi na <naziv>" vraća na zapamćenu firmu, „Promijeni firmu" je briše.
 -->
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -38,13 +40,14 @@
   label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
   .polje { display: flex; align-items: center; border: 1.5px solid #cbd5e1; border-radius: 10px; background: #f8fafc; transition: border-color 0.15s, box-shadow 0.15s; }
   .polje:focus-within { border-color: #1D4ED8; box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.15); background: #fff; }
-  .polje .sema { padding-left: 12px; font-size: 14px; color: #94a3b8; -webkit-user-select: none; user-select: none; }
-  .polje .sema[hidden] + input { padding-left: 12px; }
   input {
     flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
-    padding: 12px 12px 12px 2px; font-size: 15px; color: #0f172a;
+    padding: 12px; font-size: 15px; color: #0f172a; min-height: 44px;
   }
-  .dugmad { display: flex; gap: 10px; margin-top: 18px; }
+  .pomoc { margin-top: 6px; font-size: 12px; line-height: 1.45; color: #64748b; }
+  .dugmad { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .dugmad button { min-height: 44px; }
+  .nastavi { width: 100%; margin-top: 10px; min-height: 44px; overflow-wrap: anywhere; }
   button {
     border: none; border-radius: 10px; padding: 12px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
     transition: background 0.15s, transform 0.05s;
@@ -97,19 +100,20 @@
     </div>
 
     <h1>Poveži aplikaciju sa svojom firmom</h1>
-    <p class="uvod">Upiši adresu servera svoje firme. Radi se samo jednom na ovom računaru — poslije se aplikacija otvara direktno.</p>
+    <p class="uvod">Upiši šifru svoje firme. Radi se samo jednom na ovom računaru — poslije se aplikacija otvara direktno.</p>
 
     <form id="forma" autocomplete="off" novalidate>
-      <label for="adresa">Adresa servera</label>
+      <label for="adresa">Šifra firme</label>
       <div class="polje">
-        <span class="sema">https://</span>
-        <input id="adresa" name="adresa" type="text" inputmode="url" spellcheck="false" placeholder="firma.aierp.ba" autofocus>
+        <input id="adresa" name="adresa" type="text" autocapitalize="none" spellcheck="false" maxlength="200" placeholder="npr. mojafirma" aria-describedby="pomoc" autofocus>
       </div>
-      <div class="dugmad">
-        <button type="button" class="sporedno" id="nazad" hidden>Nazad</button>
-        <button type="submit" class="glavno" id="povezi">Poveži</button>
-      </div>
+      <div class="pomoc" id="pomoc">Šifru daje administrator tvoje firme. Firma na vlastitom serveru upisuje punu adresu (npr. erp.mojafirma.ba).</div>
       <div class="status" id="status" role="status" aria-live="polite"></div>
+      <div class="dugmad">
+        <button type="submit" class="glavno" id="povezi">Poveži</button>
+        <button type="button" class="sporedno" id="promijeni" hidden>Promijeni firmu</button>
+      </div>
+      <button type="button" class="sporedno nastavi" id="nastavi" hidden>Nastavi na <span id="nastavi-naziv"></span></button>
     </form>
 
     <div class="dno">
@@ -124,7 +128,8 @@
   var forma = document.getElementById('forma');
   var unos = document.getElementById('adresa');
   var dugme = document.getElementById('povezi');
-  var nazad = document.getElementById('nazad');
+  var nastavi = document.getElementById('nastavi');
+  var promijeni = document.getElementById('promijeni');
   var stanje = document.getElementById('status');   // NE „status": to je window.status (string), element bi se izgubio
   var api = window.aierpPostavke;
 
@@ -134,48 +139,55 @@
     if (spin) stanje.insertAdjacentHTML('afterbegin', '<span class="spin"></span>');
   }
 
-  // Mijenja se postojeca adresa (meni) → upisana je, a „Nazad" vraca na nju bez izmjene
+  // Zapamćena firma (meni „Promijeni firmu…", offline ekran) → „Nastavi na <naziv>" vraća na nju bez izmjene,
+  // „Promijeni firmu" je briše (sljedeće pokretanje opet pita šifru)
   if (api) {
     api.trenutni().then(function (r) {
       if (r && r.verzija) document.getElementById('verzija').textContent = 'aiERP v' + r.verzija;
       if (r && r.url) {
-        unos.value = r.url.replace(/^https:\/\//, '');
-        prefiks();
-        nazad.hidden = false;
+        unos.value = r.sifra || r.url.replace(/^https:\/\//, '');
+        document.getElementById('nastavi-naziv').textContent = r.naziv || r.url.replace(/^https?:\/\//, '');
+        nastavi.hidden = false;
+        promijeni.hidden = !api.zaboravi;
         unos.select();
       }
     });
   }
-  nazad.addEventListener('click', function () {
+  nastavi.addEventListener('click', function () {
     if (window.electronAPI && window.electronAPI.retryConnection) window.electronAPI.retryConnection();
   });
-
-  // Upisan cijeli URL s https:// → polje pokazuje samo adresu (prefiks je vec ispred); neka druga
-  // shema (http://…) → prefiks se sakrije da ne pise „https://http://", a main.js je odbije s porukom
-  var sema = document.querySelector('.polje .sema');
-  function prefiks() { sema.hidden = /^[a-z][a-z0-9+.-]*:\/\//i.test(unos.value); }
+  promijeni.addEventListener('click', function () {
+    api.zaboravi().then(function (r) {
+      if (!r || !r.ok) return;
+      nastavi.hidden = true;
+      promijeni.hidden = true;
+      unos.value = '';
+      poruka('');
+      unos.focus();
+    });
+  });
   unos.addEventListener('input', function () {
-    if (/^https:\/\//i.test(unos.value)) unos.value = unos.value.replace(/^https:\/\//i, '');
-    prefiks();
     if (stanje.classList.contains('greska')) poruka('');
   });
-  unos.addEventListener('blur', prefiks);
 
   forma.addEventListener('submit', function (e) {
     e.preventDefault();
     if (!api) { poruka('Ovaj ekran radi samo u desktop aplikaciji aiERP.', 'greska'); return; }
     var adresa = unos.value.trim();
-    if (!adresa) { poruka('Upiši adresu servera svoje firme.', 'greska'); unos.focus(); return; }
+    if (!adresa) { poruka('Upiši šifru svoje firme.', 'greska'); unos.focus(); return; }
     dugme.disabled = true;
-    poruka('Provjeravam server…', '', true);
+    nastavi.disabled = true;
+    poruka('Tražim firmu…', '', true);
     api.povezi(adresa).then(function (r) {
       if (r && r.ok) { poruka('Povezano — otvaram aplikaciju…', 'ok', true); return; }
       poruka((r && r.poruka) || 'Povezivanje nije uspjelo.', 'greska');
       dugme.disabled = false;
+      nastavi.disabled = false;
       unos.focus();
     }).catch(function () {
       poruka('Povezivanje nije uspjelo.', 'greska');
       dugme.disabled = false;
+      nastavi.disabled = false;
     });
   });
 </script>

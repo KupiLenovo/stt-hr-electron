@@ -34,6 +34,7 @@ if (location.protocol === 'file:') {
     contextBridge.exposeInMainWorld('aierpPostavke', {
         trenutni: () => ipcRenderer.invoke('server:trenutni'),
         povezi: (adresa) => ipcRenderer.invoke('server:povezi', adresa),
+        zaboravi: () => ipcRenderer.invoke('server:zaboravi'),   // R68 (PLT-45): „Promijeni firmu" briše zapamćenu firmu
         otvoriPovezivanje: () => ipcRenderer.send('server:otvori-povezivanje'),
     });
 }
