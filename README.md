@@ -1,11 +1,11 @@
-# STT HR Menadžment — Desktop Aplikacija
+# Vault aiERP — Desktop aplikacija
 
-Electron aplikacija za Windows i macOS.
+Electron aplikacija za Windows i macOS (tanak omotač: UI dolazi sa servera firme; desktop dodaje fiskalni
+printer, offline kasu i auto-update). Detalji: `CLAUDE.md` i `UPUSTVO-ZA-INSTALACIJU.txt`.
 
-## Preduvjeti (i Windows i macOS)
+## Preduvjeti
 
 1. **Node.js 20 LTS** → https://nodejs.org
-2. **Python 3.8+** → https://python.org (za generisanje ikona)
 
 ---
 
@@ -15,8 +15,7 @@ Electron aplikacija za Windows i macOS.
 Dvoklik na:  BUILD-WINDOWS.bat
 ```
 
-Čeka se ~3-5 minuta (prva instalacija Electron paketa).  
-Rezultat: `dist/STT HR Setup 1.0.0.exe`
+Rezultat: `dist/Vault-aiERP-Setup-X.Y.Z.exe`
 
 ---
 
@@ -27,9 +26,7 @@ chmod +x BUILD-MAC.sh
 ./BUILD-MAC.sh
 ```
 
-Rezultat: `dist/STT HR-1.0.0.dmg`
-
-> **Napomena za macOS:** Za Intel Mac i Apple Silicon (M1/M2/M3) — build automatski pravi oba (x64 + arm64).
+Rezultat: `dist/Vault-aiERP-X.Y.Z-<arh>.dmg` (x64 i arm64).
 
 ---
 
@@ -37,19 +34,20 @@ Rezultat: `dist/STT HR-1.0.0.dmg`
 
 ```
 stt-hr-electron/
-├── main.js              # Electron entry point
-├── package.json         # Konfiguracija + build settings
-├── app/
-│   └── index.html       # Kompletna HR aplikacija
+├── main.js              # Electron main process
+├── preload.js           # most prema rendereru (sandbox)
+├── povezivanje.html     # ekran „Šifra firme"
+├── offline.html         # „Nema veze sa serverom"
+├── package.json         # konfiguracija + build postavke
 ├── build/
-│   ├── icon.svg         # STT logo (source)
-│   ├── icon.ico         # Generisano za Windows
-│   ├── icon.icns        # Generisano za macOS
-│   └── icon.png         # Generisano za titlebar
+│   ├── icon.svg         # Vault aiERP ikona — znak „Dvije trake" (izvor)
+│   ├── icon.ico         # generisano za Windows
+│   ├── icon.png         # generisano (1024) za macOS i naslovnu traku
+│   └── icon_*.png       # generisano (16–1024)
 ├── scripts/
-│   └── make_icons.py    # Konverzija SVG → ico/icns
-├── BUILD-WINDOWS.bat    # Build za Windows
-└── BUILD-MAC.sh         # Build za macOS
+│   └── ikone.js         # SVG → PNG/ICO (Playwright), pokreće se samo kad se znak promijeni
+├── BUILD-WINDOWS.bat    # build za Windows
+└── BUILD-MAC.sh         # build za macOS
 ```
 
 ---
@@ -57,14 +55,7 @@ stt-hr-electron/
 ## Brzi test (bez builda)
 
 ```bash
-npm install
+npm ci
 npm start
+npm test
 ```
-
-Pokreće app direktno u development modu.
-
----
-
-## Ažuriranje aplikacije
-
-Zamijeni `app/index.html` novom verzijom i ponovi build.

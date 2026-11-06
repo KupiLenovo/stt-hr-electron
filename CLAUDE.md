@@ -1,8 +1,8 @@
-# aiERP — Electron (desktop) klijent
+# Vault aiERP — Electron (desktop) klijent
 
 ## Šta je ovo
 
-Desktop aplikacija **aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, better-sqlite3) i auto-update.
+Desktop aplikacija **Vault aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, better-sqlite3) i auto-update.
 
 **Verzija:** 4.6.0 (pauzirana firma na kasi; bez rezervne adrese STT servera — odluke 05.11.2026 (9) i (10))
 
@@ -33,8 +33,19 @@ stt-hr-electron/
 ├── lib/server-adresa.js  # normalizacija adrese servera (čist Node — test/server-adresa.test.js)
 ├── lib/pauza-firme.js    # pauzirana firma: izvori stanja i blokade nove prodaje (čist Node — test/pauza-firme.test.js)
 ├── installer.nsh         # NSIS (ASCII!) — od 4.2.0 samo briše stara firewall pravila
+├── scripts/ikone.js      # build/icon.svg → icon_*.png, icon.png, icon.ico (Playwright, ručno; PNG/ICO se commitaju)
 └── build/                # ikone za electron-builder (ne ide u app.asar)
 ```
+
+## Naziv i znak (R73, odluka Eldina 06.11.2026)
+
+- Prikazani naziv proizvoda je **„Vault aiERP"** (naslov prozora i ekrana, dijalozi, notifikacije, prečica, unos u
+  „Programs", ime instalacionog fajla, DMG). U `main.js` konstanta `NAZIV_PROIZVODA`. „aiERP" ostaje samo u domeni i e-mailu.
+- Znak je **„Dvije trake"** (V od plave `#2563EB` i ljubičaste `#7C3AED` trake, preklop `#3730A3`); stari znak (kocka od
+  pločica + orbita) ne smije se vratiti — `test/brend.test.js`.
+- **OSTAJU (namjerno):** `name` „stt-hr" (userData), `build.appId` „ba.stt.business" (ključ instalacije/ažuriranja) i
+  `build.productName` „aiERP" (instalacioni folder, ime exe-a, mac `.app` i userData na macOS-u) — promjena bi „izgubila"
+  profil, zapamćenu firmu i offline kasu na postojećim računarima.
 
 ## Tehnologije
 

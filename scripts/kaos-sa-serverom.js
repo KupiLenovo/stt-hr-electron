@@ -1,4 +1,4 @@
-// JEDNOKRATNA lokalna provjera (NE ide u CI ni u npm test): 10 offline računa iz desktop kase stiže na PRAVI aiERP server tačno jednom.
+// JEDNOKRATNA lokalna provjera (NE ide u CI ni u npm test): 10 offline računa iz desktop kase stiže na PRAVI Vault aiERP server tačno jednom.
 //
 // Pokreće pravi stt-hr-server (node server.js) na PRIVREMENOJ bazi i slobodnom portu (NODE_ENV=test → demo radnici s PIN-om 0000),
 // kroz API napravi kasu (maloprodajno skladište), artikal, novog radnika (privremeni PIN → svoj PIN) i otvori smjenu. Zatim desktop
