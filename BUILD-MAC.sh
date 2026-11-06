@@ -3,7 +3,7 @@ set -e
 
 echo ""
 echo "╔══════════════════════════════════════╗"
-echo "║   STT HR — Build za macOS (.dmg)     ║"
+echo "║  Vault aiERP — Build za macOS (.dmg) ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 
@@ -15,30 +15,21 @@ if ! command -v node &> /dev/null; then
     exit 1
 fi
 
-# Provjeri Python
-if ! command -v python3 &> /dev/null; then
-    echo "[GREŠKA] Python3 nije instaliran!"
-    echo "Preuzmi sa: https://python.org"
-    echo "Ili via Homebrew:  brew install python"
-    exit 1
-fi
+# Ikone (build/icon.png, icon.ico, icon_*.png) su commitane — generišu se samo kad se znak promijeni:
+#   node scripts/ikone.js   (treba Playwright, vidi komentar u skripti)
 
-echo "[1/4] Instaliram Node pakete..."
+echo "[1/3] Instaliram Node pakete..."
 npm install
 
 echo ""
-echo "[2/4] Generiram ikone..."
-python3 scripts/make_icons.py || echo "[UPOZORENJE] Ikone nisu generirane, nastavlja se..."
-
-echo ""
-echo "[3/4] Buildam macOS .dmg..."
+echo "[2/3] Buildam macOS .dmg..."
 npm run build:mac
 
 echo ""
-echo "[4/4] Gotovo!"
+echo "[3/3] Gotovo!"
 echo ""
 echo "  ✅ DMG se nalazi u: dist/"
-echo "     Traži fajl:  STT HR-X.X.X.dmg"
+echo "     Traži fajl:  Vault-aiERP-X.X.X-<arh>.dmg"
 echo ""
 echo "  Otvori DMG, prevuci aplikaciju u Applications,"
 echo "  i testiraj iz Launchpada!"

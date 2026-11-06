@@ -1,12 +1,12 @@
 ================================================================
-  aiERP — DESKTOP APLIKACIJA: INSTALACIJA I PRVO POKRETANJE
+  Vault aiERP — DESKTOP APLIKACIJA: INSTALACIJA I PRVO POKRETANJE
 ================================================================
   Za verziju 4.2.0 i noviju | STT d.o.o. Sarajevo
 ================================================================
 
 KAKO RADI
 ---------
-aiERP je cloud sistem: podaci su na serveru firme, a desktop
+Vault aiERP je cloud sistem: podaci su na serveru firme, a desktop
 aplikacija je prozor prema tom serveru, uz vezu sa fiskalnim
 printerom i offline kasu (računi se čuvaju lokalno dok nema
 interneta i pošalju se kad se veza vrati).
@@ -15,25 +15,25 @@ interneta i pošalju se kad se veza vrati).
   1) INSTALACIJA
 ================================================================
 
-1. Preuzmi instalaciju (fajl "aiERP Setup X.Y.Z.exe"):
+1. Preuzmi instalaciju (fajl "Vault-aiERP-Setup-X.Y.Z.exe"):
    https://github.com/KupiLenovo/stt-hr-electron/releases/latest
 
 2. Pokreni je i potvrdi administratorska prava.
 
-3. Prati korake instalacije. Na desktopu se pojavi prečica "aiERP".
+3. Prati korake instalacije. Na desktopu se pojavi prečica "Vault aiERP".
 
 ================================================================
   2) PRVO POKRETANJE — POVEZIVANJE S FIRMOM
 ================================================================
 
-1. Pokreni aiERP.
+1. Pokreni Vault aiERP.
 
 2. Na ekranu "Poveži aplikaciju sa svojom firmom" upiši ŠIFRU
    svoje firme (daje je administrator firme), npr.:   mojafirma
    Firma na vlastitom serveru upisuje punu adresu servera.
 
 3. Klikni "Poveži". Aplikacija pita ulaz (aierp.ba) gdje je
-   instanca firme, provjeri da tamo radi aiERP server, zapamti
+   instanca firme, provjeri da tamo radi Vault aiERP server, zapamti
    adresu i naziv firme i od tada se otvara direktno.
 
    - Veza je uvijek šifrovana (https). Adresa bez https se ne prihvata.

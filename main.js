@@ -6,7 +6,13 @@ const { pathToFileURL } = require('url');
 const { normalizujAdresu, STARI_SERVER } = require('./lib/server-adresa');
 const ulazFirme = require('./lib/ulaz-firme');
 const pauzaFirme = require('./lib/pauza-firme');
-const LOKALNI_EKRANI = pathToFileURL(__dirname + path.sep).href;   // file:///…/aiERP/resources/app.asar/
+const LOKALNI_EKRANI = pathToFileURL(__dirname + path.sep).href;   // file:///…/aiERP/resources/app.asar/ (folder = build.productName)
+
+// R73 (odluka Eldina 06.11.2026): prikazani naziv proizvoda je „Vault aiERP" — naslov prozora, dijalozi, notifikacije.
+// build.productName („aiERP"), build.appId i `name` („stt-hr") OSTAJU: od njih zavise instalacioni folder, ime exe-a,
+// ključ za ažuriranje i userData (%APPDATA%\stt-hr) — promjena bi „izgubila" profil i zapamćenu firmu.
+const NAZIV_PROIZVODA = 'Vault aiERP';
+app.setAboutPanelOptions({ applicationName: NAZIV_PROIZVODA, copyright: '(c) 2026 STT d.o.o.' });
 
 let mainWindow;
 let rucnaProvjera = false; // v4.0.1: true dok korisnik rucno klikne "Provjeri azuriranja" (vidljiv feedback)
@@ -96,7 +102,7 @@ function osvjeziPauzu() {
         if (n.pauzirana == null || trenutniServer() !== server) return staro;   // niko ne zna ili je firma u međuvremenu promijenjena
         zapamtiPauzu(novo);
         if (novo && !staro) javiPauzu('prodaja', { uvijek: true });
-        if (!novo && staro && Notification.isSupported()) new Notification({ title: 'aiERP', body: pauzaFirme.PORUKE.nastavak }).show();
+        if (!novo && staro && Notification.isSupported()) new Notification({ title: NAZIV_PROIZVODA, body: pauzaFirme.PORUKE.nastavak }).show();
         return novo;
     }).catch(() => trenutnaPauza()).finally(() => { provjeraPauzeUToku = null; });
     return provjeraPauzeUToku;
@@ -148,11 +154,11 @@ ipcMain.handle('server:povezi', async (e, unos) => {
         n = normalizujAdresu(unos);
         if (n.greska) return { ok: false, poruka: n.poruka };
     }
-    // /api/ping je javni odziv aiERP servera — potvrda da na toj adresi stvarno radi aiERP
+    // /api/ping je javni odziv Vault aiERP servera — potvrda da na toj adresi stvarno radi Vault aiERP
     try {
         const r = await net.fetch(n.url + '/api/ping', { signal: AbortSignal.timeout(10000), cache: 'no-store' });
         const j = await r.json().catch(() => null);
-        if (!r.ok || !j || j.ok !== true) return { ok: false, poruka: 'Na toj adresi se javlja server, ali nije aiERP.' };
+        if (!r.ok || !j || j.ok !== true) return { ok: false, poruka: `Na toj adresi se javlja server, ali nije ${NAZIV_PROIZVODA}.` };
     } catch {
         return { ok: false, poruka: 'Server na toj adresi se ne javlja. Provjeri adresu i internet.' };
     }
@@ -209,7 +215,7 @@ function setupAutoUpdater() {
                 type: 'info',
                 title: 'Azuriranje',
                 message: 'Koristite najnoviju verziju.',
-                detail: `aiERP v${app.getVersion()}`
+                detail: `${NAZIV_PROIZVODA} v${app.getVersion()}`
             });
         }
     });
@@ -489,7 +495,7 @@ function createWindow() {
         height: 900,
         minWidth: 800,
         minHeight: 600,
-        title: 'aiERP — poslovni sistem',
+        title: `${NAZIV_PROIZVODA} — poslovni sistem`,
         backgroundColor: '#DEECF9',
         webPreferences: {
             nodeIntegration: false,
@@ -591,7 +597,7 @@ function buildMenu() {
                 dialog.showMessageBox(mainWindow, {
                     type: 'info',
                     title: 'Server firme',
-                    message: 'aiERP — server firme',
+                    message: `${NAZIV_PROIZVODA} — server firme`,
                     detail: `${nazivFirme() ? `Firma: ${nazivFirme()}\n` : ''}Server: ${url || 'nije postavljen'}\nVeza: ${url && url.startsWith('https://') ? 'šifrovana (https)' : 'nešifrovana'}\n${trenutnaPauza() ? 'Stanje firme: pauzirana (samo pregled, bez nove prodaje)\n' : ''}Verzija aplikacije: ${app.getVersion()}`
                 });
             }},
