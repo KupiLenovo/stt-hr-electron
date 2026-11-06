@@ -34,7 +34,8 @@
   }
   .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; -webkit-user-select: none; user-select: none; }
   .wordmark { font-size: 26px; font-weight: 700; letter-spacing: -0.04em; }
-  .wordmark .vault { color: #0f172a; margin-right: 0.22em; }
+  .wordmark .vault { color: #3730A3; margin-right: 0.22em; letter-spacing: .01em; }
+  .wordmark .vault svg { display: inline-block; height: .7em; width: .83em; margin-right: -.07em; vertical-align: 0; }
   .wordmark .ai { background: linear-gradient(135deg, #2563EB, #7C3AED); -webkit-background-clip: text; background-clip: text; color: transparent; }
   h1 { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
   .uvod { font-size: 14px; line-height: 1.55; color: #475569; margin-bottom: 22px; }
@@ -72,14 +73,9 @@
 </head>
 <body>
   <main class="card">
-    <div class="brand" aria-label="Vault aiERP">
-      <!-- Znak „Dvije trake" (R73, odluka Eldina 06.11.2026) — isti kao LogoMark u client-v2 -->
-      <svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true">
-        <polygon points="5,8 15.5,8 29,40 19,40" fill="#2563EB"/>
-        <polygon points="43,8 32.5,8 19,40 29,40" fill="#7C3AED"/>
-        <polygon points="24,28.2 29,40 19,40" fill="#3730A3"/>
-      </svg>
-      <span class="wordmark"><span class="vault">Vault</span><span class="ai">ai</span><span style="color:#DC2626">E</span><span style="color:#0D9488">R</span><span style="color:#D97706">P</span></span>
+    <div class="brand" role="img" aria-label="Vault aiERP">
+      <!-- Natpis VAULT aiERP (R73, odluka Eldina 06.11.2026): znak „Dvije trake" je slovo V, „AULT" u tamnom indigu — isto kao Wordmark u client-v2 -->
+      <span class="wordmark" aria-hidden="true"><span class="vault"><svg viewBox="5 8 38 32" aria-hidden="true"><polygon points="5,8 15.5,8 29,40 19,40" fill="#2563EB"/><polygon points="43,8 32.5,8 19,40 29,40" fill="#7C3AED"/><polygon points="24,28.2 29,40 19,40" fill="#3730A3"/></svg>AULT</span><span class="ai">ai</span><span style="color:#DC2626">E</span><span style="color:#0D9488">R</span><span style="color:#D97706">P</span></span>
     </div>
 
     <h1>Poveži aplikaciju sa svojom firmom</h1>
