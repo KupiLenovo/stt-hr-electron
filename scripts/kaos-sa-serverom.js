@@ -16,7 +16,7 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { napraviSimulator } = require('../test/helpers/tring-simulator');
-const { napraviDriver } = require('../test/helpers/sqlite');
+const { BazaSqlite } = require('../lib/sqlite');
 
 const SERVER_REPO = path.resolve(process.env.STT_HR_SERVER || path.join(__dirname, '..', '..', 'stt-hr-server'));
 const BROJ = 10;
@@ -88,7 +88,7 @@ async function main() {
         const { pokreniAplikaciju, sinhronizuj } = require('../test/helpers/kasa');
         const userData = path.join(tmp, 'userData');   // %APPDATA%\stt-hr — Electron ga napravi sam
         fs.mkdirSync(userData, { recursive: true });
-        const app = pokreniAplikaciju(userData, napraviDriver());
+        const app = pokreniAplikaciju(userData, BazaSqlite);
         await app.most.pokretanje(Date.now() + 46000);
         const mrtav = `http://127.0.0.1:${await slobodanPort()}`;   // „nema interneta": na ovom portu niko ne sluša
 
@@ -139,7 +139,7 @@ async function main() {
             stavke: [{ naziv: uidPad, jm: 'kom', cijena_fening: 990, stopa_oznaka: 'E', kolicina_mili: 1000 }], placanja: tijelo.placanja, iznos_fening: 990, payload: tijelo }, 'poslije_stampe');
         provjeri(!!pad.krah && sim.racuniZa(uidPad).length === 1, 'uređaj odštampao, aplikacija pala prije upisa rezultata');
         await sim.ugasi();
-        const app2 = pokreniAplikaciju(userData, napraviDriver());
+        const app2 = pokreniAplikaciju(userData, BazaSqlite);
         const start = await app2.most.pokretanje(Date.now() + 46000);
         provjeri(start.zateceno.nepoznato === 1 && start.nedostupno, 'pri startu: zatečen red → nepoznato, uređaj ne odgovara');
         await sinhronizuj(app2.posKes, baza, { token: kasir });

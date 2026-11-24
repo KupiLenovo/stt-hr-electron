@@ -1,18 +1,18 @@
 // MAL-03 — offline kasa (lib/pos-kes.js): idempotentan red računa i keš kataloga.
-// Baza: better-sqlite3 (CI, Node 20) ili node:sqlite adapter (lokalno, Node 22+) — vidi test/helpers/sqlite.js. BEZ Electrona.
+// Baza: lib/sqlite.js (ugrađeni node:sqlite) — isti omotač koji koristi aplikacija (4.8.0-beta.2). BEZ Electrona.
 'use strict';
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { napraviDriver } = require('./helpers/sqlite');
+const { BazaSqlite } = require('../lib/sqlite');
 const posKes = require('../lib/pos-kes');
 
 let tmpDir;
 before(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pos-kes-test-'));
-    const ok = posKes.init(tmpDir, napraviDriver());
+    const ok = posKes.init(tmpDir, BazaSqlite);
     assert.equal(ok, true, 'pos-kes init mora uspjeti (better-sqlite3 ili node:sqlite)');
 });
 after(() => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* baza možda još drži fajl (Windows) */ } });

@@ -1,6 +1,6 @@
 // MAL-20 / MAL-21 — kasa bez interneta (lib/kasa-offline.js): keš radnje po računaru, offline prijava PIN-om (72 h, samo radnici radnje,
 // brava poslije 5 pogrešnih), samo prodaja i smjena, brisanje keša na odjavu uređaja i promjenu radnje, smjena na disku kase i primopredaja.
-// Baza: better-sqlite3 (CI) ili node:sqlite adapter (lokalno) — test/helpers/sqlite.js. BEZ Electrona.
+// Baza: lib/sqlite.js (ugrađeni node:sqlite, isti kao u aplikaciji). BEZ Electrona.
 'use strict';
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -8,11 +8,11 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { napraviDriver } = require('./helpers/sqlite');
+const { BazaSqlite } = require('../lib/sqlite');
 const posKes = require('../lib/pos-kes');
 const ko = require('../lib/kasa-offline');
 
-const Db = napraviDriver();
+const Db = BazaSqlite;
 let dir;
 const SAT = 3600 * 1000;
 const T0 = Date.parse('2026-10-05T06:00:00.000Z');   // „zadnja veza" — fiksno vrijeme (test ne zavisi od sata)

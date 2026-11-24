@@ -13,7 +13,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { napraviDriver } = require('./helpers/sqlite');
+const { BazaSqlite } = require('../lib/sqlite');
 const { napraviSimulator } = require('./helpers/tring-simulator');
 const { pokreniAplikaciju, sinhronizuj, napraviServer, sjeme, TACKE_PADA } = require('./helpers/kasa');
 
@@ -22,7 +22,7 @@ const FISK = '/stampatifiskalniracun';
 const SPOR_MS = 1200;         // „odgovor poslije 35 s" — drajveru je prag skraćen na 400 ms (TRING_TIMEOUT_MS), bez stvarnog čekanja
 const POSLIJE_45S = () => Date.now() + 46000;   // pokretanje „poslije" 45 s čekanja oporavka (bez stvarnog čekanja)
 
-const Db = napraviDriver();
+const Db = BazaSqlite;
 const folderi = [];
 const simulatori = [];
 const serveri = [];

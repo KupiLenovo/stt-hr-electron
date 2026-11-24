@@ -2,9 +2,9 @@
 
 ## Šta je ovo
 
-Desktop aplikacija **Vault aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, better-sqlite3) i auto-update.
+Desktop aplikacija **Vault aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, ugrađeni `node:sqlite`) i auto-update.
 
-**Verzija:** 4.8.0-beta.1 — probno izdanje PLT-22/PLT-39 (bez admin prava, ažuriranje uz potvrdu, izdanje kroz nacrt i odobrenje; Eldin 24.11.2026). Prije: 4.7.0 (brend Vault aiERP — znak „Dvije trake", natpis VAULT; R73, odluka Eldina 06.11.2026). 4.6.0 nije izdata kao tag — njene izmjene idu u 4.7.0
+**Verzija:** 4.8.0-beta.2 — probno izdanje: Electron 45 (umjesto 28, van podrške), baza kase na ugrađenom `node:sqlite` umjesto better-sqlite3. Prije: 4.8.0-beta.1 — probno izdanje PLT-22/PLT-39 (bez admin prava, ažuriranje uz potvrdu, izdanje kroz nacrt i odobrenje; Eldin 24.11.2026); 4.7.0 (brend Vault aiERP — znak „Dvije trake", natpis VAULT; R73, odluka Eldina 06.11.2026). 4.6.0 nije izdata kao tag — njene izmjene idu u 4.7.0
 
 ## Server firme (v4.2.0) — adresa NIJE zakucana
 
@@ -27,7 +27,8 @@ stt-hr-electron/
 ├── povezivanje.html      # ekran „Poveži aplikaciju sa svojom firmom" (v4.2.0) — MORA biti u build.files
 ├── offline.html          # „Nema veze sa serverom" + promjena adrese
 ├── fiskalni-drajver.js   # Tring TFS na localhost:8085 (lib/fiskalni/tring.js)
-├── lib/pos-kes.js        # offline kasa (better-sqlite3, userData/pos-kes.db)
+├── lib/pos-kes.js        # offline kasa (userData/pos-kes.db)
+├── lib/sqlite.js         # baza kase: tanak omotač nad ugrađenim node:sqlite s API-jem better-sqlite3 (aplikacija i testovi)
 ├── lib/kasa-offline.js   # kasa bez interneta (4.4.0): keš radnje, offline prijava PIN-om, smjena na disku, tijeloSynca
 ├── lib/kasa-offline-ugovor.json  # ugovor mosta posOffline — BAJT-PO-BAJT kopija serverskog (+ .sha256); mijenja se u OBA repoa
 ├── lib/server-adresa.js  # normalizacija adrese servera (čist Node — test/server-adresa.test.js)
@@ -57,8 +58,9 @@ stt-hr-electron/
 
 ## Tehnologije
 
-- **Electron 28** · **electron-builder 24** (NSIS + DMG) · **electron-updater** (GitHub Releases, javni repo)
-  — Electron 28 više nije podržan; plan nadogradnje je u „Izdanje i ažuriranje" ispod.
+- **Electron 45** (45.4.1; Node 24.22, SQLite 3.54) · **electron-builder 26** (NSIS + DMG) · **electron-updater 6.8**
+  (GitHub Releases, javni repo). Minimalni OS: Windows 10 (64-bit), macOS 13. Razvoj i testovi: Node 22+.
+- Electron od 42 ne skida binarni fajl u `postinstall`: skine ga pri prvom `npm start` / `npm run dimni-test` (ili `npx install-electron --no`).
 - **UI nije ovdje** — to je `client-v2` (React + Vite) u server repou; desktop ga učitava sa servera firme.
 
 ## Server (drugi repo)
@@ -73,7 +75,7 @@ stt-hr-electron/
 npm ci
 npm start          :: iz koda
 npm test           :: svi testovi, uklj. test/kaos.test.js (simulator Tring uređaja sa stanjem, padovi aplikacije/TFS-a, offline sync)
-npm run dimni-test [putanja do exe-a]   :: --smoke: prozor, better-sqlite3 i mostovi; izlaz 0 = u redu
+npm run dimni-test [putanja do exe-a]   :: --smoke: prozor, baza kase (node:sqlite) i mostovi; izlaz 0 = u redu
 npm run licence    :: poslije promjene zavisnosti — LICENCE-TRECIH-STRANA.txt (commitovati)
 node scripts/kaos-sa-serverom.js   :: jednokratno, NE CI: 10 offline računa prema PRAVOM stt-hr-serveru (privremena baza)
 
@@ -85,7 +87,7 @@ git tag vX.Y.Z-beta.N && git push origin vX.Y.Z-beta.N   :: probno (beta kanal);
 Lokalna provjera pakovanja: `node scripts/izgradi.js --win --dir -c.npmRebuild=false -c.directories.output=dist-test`
 (od PLT-39 aplikacija ne traži administratora — `requestedExecutionLevel: asInvoker`). Na Linuxu (bez Windowsa):
 `node scripts/izgradi.js --linux --dir -c.directories.output=dist-test` pa `npm run dimni-test dist-test/linux-unpacked/stt-hr`
-(electron-builder prepravi better-sqlite3 za Electron — za `npm test` poslije toga `npm rebuild better-sqlite3`).
+(nema nativnih modula — ništa se ne prepravlja za Electron).
 
 ## Izdanje i ažuriranje (PLT-22, PLT-39 — 24.11.2026)
 
@@ -107,29 +109,33 @@ Lokalna provjera pakovanja: `node scripts/izgradi.js --win --dir -c.npmRebuild=f
   poslati offline red serveru.
 - **Potpis koda — ISKLJUČEN do certifikata**: `scripts/potpis-koda.js` (`POTPIS_UKLJUCEN = false`, `PUBLISHER_NAME = []`); u
   package.json `win.verifyUpdateCodeSignature: false`, bez `publisherName`. Uključenje (koraci u fajlu): ime iz certifikata,
-  tajne za potpis, zastavica true → `publisherName` + `verifyUpdateCodeSignature` + `forceCodeSigning`. Provjera potpisa važi
+  tajne za potpis, zastavica true → `win.signtoolOptions.publisherName` (electron-builder 26; stari `win.publisherName` odbije)
+  + `verifyUpdateCodeSignature` + `forceCodeSigning`. Provjera potpisa važi
   od PRVE verzije izgrađene s uključenim potpisom; prvo izdanje s potpisom pustiti na beta kanal.
 - **Licence**: `LICENCE-TRECIH-STRANA.txt` pored exe-a; Electron/Chromium: `LICENSE.electron.txt` i `LICENSES.chromium.html`
   (electron-builder ih sam stavlja).
 
-### Plan nadogradnje Electrona (28 → podržana verzija) — NIJE urađeno
+### Nadogradnja Electrona 28 → 45 — URAĐENO (4.8.0-beta.2, 24.11.2026)
 
-Podržane su 43, 44 i 45 (24.11.2026; 42 je izašla iz podrške s 45.0.0). Provjereno u kopiji repoa: Electron 45.4.1 iz koda
-prolazi dimni test za prozor, preload u sandboxu i sva četiri contextBridge mosta; pada samo better-sqlite3. Zašto nije urađeno:
-better-sqlite3 12.11.1 ima prebuild za Electron najviše do ABI 146 (Electron 42); za 43 (ABI 148), 44 (149) i 45 (150) nema →
-nativni build iz izvora na svakom runneru (Electron headers s artifacts.electronjs.org, ovdje blokirano), a to se ne može
-provjeriti bez Windowsa. Koraci:
-1. Cilj Electron 44.x ili 45.x, electron-builder 26.x, electron-updater zadnji 6.x. `electron` ≥ 43 traži Node ≥ 22.12 → Node 22 u
-   build.yml i test.yml.
-2. Baza kase — izabrati jedno: (a) better-sqlite3 12.x iz izvora (windows-latest ima VS Build Tools, macOS Xcode; electron-builder
-   sam zove @electron/rebuild); ili (b) **bolje**: ugrađeni `node:sqlite` (Electron 45 nosi Node 24.22, SQLite 3.54 —
-   provjereno) — `lib/pos-kes.js init(userData, DatabaseCtor)` već prima adapter (`test/helpers/sqlite.js`), pa nativni modul
-   i `asarUnpack` za njega otpadaju. Format `pos-kes.db` je isti SQLite fajl — offline red ostaje.
-3. Kod: contextBridge izlaže samo funkcije (nikad cijeli `ipcRenderer` — zabranjeno od Electrona 29) ✓; `protocol.handle` +
-   `net.fetch(req, { bypassCustomProtocolHandlers: true })` (lokalna kasa) postoje od Electrona 25 ✓; preload u sandboxu ✓.
-   Minimalni OS: Windows 10, macOS 12.
-4. Provjera: `npm test`, `npm run dimni-test` spakovane Windows aplikacije, proba lokalne kase bez interneta i Tring uređaja,
-   pa beta tag na jednu kasu prije stabilnog izdanja.
+- **Verzije:** Electron 45.4.1, electron-builder 26.18.1, electron-updater 6.8.12; Node 22 u `build.yml` i `test.yml`
+  (`electron` ≥ 43 traži Node ≥ 22.12). Podržane su 43, 44 i 45 (24.11.2026).
+- **Baza kase — opcija 2(b):** better-sqlite3 je izbačen (za Electron ≥ 43 nema prebuilda) zajedno s `asarUnpack` za njega.
+  `lib/pos-kes.js` otvara bazu kroz `lib/sqlite.js` — tanak omotač nad ugrađenim `node:sqlite` (`DatabaseSync`) s API-jem
+  better-sqlite3 (`pragma`, `exec`, `prepare().run/get/all`, `transaction` sa SAVEPOINT za ugniježđene, `close`; `timeout` 5 s;
+  redovi kao obični objekti; brojevi se vežu kao REAL isto kao ranije). Isti omotač koriste testovi (ranije `test/helpers/sqlite.js`).
+  `test/sqlite.test.js` drži isto ponašanje kao better-sqlite3 (očekivanja provjerena i nad pravim better-sqlite3 11.10).
+- **Stari `pos-kes.db` ostaje:** isti SQLite fajl i WAL. `test/pos-kes-stara-baza.test.js` otvara baze koje je napravio STARI kod
+  (tagovi v4.2.0 i v4.8.0-beta.1) starim better-sqlite3 — `test/podaci/` (+ `napravi-stare-baze.js`), uključujući bazu poslije pada
+  s dijelom reda samo u `-wal` fajlu — i drži da je offline red, fiskalni rezultat, oporavak i smjena na mjestu.
+- **Breaking changes 29–45 provjereni na našem kodu:** contextBridge izlaže samo funkcije (29) ✓; `protocol.handle` +
+  `net.fetch(req, { bypassCustomProtocolHandlers: true })` ✓; preload u sandboxu traži samo `electron` i ne koristi
+  `Buffer`/`setImmediate` (45 je uklonio shimove `events`/`timers`/`url` — `test/helpers/preload.js` ih više ne daje, PRE.2b) ✓;
+  `window.open` za štampu: glavni prozor je u sandboxu pa dijete dijeli proces (45) ✓; `webRequest.onCompleted` bez filtera (35) ✓.
+  electron-builder 26: `publisherName` u `win.signtoolOptions` (`scripts/potpis-koda.js`). Mac: Electron 44 traži macOS 13+;
+  od 42 obavijesti na macOS-u traže potpisanu aplikaciju (nepotpisana ih tiho ne prikaže).
+- **Provjereno ovdje (Linux):** `npm test` na Node 22 i u Node-u Electrona 45; dimni test iz koda i spakovane Linux aplikacije.
+- **NIJE provjereno ovdje — prije stabilnog izdanja:** Windows build i dimni test spakovanog exe-a (build.yml), Tring uređaj, na kasi
+  s beta.2: ažuriranje sa beta.1 (offline red iz beta.1 poslan poslije ažuriranja), lokalna kasa bez interneta, pa beta na jednu kasu.
 
 ## Stilske konvencije
 

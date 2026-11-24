@@ -12,7 +12,7 @@ const ROOT = path.join(__dirname, '..');
 const MAIN = fs.readFileSync(path.join(ROOT, 'main.js'), 'utf8');
 
 const DOBRO = {
-    verzija: '4.7.0', electron: '28.3.3', spakovana: true, nazivProizvoda: 'Vault aiERP',
+    verzija: '4.8.0-beta.2', electron: '45.4.1', spakovana: true, nazivProizvoda: 'Vault aiERP',
     ucitan: true, vidljiv: true, url: 'file:///C:/Program%20Files/aiERP/resources/app.asar/povezivanje.html', naslov: 'Vault aiERP — Povezivanje s firmom',
     kesSpreman: true, kesUpis: true, mostovi: { electronAPI: 'object', fiskalniDrajver: 'object', posOffline: 'object', aierpPostavke: 'object' },
 };
@@ -20,13 +20,14 @@ const DOBRO = {
 test('DIM.1 sve u redu → DIMNI TEST OK (izlaz 0)', () => {
     const r = dimni.ocijeni(DOBRO);
     assert.equal(r.ok, true);
-    assert.match(r.redovi[0], /^DIMNI TEST OK — verzija 4\.7\.0, Electron 28\.3\.3, spakovana aplikacija$/);
+    assert.match(r.redovi[0], /^DIMNI TEST OK — verzija 4\.8\.0-beta\.2, Electron 45\.4\.1, spakovana aplikacija$/);
     assert.ok(r.redovi.slice(1).every((x) => x.startsWith('OK ')));
 });
 
-test('DIM.2 pada kad: nativni modul (better-sqlite3) ne radi, most fali, prozor nije prikazan ili je otišao na mrežu', () => {
+test('DIM.2 pada kad: baza kase (node:sqlite) se ne otvori, most fali, prozor nije prikazan ili je otišao na mrežu', () => {
     for (const [izmjena, trag] of [
-        [{ kesSpreman: false, kesUpis: false, greskaKesa: 'NODE_MODULE_VERSION' }, /better-sqlite3/],
+        [{ kesSpreman: false, kesUpis: false, greskaKesa: 'No such built-in module: node:sqlite' }, /node:sqlite: lokalna baza kase/],
+        [{ kesUpis: false, greskaUpisa: 'database is locked' }, /upis i čitanje — database is locked/],
         [{ mostovi: { ...DOBRO.mostovi, posOffline: 'undefined' } }, /most posOffline/],
         [{ mostovi: null }, /most electronAPI/],
         [{ vidljiv: false }, /prikazan/],

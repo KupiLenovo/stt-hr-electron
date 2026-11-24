@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Preload glavnog prozora radi u SANDBOXU (Electron 20+ zadano; prozor nema `sandbox: false`): `require` ovdje zna samo 'electron'
-// (i events, timers, url) — NE 'fs', 'path' ni lokalne fajlove. Do 4.3.0 je ovdje stajao `require('fs')`: u pravoj aplikaciji to baca
+// (od Electrona 45 ni events/timers/url, ni globalne Buffer/setImmediate/clearImmediate) — NE 'fs', 'path' ni lokalne fajlove. Do 4.3.0 je ovdje stajao `require('fs')`: u pravoj aplikaciji to baca
 // „module not found: fs" i preload stane prije ijednog mosta. Podatke s diska zato daje main (lib/preload-podaci.js) sinhrono.
 // test/preload.test.js pokreće ovaj fajl s istim ograničenim `require`.
 let PODACI = {};
@@ -61,7 +61,7 @@ contextBridge.exposeInMainWorld('fiskalniDrajver', {
     provjeriRezim: () => ipcRenderer.invoke('fiskalni:rezim'),
 });
 
-// C-POS skelet Faza 2: lokalni keš + offline queue most (renderer → main → better-sqlite3).
+// C-POS skelet Faza 2: lokalni keš + offline queue most (renderer → main → node:sqlite, lib/sqlite.js).
 // Dostupan SAMO u desktop appu (browser = undefined → POS radi online-only, bez offline keša).
 // MAL-2 (N-1): most se gradi iz UGOVORA (lib/kasa-offline-ugovor.json, bajt-ista kopija serverskog; imena metoda daje main) —
 // izlaže se samo ono što je u ugovoru. Novo svojstvo/metoda mosta prvo ide u ugovor (oba repoa), pa tek onda ovdje.

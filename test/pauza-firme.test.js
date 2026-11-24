@@ -8,7 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const pauza = require('../lib/pauza-firme');
 const posKes = require('../lib/pos-kes');
-const { napraviDriver } = require('./helpers/sqlite');
+const { BazaSqlite } = require('../lib/sqlite');
 
 const SERVER = 'https://prva.aierp.ba';
 const PORTAL = { url: 'https://aierp.ba', domena: 'aierp.ba' };
@@ -139,7 +139,7 @@ test('PZ6 main.js: nova prodaja i nova smjena idu kroz pauzu; zatvaranje smjene,
 let tmpDir;
 before(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pauza-firme-'));
-    assert.equal(posKes.init(tmpDir, napraviDriver()), true);
+    assert.equal(posKes.init(tmpDir, BazaSqlite), true);
 });
 after(() => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ } });
 
