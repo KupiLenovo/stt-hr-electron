@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { napraviDriver } = require('./helpers/sqlite');
+const { BazaSqlite } = require('../lib/sqlite');
 const { napraviTFS, osnovneXml, racunOkXml } = require('./helpers/tfs');
 
 const OSN = '/osnovneinformacije';
@@ -29,7 +29,7 @@ before(async () => {
     drajver = require('../fiskalni-drajver').napraviDrajver('tring');
     posKes = require('../lib/pos-kes');
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mal04-most-'));
-    assert.equal(posKes.init(tmpDir, napraviDriver()), true, 'pos-kes init');
+    assert.equal(posKes.init(tmpDir, BazaSqlite), true, 'pos-kes init');
     most = require('../lib/fiskalni-most').napraviMost({ drajver, posKes });
 });
 after(() => { tfs.stop(); try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows drži fajl */ } });

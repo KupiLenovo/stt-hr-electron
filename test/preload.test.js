@@ -1,6 +1,6 @@
 // preload.js u sandboxu (Electron 20+ zadano — glavni prozor nema `sandbox: false`): `require` zna samo 'electron'.
 // Preload iz 4.3.0 je na vrhu imao `require('fs')` → u pravoj aplikaciji „module not found: fs", preload stane i prozor ne dobije
-// nijedan most (electronAPI, fiskalniDrajver, posOffline). Provjereno u pravom Electronu 28. Ovaj test pokreće preload s istim
+// nijedan most (electronAPI, fiskalniDrajver, posOffline). Provjereno u pravom Electronu 28 i 45. Ovaj test pokreće preload s istim
 // ograničenim `require` (test/helpers/preload.js) i drži da se to ne vrati.
 'use strict';
 const { test } = require('node:test');
@@ -23,6 +23,11 @@ test('PRE.2 preload ne traži modul koji sandbox nema (samo electron)', () => {
     const kod = fs.readFileSync(PRELOAD, 'utf8').split(/\r?\n/).filter((r) => !r.trim().startsWith('//')).join('\n');
     const trazi = [...kod.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
     assert.deepEqual([...new Set(trazi)], ['electron'], `preload traži: ${trazi.join(', ')}`);
+});
+
+test('PRE.2b preload ne koristi globalne Buffer, setImmediate, clearImmediate (sandbox ih nema od Electrona 45)', () => {
+    const kod = fs.readFileSync(PRELOAD, 'utf8').split(/\r?\n/).filter((r) => !r.trim().startsWith('//')).join('\n');
+    for (const ime of ['Buffer', 'setImmediate', 'clearImmediate']) assert.doesNotMatch(kod, new RegExp(`\\b${ime}\\b`), `preload koristi ${ime}`);
 });
 
 test('PRE.3 protokol Tringa stiže iz maina (verzija + sha kopije), kao do sada', () => {

@@ -268,7 +268,7 @@ ipcMain.handle('fiskalni:dnevni', fiskalniHandler(() => fiskalni.dnevniIzvjestaj
 ipcMain.handle('fiskalni:osnovne', fiskalniHandler(() => fiskalni.osnovneInformacije()));
 
 // ==========================================
-// C-POS skelet Faza 2 — LOKALNI KEŠ + OFFLINE QUEUE (better-sqlite3). Init u createWindow (treba userData).
+// C-POS skelet Faza 2 — LOKALNI KEŠ + OFFLINE QUEUE (ugrađeni node:sqlite, lib/sqlite.js). Init u createWindow (treba userData).
 // Renderer vozi sync (ima JWT); ovdje samo lokalna baza. Greška → {ok:false}, ne bacamo.
 // ==========================================
 const posKes = require('./lib/pos-kes');
@@ -652,7 +652,7 @@ function pokreniDimniTest() {
         const upis = dimni.provjeriUpis(posKes.baza());
         clearTimeout(rok);
         const rez = dimni.ocijeni({ ...stanje, ...u, vidljiv: mainWindow.isVisible(), url: mainWindow.webContents.getURL(), naslov: mainWindow.getTitle(),
-            kesSpreman: posKes.spreman(), greskaKesa: posKes.spreman() ? '' : 'better-sqlite3 se nije učitao (nativni modul za ovu verziju Electrona?)',
+            kesSpreman: posKes.spreman(), greskaKesa: posKes.spreman() ? '' : 'baza kase (node:sqlite) se nije otvorila',
             kesUpis: upis.ok, greskaUpisa: upis.greska, mostovi });
         kraj(rez.ok ? 0 : 1, rez);
     });

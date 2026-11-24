@@ -6,7 +6,7 @@
 // └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 //
 // Kad certifikat stigne:
-//   1. PUBLISHER_NAME = tačno ime izdavača iz certifikata (polje „CN" subjekta, npr. kako ga Windows pokaže u „Digital Signatures").
+//   1. PUBLISHER_NAME = tačno ime izdavača iz certifikata (ide u win.signtoolOptions.publisherName) (polje „CN" subjekta, npr. kako ga Windows pokaže u „Digital Signatures").
 //      electron-builder ga upisuje u app-update.yml; electron-updater tada instalira SAMO instalater potpisan tim imenom.
 //   2. Tajne u GitHub okruženju `izdanje` ili repou (CSC_LINK + CSC_KEY_PASSWORD za .pfx; za certifikat na HSM-u / u oblaku —
 //      a novi OV/EV certifikati su od 2023. samo takvi — vidi uputstvo izdavača certifikata i `win.sign` u electron-builderu).
@@ -29,7 +29,8 @@ function opcijePotpisa({ ukljucen = POTPIS_UKLJUCEN, publisherName = PUBLISHER_N
     if (!imena.length) throw new Error('Potpis je uključen, a PUBLISHER_NAME je prazan — upiši ime izdavača iz certifikata (scripts/potpis-koda.js).');
     return {
         forceCodeSigning: true,
-        win: { publisherName: imena, verifyUpdateCodeSignature: true },
+        // electron-builder 26: ime izdavača je u win.signtoolOptions (ranije win.publisherName — 26.x takvu konfiguraciju odbije)
+        win: { signtoolOptions: { publisherName: imena }, verifyUpdateCodeSignature: true },
     };
 }
 

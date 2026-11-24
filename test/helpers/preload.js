@@ -1,5 +1,7 @@
 // Pokreće preload.js BEZ Electrona, s istim ograničenjima kao sandbox preload u pravoj aplikaciji: `require` zna samo 'electron'
-// (contextBridge, ipcRenderer) i events/timers/url; sve ostalo baca „module not found: <ime>" kao Electron.
+// (contextBridge, ipcRenderer; i 'electron/renderer', 'electron/common'); sve ostalo baca „module not found: <ime>" kao Electron.
+// Od Electrona 45 sandbox nema ni shimove events/timers/url ni globalne Buffer, setImmediate, clearImmediate — ni ovdje ih nema
+// (vm kontekst ima samo ugrađene JS objekte).
 // Vraća mostove koje je preload izložio (exposeInMainWorld) i dnevnik IPC poziva (invoke/send/sendSync).
 'use strict';
 const fs = require('node:fs');
@@ -7,7 +9,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const PRELOAD = path.join(__dirname, '..', '..', 'preload.js');
-const DOZVOLJENI = new Set(['events', 'timers', 'url']);
+const ELECTRON = new Set(['electron', 'electron/renderer', 'electron/common']);
 
 /**
  * @param {object} o
@@ -29,8 +31,7 @@ function pokreniPreload(o = {}) {
         },
     };
     const sandboxRequire = (ime) => {
-        if (ime === 'electron') return electron;
-        if (DOZVOLJENI.has(ime)) return require(ime);
+        if (ELECTRON.has(ime)) return electron;
         throw new Error(`module not found: ${ime}`);
     };
     const kod = fs.readFileSync(PRELOAD, 'utf8');

@@ -161,6 +161,7 @@ test('AZU.8 bez administratorskih prava; productName/appId/name ostaju (userData
     assert.equal(potpis.POTPIS_UKLJUCEN, false, 'uključuje se tek kad stigne certifikat (scripts/potpis-koda.js)');
     assert.equal(PKG.build.win.verifyUpdateCodeSignature, false);
     assert.equal(PKG.build.win.publisherName, undefined, 'publisherName ide samo kroz scripts/potpis-koda.js');
+    assert.equal(PKG.build.win.signtoolOptions, undefined, 'publisherName ide samo kroz scripts/potpis-koda.js');
     assert.deepEqual(potpis.opcijePotpisa(), {});
     assert.deepEqual(dodatakKonfiguraciji(), {});
 });
@@ -169,12 +170,13 @@ test('AZU.9 uključen potpis: obavezno ime izdavača, provjera potpisa ažuriran
     assert.throws(() => potpis.opcijePotpisa({ ukljucen: true, publisherName: [] }), /PUBLISHER_NAME/);
     assert.throws(() => potpis.opcijePotpisa({ ukljucen: true, publisherName: '  ' }), /PUBLISHER_NAME/);
     const o = potpis.opcijePotpisa({ ukljucen: true, publisherName: 'Primjer d.o.o.' });
-    assert.deepEqual(o, { forceCodeSigning: true, win: { publisherName: ['Primjer d.o.o.'], verifyUpdateCodeSignature: true } });
+    // electron-builder 26: publisherName je u win.signtoolOptions (win.publisherName ne prolazi provjeru konfiguracije)
+    assert.deepEqual(o, { forceCodeSigning: true, win: { signtoolOptions: { publisherName: ['Primjer d.o.o.'] }, verifyUpdateCodeSignature: true } });
     // izmjene iz komandne linije se spajaju preko potpisa, ne brišu ga
     const a = argumenti(['--win', '--dir', '-c.directories.output=dist-test', '-c.npmRebuild=false', '-c.win.target=dir']);
     assert.deepEqual(dodatakKonfiguraciji(a.izmjene, o), {
         forceCodeSigning: true, npmRebuild: false, directories: { output: 'dist-test' },
-        win: { publisherName: ['Primjer d.o.o.'], verifyUpdateCodeSignature: true, target: 'dir' },
+        win: { signtoolOptions: { publisherName: ['Primjer d.o.o.'] }, verifyUpdateCodeSignature: true, target: 'dir' },
     });
     assert.throws(() => argumenti(['--publish', 'always']), /platformu/);
     assert.throws(() => argumenti(['--win', '--sta']), /Nepoznat argument/);

@@ -11,13 +11,13 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { napraviDriver } = require('./helpers/sqlite');
+const { BazaSqlite } = require('../lib/sqlite');
 const { napraviSimulator } = require('./helpers/tring-simulator');
 const { pokreniAplikaciju } = require('./helpers/kasa');
 const lk = require('../lib/lokalna-kasa');
 const ko = require('../lib/kasa-offline');
 
-const Db = napraviDriver();
+const Db = BazaSqlite;
 const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const kod = main.split(/\r?\n/).filter((r) => { const t = r.trim(); return t && !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*'); }).join('\n');
 const folderi = [];

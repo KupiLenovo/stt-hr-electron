@@ -1,13 +1,13 @@
 {
   "name": "stt-hr",
-  "version": "4.8.0-beta.1",
+  "version": "4.8.0-beta.2",
   "description": "Vault aiERP — modularni poslovni sistem (ERP)",
   "main": "main.js",
   "author": "Vault aiERP",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/brend.test.js test/azuriranje.test.js test/izdanje.test.js test/licence.test.js test/dimni.test.js test/server-adresa.test.js test/ulaz-firme.test.js test/pauza-firme.test.js test/bez-http.test.js test/sigurnost.test.js test/tring.test.js test/tring-sha.test.js test/fiskalni-drajver.test.js test/pos-kes.test.js test/oporavak.test.js test/pos-kes-mal04.test.js test/fiskalni-most.test.js test/kaos.test.js test/kasa-offline.test.js test/lokalna-kasa.test.js test/preload.test.js test/kasa-offline-ugovor.test.js",
+    "test": "node --test test/brend.test.js test/azuriranje.test.js test/izdanje.test.js test/licence.test.js test/dimni.test.js test/server-adresa.test.js test/ulaz-firme.test.js test/pauza-firme.test.js test/bez-http.test.js test/sigurnost.test.js test/tring.test.js test/tring-sha.test.js test/fiskalni-drajver.test.js test/sqlite.test.js test/pos-kes.test.js test/pos-kes-stara-baza.test.js test/oporavak.test.js test/pos-kes-mal04.test.js test/fiskalni-most.test.js test/kaos.test.js test/kasa-offline.test.js test/lokalna-kasa.test.js test/preload.test.js test/kasa-offline-ugovor.test.js",
     "test:emulator": "node scripts/test-emulator.js",
     "build:win": "node scripts/izgradi.js --win",
     "build:mac": "node scripts/izgradi.js --mac",
@@ -15,8 +15,8 @@
     "dimni-test": "node scripts/dimni-test.js"
   },
   "devDependencies": {
-    "electron": "^28.3.0",
-    "electron-builder": "^24.13.3"
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.1"
   },
   "build": {
     "appId": "ba.stt.business",
@@ -35,8 +35,7 @@
       "lib/**/*"
     ],
     "asarUnpack": [
-      "**/*.node",
-      "**/node_modules/better-sqlite3/**"
+      "**/*.node"
     ],
     "extraFiles": [
       {
@@ -93,7 +92,6 @@
     }
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.12"
   }
 }

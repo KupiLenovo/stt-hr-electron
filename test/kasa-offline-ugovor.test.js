@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pokreniPreload } = require('./helpers/preload');
-const { napraviDriver } = require('./helpers/sqlite');
+const { BazaSqlite } = require('../lib/sqlite');
 const posKes = require('../lib/pos-kes');
 const ko = require('../lib/kasa-offline');
 
@@ -172,7 +172,7 @@ test('UG.10 tijeloSynca ne šalje ništa van ugovora', () => {
 });
 
 // ---- 4. pravi tok na disku kase: smjena → nesinhronizovaneSmjene → tijelo; dodajURed → nesinhronizovani ----
-const Db = napraviDriver();
+const Db = BazaSqlite;
 let dir;
 before(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kasa-ugovor-'));
