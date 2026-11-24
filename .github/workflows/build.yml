@@ -1,16 +1,49 @@
 name: Build & Release
 
+# PLT-22: tag v* pravi SAMO NACRT izdanja (draft). Nacrt ne vidi nijedna instalirana aplikacija (electron-updater čita samo
+# objavljena izdanja). Objava je poseban posao `objavi` u GitHub okruženju `izdanje`, koje traži ručno odobrenje (Eldin).
+# Do 4.7.0 je `publish-release` objavljivao odmah poslije builda — instalirane kase su ga vidjele bez ikakve provjere.
+#
+# Redoslijed: provjera taga + testovi → Windows i Mac instalacija u nacrt + dimni test spakovane aplikacije → (odobrenje) → objava.
+# Tag vX.Y.Z-beta.N = probno izdanje: objavljuje se kao pre-release i vide ga samo računari na beta kanalu.
+# test/izdanje.test.js drži da ovaj fajl ne objavljuje bez odobrenja.
+
 on:
   push:
     tags:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: izdanje-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  provjera:
+    runs-on: ubuntu-latest
+    outputs:
+      verzija: ${{ steps.tag.outputs.verzija }}
+      beta: ${{ steps.tag.outputs.beta }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Tag mora biti v<verzija iz package.json>
+        id: tag
+        run: node scripts/izdanje.js "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+      - name: Instaliraj prod ovisnosti (better-sqlite3, bez Electrona)
+        run: npm ci --omit=dev
+      - name: Testovi
+        run: npm test
+
   build-windows:
+    needs: provjera
     runs-on: windows-latest
+    permissions:
+      contents: write   # samo za upload u NACRT izdanja (releaseType draft)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,13 +51,21 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Build Windows installer
+      - name: Fajl licenci trećih strana usklađen s package-lock.json
+        run: node scripts/licence-trecih-strana.js --provjeri
+      - name: Windows instalacija → nacrt izdanja
         run: npm run build:win -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: 'true'
+      - name: Dimni test spakovane aplikacije (--smoke)
+        run: node scripts/dimni-test.js dist/win-unpacked/aiERP.exe
 
   build-mac:
+    needs: provjera
     runs-on: macos-latest
+    permissions:
+      contents: write   # samo za upload u NACRT izdanja (releaseType draft)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,33 +73,48 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Build macOS DMG
+      - name: Fajl licenci trećih strana usklađen s package-lock.json
+        run: node scripts/licence-trecih-strana.js --provjeri
+      - name: macOS DMG → nacrt izdanja
         run: npm run build:mac -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: 'true'
+      - name: Dimni test spakovane aplikacije (--smoke)
+        run: node scripts/dimni-test.js dist/mac-arm64/aiERP.app/Contents/MacOS/aiERP
 
-  publish-release:
-    needs: [build-windows, build-mac]
+  objavi:
+    # JEDINI posao koji objavljuje. Okruženje `izdanje` (Settings → Environments) traži odobrenje — dok ga Eldin ne odobri,
+    # izdanje ostaje nacrt. Bez okruženja s pravilom odobrenja ovaj posao bi išao sam: okruženje se podešava PRIJE prvog taga.
+    needs: [provjera, build-windows, build-mac]
     runs-on: ubuntu-latest
+    environment: izdanje
+    permissions:
+      contents: write
     steps:
-      - name: Publish draft release
+      - name: Objavi nacrt (beta → pre-release)
         uses: actions/github-script@v7
+        env:
+          BETA: ${{ needs.provjera.outputs.beta }}
         with:
           script: |
             const tag = context.ref.replace('refs/tags/', '');
-            const releases = await github.rest.repos.listReleases({
+            const beta = process.env.BETA === 'true';
+            const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
+              per_page: 100,
             });
-            const release = releases.data.find(r => r.tag_name === tag && r.draft);
-            if (release) {
-              await github.rest.repos.updateRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: release.id,
-                draft: false,
-              });
-              console.log('Published release:', tag);
-            } else {
-              console.log('No draft release found for', tag);
+            const release = releases.find(r => r.tag_name === tag && r.draft);
+            if (!release) {
+              core.setFailed(`Nema nacrta izdanja za ${tag} — ništa nije objavljeno.`);
+              return;
             }
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              draft: false,
+              prerelease: beta,
+            });
+            core.info(`Objavljeno izdanje ${tag}${beta ? ' (beta, pre-release)' : ''}.`);
