@@ -15,7 +15,6 @@ const NAZIV_PROIZVODA = 'Vault aiERP';
 app.setAboutPanelOptions({ applicationName: NAZIV_PROIZVODA, copyright: '(c) 2026 STT d.o.o.' });
 
 let mainWindow;
-let rucnaProvjera = false; // v4.0.1: true dok korisnik rucno klikne "Provjeri azuriranja" (vidljiv feedback)
 
 // Razvoj/test: odvojen profil (npr. „prvo pokretanje" bez diranja pravog). Mora prije svega ostalog.
 if (process.env.AIERP_USER_DATA) app.setPath('userData', process.env.AIERP_USER_DATA);
@@ -48,8 +47,10 @@ function snimljenaAdresa() {
 // R68 (PLT-45): `portal` (ručno upisan u konfiguraciju, npr. probni portal) preživljava svako snimanje i „Promijeni firmu"
 function snimiAdresu(url, dodatno = {}) {
     fs.mkdirSync(app.getPath('userData'), { recursive: true });
-    const { portal } = konfiguracija();
-    fs.writeFileSync(KONFIG(), JSON.stringify({ url, snimljeno: new Date().toISOString(), verzija: app.getVersion(), ...(portal ? { portal } : {}), ...dodatno }, null, 2));
+    // PLT-22: i kanal ažuriranja (beta) je postavka računara, ne firme — ostaje i kad se firma promijeni
+    const { portal, kanal_azuriranja } = konfiguracija();
+    fs.writeFileSync(KONFIG(), JSON.stringify({ url, snimljeno: new Date().toISOString(), verzija: app.getVersion(), ...(portal ? { portal } : {}),
+        ...(kanal_azuriranja ? { kanal_azuriranja } : {}), ...dodatno }, null, 2));
 }
 // Naziv firme iz ulaza (samo za prikaz) — važi samo dok je adresa ista (STT_SERVER_URL u razvoju ga ne prikazuje)
 function nazivFirme() {
@@ -176,90 +177,61 @@ ipcMain.handle('server:zaboravi', (e) => {
 });
 
 // ==========================================
-// AUTO-UPDATER
+// AUTO-UPDATER — PLT-39: ništa bez pristanka korisnika; PLT-22: beta kanal. Logika u lib/azuriranje.js.
 // ==========================================
+const azuriranjeLib = require('./lib/azuriranje');
+let azuriranje = null;
+function kanalAzuriranja() {
+    return azuriranjeLib.kanalIz({ env: process.env, konfig: konfiguracija() });
+}
 function setupAutoUpdater() {
     // v4.0.0: repo je PUBLIC → auto-update ne treba token (rijesen stari hardkodirani
     // PAT iz v3.7.0 audita). Stari token revoke-ovati na github.com/settings/tokens.
+    // Nacrt izdanja (build.yml) updater ne vidi — vidi tek izdanje objavljeno uz odobrenje (okruženje `izdanje`).
     autoUpdater.setFeedURL({
         provider: 'github',
         owner: 'KupiLenovo',
         repo: 'stt-hr-electron'
     });
-
-    autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
-    autoUpdater.logger = null; // tiho u produkciji
-
-    autoUpdater.on('update-available', (info) => {
-        if (mainWindow) mainWindow.webContents.send('update-available', info);
-        if (rucnaProvjera) {
-            dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'Azuriranje',
-                message: `Dostupno je novo azuriranje (v${info.version}).`,
-                detail: 'Preuzimam u pozadini — javicu kad bude spremno za instalaciju.'
-            });
-        }
+    azuriranje = azuriranjeLib.napraviAzuriranje({
+        autoUpdater, dialog,
+        prozor: () => mainWindow,
+        verzijaAplikacije: () => app.getVersion(),
+        nazivProizvoda: NAZIV_PROIZVODA,
+        kanal: kanalAzuriranja(),
+        posalji: (kanal, podaci) => { if (mainWindow) mainWindow.webContents.send(kanal, podaci); },
+        dev: process.argv.includes('--dev'),
     });
-
-    autoUpdater.on('download-progress', (progress) => {
-        if (mainWindow) mainWindow.webContents.send('update-progress', progress);
-    });
-
-    // v4.0.1: vidljiv feedback kad je korisnik RUCNO provjerio i nema novog azuriranja
-    autoUpdater.on('update-not-available', () => {
-        if (rucnaProvjera) {
-            rucnaProvjera = false;
-            dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'Azuriranje',
-                message: 'Koristite najnoviju verziju.',
-                detail: `${NAZIV_PROIZVODA} v${app.getVersion()}`
-            });
-        }
-    });
-
-    autoUpdater.on('update-downloaded', (info) => {
-        if (mainWindow) mainWindow.webContents.send('update-downloaded', info);
-        // Restart ponuda samo na rucnu provjeru; auto-download tiho instalira na izlazu.
-        if (rucnaProvjera) {
-            rucnaProvjera = false;
-            dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'Azuriranje spremno',
-                message: `Azuriranje (v${info.version}) je preuzeto.`,
-                detail: 'Restartujte aplikaciju da primijenite.',
-                buttons: ['Restartuj sad', 'Kasnije'],
-                defaultId: 0,
-                cancelId: 1
-            }).then((r) => { if (r.response === 0) autoUpdater.quitAndInstall(); });
-        }
-    });
-
-    autoUpdater.on('error', (err) => {
-        if (process.argv.includes('--dev')) console.error('Updater error:', err);
-        if (rucnaProvjera) {
-            rucnaProvjera = false;
-            dialog.showMessageBox(mainWindow, {
-                type: 'error',
-                title: 'Azuriranje',
-                message: 'Nije moguce provjeriti azuriranja.',
-                detail: 'Provjeri internet konekciju pa pokusaj ponovo.'
-            });
-        }
-    });
-
-    // Auto-provjera 3s nakon pokretanja (tiha — daje app vremena da se ucita)
-    setTimeout(() => {
-        rucnaProvjera = false;
-        autoUpdater.checkForUpdates().catch(() => {});
-    }, 3000);
+    // Auto-provjera 3s nakon pokretanja (tiha — daje app vremena da se ucita); nađena verzija → pitanje korisniku
+    setTimeout(() => azuriranje.provjeri(), 3000);
 }
 
-ipcMain.on('install-update', () => {
-    autoUpdater.quitAndInstall();
-});
+// PLT-22: beta kanal je postavka OVOG računara (aierp-server.json → kanal_azuriranja), uz potvrdu. Povratak na stabilni kanal ne
+// vraća stariju verziju (allowDowngrade = false) — računar ostaje na beta verziji dok ne izađe novije objavljeno izdanje.
+async function promijeniKanal(stavka) {
+    const uBeta = !!stavka.checked;   // kvačica je već prebačena
+    const r = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        title: 'Kanal ažuriranja',
+        message: uBeta ? 'Primati probne (beta) verzije na ovom računaru?' : 'Vratiti ovaj računar na stabilne verzije?',
+        detail: uBeta
+            ? 'Probne verzije stižu prije objavljenih i služe za provjeru prije svih kasa. Za kasu u svakodnevnom radu ostavi stabilne verzije.'
+            : 'Računar ostaje na verziji koju sada ima i prelazi na prvo novije objavljeno izdanje.',
+        buttons: ['Da', 'Odustani'],
+        defaultId: 1,
+        cancelId: 1,
+    }).catch(() => ({ response: 1 }));
+    if (r.response !== 0) { stavka.checked = !uBeta; return; }
+    try {
+        const { kanal_azuriranja: _staro, ...ostalo } = konfiguracija();
+        fs.mkdirSync(app.getPath('userData'), { recursive: true });
+        fs.writeFileSync(KONFIG(), JSON.stringify({ ...ostalo, ...(uBeta ? { kanal_azuriranja: azuriranjeLib.KANALI.BETA } : {}) }, null, 2));
+    } catch { stavka.checked = !uBeta; return; }
+    if (azuriranje) { azuriranje.promijeniKanal(kanalAzuriranja()); azuriranje.rucnaProvjera(); }
+}
+
+// Web aplikacija (dugme „Instaliraj") ne instalira direktno — ide kroz ista pitanja u glavnom procesu.
+ipcMain.on('install-update', () => { if (azuriranje) azuriranje.zahtjevInstalacije(); });
 
 // Preload je u sandboxu (ne može čitati fajlove) — podatke s diska mu daje main, jednom, sinhrono (lib/preload-podaci.js).
 const { podaciZaPreload } = require('./lib/preload-podaci');
@@ -583,12 +555,11 @@ function buildMenu() {
         { label: 'Aplikacija', submenu: [
             { label: 'Osvjezi', accelerator: 'F5', click: () => { if (mainWindow) mainWindow.reload(); } },
             { type: 'separator' },
-            { label: 'Provjeri azuriranja', click: () => {
-                // v4.0.1: rucna provjera daje vidljiv rezultat (azurni / dostupno / spremno / greska)
-                // preko autoUpdater evenata (update-not-available / available / downloaded / error).
-                rucnaProvjera = true;
-                autoUpdater.checkForUpdates().catch(() => {}); // gresku pokazuje 'error' event
+            { label: 'Provjeri ažuriranja', click: () => {
+                // v4.0.1: rucna provjera daje vidljiv rezultat (azurni / dostupno / greska); nova verzija → pitanje (PLT-39)
+                if (azuriranje) azuriranje.rucnaProvjera();
             }},
+            { label: 'Probne verzije (beta)', type: 'checkbox', checked: kanalAzuriranja() === azuriranjeLib.KANALI.BETA, click: (stavka) => promijeniKanal(stavka) },
             { type: 'separator' },
             { label: 'DevTools', accelerator: 'F12', click: () => { if (mainWindow) mainWindow.webContents.toggleDevTools(); } },
             { type: 'separator' },
@@ -598,7 +569,7 @@ function buildMenu() {
                     type: 'info',
                     title: 'Server firme',
                     message: `${NAZIV_PROIZVODA} — server firme`,
-                    detail: `${nazivFirme() ? `Firma: ${nazivFirme()}\n` : ''}Server: ${url || 'nije postavljen'}\nVeza: ${url && url.startsWith('https://') ? 'šifrovana (https)' : 'nešifrovana'}\n${trenutnaPauza() ? 'Stanje firme: pauzirana (samo pregled, bez nove prodaje)\n' : ''}Verzija aplikacije: ${app.getVersion()}`
+                    detail: `${nazivFirme() ? `Firma: ${nazivFirme()}\n` : ''}Server: ${url || 'nije postavljen'}\nVeza: ${url && url.startsWith('https://') ? 'šifrovana (https)' : 'nešifrovana'}\n${trenutnaPauza() ? 'Stanje firme: pauzirana (samo pregled, bez nove prodaje)\n' : ''}Verzija aplikacije: ${app.getVersion()}${kanalAzuriranja() === azuriranjeLib.KANALI.BETA ? ' (beta kanal)' : ''}`
                 });
             }},
             { label: 'Promijeni firmu…', click: async () => {
