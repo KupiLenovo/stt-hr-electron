@@ -32,7 +32,15 @@ stt-hr-electron/
 ├── lib/kasa-offline-ugovor.json  # ugovor mosta posOffline — BAJT-PO-BAJT kopija serverskog (+ .sha256); mijenja se u OBA repoa
 ├── lib/server-adresa.js  # normalizacija adrese servera (čist Node — test/server-adresa.test.js)
 ├── lib/pauza-firme.js    # pauzirana firma: izvori stanja i blokade nove prodaje (čist Node — test/pauza-firme.test.js)
+├── lib/azuriranje.js     # ažuriranje SAMO uz potvrdu korisnika + beta kanal (PLT-39, PLT-22; čist Node — test/azuriranje.test.js)
+├── lib/dimni-test.js     # `--smoke`: ocjena dimnog testa spakovane aplikacije (test/dimni.test.js)
 ├── installer.nsh         # NSIS (ASCII!) — od 4.2.0 samo briše stara firewall pravila
+├── LICENCE-TRECIH-STRANA.txt  # licence produkcijskih npm paketa → pored exe-a (build.extraFiles); pravi `npm run licence`
+├── scripts/izgradi.js    # jedini ulaz za build:win/build:mac (package.json build + opcije potpisa + -c.ključ=vrijednost)
+├── scripts/potpis-koda.js     # potpis koda i provjera potpisa ažuriranja — PRIPREMLJENO, ISKLJUČENO (POTPIS_UKLJUCEN)
+├── scripts/dimni-test.js # pokreće aplikaciju s --smoke (iz koda ili spakovanu) i provjerava izlaz 0
+├── scripts/izdanje.js    # build.yml: tag mora biti v<verzija>, beta samo X.Y.Z-beta.N
+├── scripts/licence-trecih-strana.js  # pravi/provjerava LICENCE-TRECIH-STRANA.txt iz package-lock.json + node_modules
 ├── scripts/ikone.js      # build/icon.svg → icon_*.png, icon.png, icon.ico (Playwright, ručno; PNG/ICO se commitaju)
 └── build/                # ikone za electron-builder (ne ide u app.asar)
 ```
@@ -50,6 +58,7 @@ stt-hr-electron/
 ## Tehnologije
 
 - **Electron 28** · **electron-builder 24** (NSIS + DMG) · **electron-updater** (GitHub Releases, javni repo)
+  — Electron 28 više nije podržan; plan nadogradnje je u „Izdanje i ažuriranje" ispod.
 - **UI nije ovdje** — to je `client-v2` (React + Vite) u server repou; desktop ga učitava sa servera firme.
 
 ## Server (drugi repo)
@@ -64,14 +73,63 @@ stt-hr-electron/
 npm ci
 npm start          :: iz koda
 npm test           :: svi testovi, uklj. test/kaos.test.js (simulator Tring uređaja sa stanjem, padovi aplikacije/TFS-a, offline sync)
+npm run dimni-test [putanja do exe-a]   :: --smoke: prozor, better-sqlite3 i mostovi; izlaz 0 = u redu
+npm run licence    :: poslije promjene zavisnosti — LICENCE-TRECIH-STRANA.txt (commitovati)
 node scripts/kaos-sa-serverom.js   :: jednokratno, NE CI: 10 offline računa prema PRAVOM stt-hr-serveru (privremena baza)
 
-:: izdanje = tag; GitHub Actions pravi Windows + Mac instalaciju i OBJAVI release
-:: (instalirane aplikacije ga odmah vide) — zato tag tek kad je sve provjereno
-git tag vX.Y.Z && git push origin vX.Y.Z
+:: izdanje = tag → NACRT izdanja; objava tek uz Eldinovo odobrenje (okruženje `izdanje`)
+git tag vX.Y.Z && git push origin vX.Y.Z          :: stabilno izdanje
+git tag vX.Y.Z-beta.N && git push origin vX.Y.Z-beta.N   :: probno (beta kanal); verzija u package.json mora biti ista
 ```
 
-Lokalna provjera pakovanja bez UAC-a: `npx electron-builder --win --dir -c.npmRebuild=false -c.win.requestedExecutionLevel=asInvoker -c.directories.output=dist-test` (pravi build traži administratora — `requestedExecutionLevel: requireAdministrator`).
+Lokalna provjera pakovanja: `node scripts/izgradi.js --win --dir -c.npmRebuild=false -c.directories.output=dist-test`
+(od PLT-39 aplikacija ne traži administratora — `requestedExecutionLevel: asInvoker`). Na Linuxu (bez Windowsa):
+`node scripts/izgradi.js --linux --dir -c.directories.output=dist-test` pa `npm run dimni-test dist-test/linux-unpacked/stt-hr`
+(electron-builder prepravi better-sqlite3 za Electron — za `npm test` poslije toga `npm rebuild better-sqlite3`).
+
+## Izdanje i ažuriranje (PLT-22, PLT-39 — 24.11.2026)
+
+- **build.yml**: tag `v*` → `provjera` (tag = `v<verzija iz package.json>`, `npm test`) → `build-windows` / `build-mac` pune
+  **nacrt** (`publish.releaseType: draft` + `EP_DRAFT`), provjere fajl licenci i puste **dimni test** spakovane aplikacije →
+  `objavi` u GitHub okruženju **`izdanje`** (ručno odobrenje) objavi nacrt; beta tag kao pre-release. Nacrt ne vidi nijedna
+  instalirana aplikacija. `test/izdanje.test.js` drži da nijedan drugi posao ne objavljuje.
+- **Okruženje `izdanje` mora postojati PRIJE prvog taga** (Settings → Environments → `izdanje`: Required reviewers = Eldin,
+  „Prevent self-review" isključen ako Eldin i taguje, Deployment branches and tags → samo tagovi `v*`). Bez pravila odobrenja
+  posao `objavi` bi išao sam.
+- **Ažuriranje** (`lib/azuriranje.js`): `autoDownload = false`, `autoInstallOnAppQuit = false`. Nova verzija → „Nova verzija je
+  dostupna — preuzmi i instaliraj?" (zadano „Ne sada"); preuzeto → „Instaliraj sada" / „Pri zatvaranju aplikacije" (zadano).
+  `install-update` iz web aplikacije ide kroz ista pitanja. U main.js nema `quitAndInstall` (test AZU.7).
+- **Beta kanal**: postavka računara `kanal_azuriranja: "beta"` u `aierp-server.json` (meni Aplikacija → Probne verzije (beta),
+  uz potvrdu; za probu `AIERP_KANAL_AZURIRANJA`). Beta računar vidi i stabilna izdanja; na starije se ne vraća (allowDowngrade false).
+- **Bez administratora** (`asInvoker`, ranije `requireAdministrator`). Instalacija za sve korisnike (Program Files) i dalje traži
+  UAC — to radi instalater, ne aplikacija. Pažnja: ako je neko do 4.7.0 pokretao aplikaciju podizanjem prava na DRUGI (admin)
+  nalog, njen profil (`%APPDATA%\stt-hr` tog naloga, offline red) ostaje kod tog naloga — prije ažuriranja takvog računara
+  poslati offline red serveru.
+- **Potpis koda — ISKLJUČEN do certifikata**: `scripts/potpis-koda.js` (`POTPIS_UKLJUCEN = false`, `PUBLISHER_NAME = []`); u
+  package.json `win.verifyUpdateCodeSignature: false`, bez `publisherName`. Uključenje (koraci u fajlu): ime iz certifikata,
+  tajne za potpis, zastavica true → `publisherName` + `verifyUpdateCodeSignature` + `forceCodeSigning`. Provjera potpisa važi
+  od PRVE verzije izgrađene s uključenim potpisom; prvo izdanje s potpisom pustiti na beta kanal.
+- **Licence**: `LICENCE-TRECIH-STRANA.txt` pored exe-a; Electron/Chromium: `LICENSE.electron.txt` i `LICENSES.chromium.html`
+  (electron-builder ih sam stavlja).
+
+### Plan nadogradnje Electrona (28 → podržana verzija) — NIJE urađeno
+
+Podržane su 43, 44 i 45 (24.11.2026; 42 je izašla iz podrške s 45.0.0). Provjereno u kopiji repoa: Electron 45.4.1 iz koda
+prolazi dimni test za prozor, preload u sandboxu i sva četiri contextBridge mosta; pada samo better-sqlite3. Zašto nije urađeno:
+better-sqlite3 12.11.1 ima prebuild za Electron najviše do ABI 146 (Electron 42); za 43 (ABI 148), 44 (149) i 45 (150) nema →
+nativni build iz izvora na svakom runneru (Electron headers s artifacts.electronjs.org, ovdje blokirano), a to se ne može
+provjeriti bez Windowsa. Koraci:
+1. Cilj Electron 44.x ili 45.x, electron-builder 26.x, electron-updater zadnji 6.x. `electron` ≥ 43 traži Node ≥ 22.12 → Node 22 u
+   build.yml i test.yml.
+2. Baza kase — izabrati jedno: (a) better-sqlite3 12.x iz izvora (windows-latest ima VS Build Tools, macOS Xcode; electron-builder
+   sam zove @electron/rebuild); ili (b) **bolje**: ugrađeni `node:sqlite` (Electron 45 nosi Node 24.22, SQLite 3.54 —
+   provjereno) — `lib/pos-kes.js init(userData, DatabaseCtor)` već prima adapter (`test/helpers/sqlite.js`), pa nativni modul
+   i `asarUnpack` za njega otpadaju. Format `pos-kes.db` je isti SQLite fajl — offline red ostaje.
+3. Kod: contextBridge izlaže samo funkcije (nikad cijeli `ipcRenderer` — zabranjeno od Electrona 29) ✓; `protocol.handle` +
+   `net.fetch(req, { bypassCustomProtocolHandlers: true })` (lokalna kasa) postoje od Electrona 25 ✓; preload u sandboxu ✓.
+   Minimalni OS: Windows 10, macOS 12.
+4. Provjera: `npm test`, `npm run dimni-test` spakovane Windows aplikacije, proba lokalne kase bez interneta i Tring uređaja,
+   pa beta tag na jednu kasu prije stabilnog izdanja.
 
 ## Stilske konvencije
 

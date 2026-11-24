@@ -18,7 +18,8 @@ interneta i pošalju se kad se veza vrati).
 1. Preuzmi instalaciju (fajl "Vault-aiERP-Setup-X.Y.Z.exe"):
    https://github.com/KupiLenovo/stt-hr-electron/releases/latest
 
-2. Pokreni je i potvrdi administratorska prava.
+2. Pokreni je. Administratorska prava traži samo instalacija za sve
+   korisnike računara; sama aplikacija radi bez njih.
 
 3. Prati korake instalacije. Na desktopu se pojavi prečica "Vault aiERP".
 
@@ -60,9 +61,12 @@ interneta i pošalju se kad se veza vrati).
   4) AŽURIRANJE
 ================================================================
 
-Aplikacija se ažurira sama: nova verzija se preuzme u pozadini i
-instalira pri sljedećem zatvaranju aplikacije.
+Aplikacija pita prije svakog ažuriranja: "Nova verzija je dostupna —
+preuzmi i instaliraj?". Kad se preuzme, bira se "Instaliraj sada" ili
+"Pri zatvaranju aplikacije" (usred naplate izaberi ovo drugo).
 Ručno: Aplikacija -> Provjeri ažuriranja.
+Probne verzije (samo za računar na kome se provjerava nova verzija):
+Aplikacija -> Probne verzije (beta).
 
 ================================================================
   VERZIJA 4.3.0 — FISKALNA KASA
@@ -122,8 +126,10 @@ veza kiosk uređaja se prenesu — niko ništa ne upisuje.
 
   Izdanje: podigni verziju u package.json, pa
     git tag vX.Y.Z && git push origin vX.Y.Z
-  GitHub Actions napravi Windows i Mac instalaciju i objavi release;
-  instalirane aplikacije ga vide pri sljedećoj provjeri ažuriranja.
+  (probno: verzija X.Y.Z-beta.N i tag vX.Y.Z-beta.N).
+  GitHub Actions napravi Windows i Mac instalaciju kao NACRT izdanja i
+  pusti dimni test. Objava ide tek kad Eldin odobri posao "objavi"
+  (okruženje "izdanje"); tek tada je instalirane aplikacije vide.
 
 ================================================================
   KONTAKT ZA PODRŠKU
