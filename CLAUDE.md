@@ -4,7 +4,7 @@
 
 Desktop aplikacija **Vault aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, better-sqlite3) i auto-update.
 
-**Verzija:** 4.7.0 (brend Vault aiERP — znak „Dvije trake", natpis VAULT; R73, odluka Eldina 06.11.2026). 4.6.0 nije izdata kao tag — njene izmjene idu u 4.7.0
+**Verzija:** 4.8.0-beta.1 — probno izdanje PLT-22/PLT-39 (bez admin prava, ažuriranje uz potvrdu, izdanje kroz nacrt i odobrenje; Eldin 24.11.2026). Prije: 4.7.0 (brend Vault aiERP — znak „Dvije trake", natpis VAULT; R73, odluka Eldina 06.11.2026). 4.6.0 nije izdata kao tag — njene izmjene idu u 4.7.0
 
 ## Server firme (v4.2.0) — adresa NIJE zakucana
 
