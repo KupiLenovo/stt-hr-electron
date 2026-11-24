@@ -7,10 +7,11 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/brend.test.js test/azuriranje.test.js test/server-adresa.test.js test/ulaz-firme.test.js test/pauza-firme.test.js test/bez-http.test.js test/sigurnost.test.js test/tring.test.js test/tring-sha.test.js test/fiskalni-drajver.test.js test/pos-kes.test.js test/oporavak.test.js test/pos-kes-mal04.test.js test/fiskalni-most.test.js test/kaos.test.js test/kasa-offline.test.js test/lokalna-kasa.test.js test/preload.test.js test/kasa-offline-ugovor.test.js",
+    "test": "node --test test/brend.test.js test/azuriranje.test.js test/dimni.test.js test/server-adresa.test.js test/ulaz-firme.test.js test/pauza-firme.test.js test/bez-http.test.js test/sigurnost.test.js test/tring.test.js test/tring-sha.test.js test/fiskalni-drajver.test.js test/pos-kes.test.js test/oporavak.test.js test/pos-kes-mal04.test.js test/fiskalni-most.test.js test/kaos.test.js test/kasa-offline.test.js test/lokalna-kasa.test.js test/preload.test.js test/kasa-offline-ugovor.test.js",
     "test:emulator": "node scripts/test-emulator.js",
     "build:win": "node scripts/izgradi.js --win",
-    "build:mac": "node scripts/izgradi.js --mac"
+    "build:mac": "node scripts/izgradi.js --mac",
+    "dimni-test": "node scripts/dimni-test.js"
   },
   "devDependencies": {
     "electron": "^28.3.0",

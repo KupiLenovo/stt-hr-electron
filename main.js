@@ -18,6 +18,12 @@ let mainWindow;
 
 // Razvoj/test: odvojen profil (npr. „prvo pokretanje" bez diranja pravog). Mora prije svega ostalog.
 if (process.env.AIERP_USER_DATA) app.setPath('userData', process.env.AIERP_USER_DATA);
+// PLT-22: dimni test spakovane aplikacije (`--smoke`, lib/dimni-test.js) — UVIJEK na novom privremenom profilu i bez servera firme:
+// pravi profil kase (zapamćena firma, offline red, pos-kes.db) se ne smije ni otvoriti. scripts/dimni-test.js daje folder i briše ga
+// poslije izlaza (Chromium u profil piše i dok se gasi); bez njega ide novi folder u sistemski temp.
+const DIMNI_TEST = process.argv.includes('--smoke');
+const DIMNI_PROFIL = DIMNI_TEST ? (process.env.AIERP_DIMNI_PROFIL || fs.mkdtempSync(path.join(require('os').tmpdir(), 'vault-aierp-dimni-'))) : null;
+if (DIMNI_TEST) { app.setPath('userData', DIMNI_PROFIL); delete process.env.STT_SERVER_URL; }
 
 // ==========================================
 // SERVER FIRME (v4.2.0)
@@ -610,6 +616,7 @@ app.whenReady().then(() => {
         catch (e) { if (process.argv.includes('--dev')) console.error('prvi start:', e.message); }
     }
     createWindow();
+    if (DIMNI_TEST) return pokreniDimniTest();   // bez ažuriranja i bez provjere pauze — samo prozor, baza kase i mostovi
     setupAutoUpdater();
     setInterval(() => { osvjeziPauzu(); }, 5 * 60 * 1000);   // F8: pauza se vidi i dok je ekran otvoren (bez novog učitavanja)
 
@@ -617,6 +624,39 @@ app.whenReady().then(() => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
 });
+
+// PLT-22: dimni test — čeka učitavanje i prikaz glavnog prozora, provjeri bazu kase i mostove, ispiše rezultat i ugasi aplikaciju.
+function pokreniDimniTest() {
+    const dimni = require('./lib/dimni-test');
+    const stanje = { verzija: app.getVersion(), electron: process.versions.electron, spakovana: app.isPackaged, nazivProizvoda: NAZIV_PROIZVODA };
+    let gotovo = false;
+    const kraj = (kod, rez) => {
+        if (gotovo) return;
+        gotovo = true;
+        for (const r of rez.redovi) console.log(r);
+        // i u fajl profila: na Windowsu ispis GUI aplikacije zna ne stići do cijevi — scripts/dimni-test.js čita i fajl
+        try { fs.writeFileSync(path.join(DIMNI_PROFIL, 'dimni-rezultat.txt'), rez.redovi.join('\n') + '\n'); } catch { /* ispis je dovoljan */ }
+        try { const b = posKes.baza(); if (b) b.close(); } catch { /* svejedno se gasi */ }
+        app.exit(kod);
+    };
+    const rok = setTimeout(() => kraj(2, dimni.ocijeni({ ...stanje, greskaUcitavanja: `rok ${dimni.ROK_MS / 1000} s istekao` })), dimni.ROK_MS);
+    const prikazan = new Promise((r) => { if (mainWindow.isVisible()) r(); else mainWindow.once('show', r); });
+    const ucitan = new Promise((r) => {
+        mainWindow.webContents.once('did-finish-load', () => r({ ucitan: true }));
+        mainWindow.webContents.once('did-fail-load', (_e, kod, opis) => r({ ucitan: false, greskaUcitavanja: `${kod} ${opis}` }));
+    });
+    ucitan.then(async (u) => {
+        if (u.ucitan) await Promise.race([prikazan, new Promise((r) => setTimeout(r, 10000))]);
+        let mostovi = null;
+        try { mostovi = await mainWindow.webContents.executeJavaScript(dimni.IZRAZ_MOSTOVA); } catch { mostovi = null; }
+        const upis = dimni.provjeriUpis(posKes.baza());
+        clearTimeout(rok);
+        const rez = dimni.ocijeni({ ...stanje, ...u, vidljiv: mainWindow.isVisible(), url: mainWindow.webContents.getURL(), naslov: mainWindow.getTitle(),
+            kesSpreman: posKes.spreman(), greskaKesa: posKes.spreman() ? '' : 'better-sqlite3 se nije učitao (nativni modul za ovu verziju Electrona?)',
+            kesUpis: upis.ok, greskaUpisa: upis.greska, mostovi });
+        kraj(rez.ok ? 0 : 1, rez);
+    });
+}
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
