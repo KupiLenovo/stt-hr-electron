@@ -181,3 +181,115 @@ test('AZU.9 uključen potpis: obavezno ime izdavača, provjera potpisa ažuriran
     assert.throws(() => argumenti(['--publish', 'always']), /platformu/);
     assert.throws(() => argumenti(['--win', '--sta']), /Nepoznat argument/);
 });
+
+// ── Beta kanal kroz PRAVI electron-updater (GitHubProvider) nad lažnim GitHubom ─────────────────────────────────────────────
+// v4.8.0-beta.2: electron-builder za GitHub pravi samo latest*.yml. Beta kasa (channel 'beta' + allowPrerelease) prvo traži
+// beta.yml / beta-mac.yml, pa tek na grešku latest*.yml; objavljeno beta.2 izdanje nije imalo ni latest-mac.yml (Mac fajlovi su ostali
+// u drugom nacrtu). Od beta.3 posao `nacrt` (scripts/izdanje.js pripremi) stavlja beta*.yml u SVAKO izdanje.
+const { createRequire } = require('node:module');
+const os = require('node:os');
+const { GitHubProvider } = require('electron-updater/out/providers/GitHubProvider');
+const izUpdatera = createRequire(require.resolve('electron-updater/out/AppUpdater.js'));
+const semver = izUpdatera('semver');
+const { HttpError } = izUpdatera('builder-util-runtime');
+const { pripremi, obavezniFajlovi } = require('../scripts/izdanje');
+
+/** Izdanje kakvo pravi posao `nacrt`: fajlovi obje gradnje → pripremi (beta*.yml) → { ime: sadržaj }. */
+function izdanjeIzNacrta(v) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'azu-izdanje-'));
+    const exe = `Vault-aiERP-Setup-${v}.exe`;
+    const dmg = (a) => `Vault-aiERP-${v}-${a}.dmg`;
+    const fajlovi = {
+        [exe]: 'x', [`${exe}.blockmap`]: 'x', [dmg('x64')]: 'x', [`${dmg('x64')}.blockmap`]: 'x', [dmg('arm64')]: 'x', [`${dmg('arm64')}.blockmap`]: 'x',
+        'latest.yml': `version: ${v}\nfiles:\n  - url: ${exe}\n    sha512: YQ==\n    size: 1\npath: ${exe}\nsha512: YQ==\nreleaseDate: '2026-11-25T18:42:00.000Z'\n`,
+        'latest-mac.yml': `version: ${v}\nfiles:\n  - url: ${dmg('x64')}\n    sha512: Yg==\n    size: 1\n  - url: ${dmg('arm64')}\n    sha512: Yw==\n    size: 1\n` +
+            `path: ${dmg('x64')}\nsha512: Yg==\nreleaseDate: '2026-11-25T18:51:00.000Z'\n`,
+    };
+    for (const [f, s] of Object.entries(fajlovi)) fs.writeFileSync(path.join(dir, f), s);
+    const r = pripremi(dir, v);
+    assert.equal(r.ok, true, r.poruka);
+    return Object.fromEntries(obavezniFajlovi(v).map((f) => [f, fs.readFileSync(path.join(dir, f), 'utf8')]));
+}
+
+/** Lažni github.com: objavljena izdanja (najnovije prvo) → releases.atom, /releases/latest (bez pre-release) i preuzimanje fajla. */
+function lazniGithubCom(izdanja) {
+    const trazeno = [];
+    const baza = '/KupiLenovo/stt-hr-electron/releases';
+    const odgovor = (put) => {
+        if (put === `${baza}.atom`) {
+            return '<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom">' + izdanja.map((r) =>
+                `<entry><title>${r.tag}</title><link rel="alternate" type="text/html" href="https://github.com${baza}/tag/${r.tag}"/><content>x</content></entry>`).join('') + '</feed>';
+        }
+        if (put === `${baza}/latest`) return JSON.stringify({ tag_name: izdanja.find((r) => !r.prerelease).tag });
+        const m = new RegExp(`^${baza}/download/([^/]+)/(.+)$`).exec(put);
+        const r = m && izdanja.find((x) => x.tag === m[1]);
+        if (r && m[2] in r.fajlovi) return r.fajlovi[m[2]];
+        throw new HttpError(404, 'Not Found');
+    };
+    return {
+        trazeno,
+        request(o) {
+            const put = o.path;
+            try { const t = odgovor(put); trazeno.push(`200 ${put.replace(baza, '')}`); return Promise.resolve(t); }
+            catch (e) { trazeno.push(`404 ${put.replace(baza, '')}`); return Promise.reject(e); }
+        },
+    };
+}
+
+/** Šta kasa nađe: kanal se podesi kroz lib/azuriranje.js (kao u aplikaciji), opis verzije traži pravi GitHubProvider. */
+async function provjeraKase({ kanal, platforma, trenutna, izdanja }) {
+    const { autoUpdater } = napravi({ kanal });
+    const executor = lazniGithubCom(izdanja);
+    const p = new GitHubProvider({ provider: 'github', owner: 'KupiLenovo', repo: 'stt-hr-electron' },
+        { channel: autoUpdater.channel, allowPrerelease: autoUpdater.allowPrerelease, currentVersion: semver.parse(trenutna), fullChangelog: false },
+        { platform: platforma, executor, isUseMultipleRangeRequest: false });
+    try {
+        const info = await p.getLatestVersion();
+        return { verzija: info.version, nova: semver.gt(info.version, trenutna), fajlovi: info.files.map((f) => f.url), trazeno: executor.trazeno };
+    } catch (e) {
+        return { greska: e.code, trazeno: executor.trazeno };
+    }
+}
+
+const STABILNO_470 = { tag: 'v4.7.0', prerelease: false, fajlovi: { 'latest.yml': 'version: 4.7.0\nfiles:\n  - url: Vault-aiERP-Setup-4.7.0.exe\n    sha512: YQ==\n    size: 1\npath: Vault-aiERP-Setup-4.7.0.exe\nsha512: YQ==\n',
+    'latest-mac.yml': 'version: 4.7.0\nfiles:\n  - url: Vault-aiERP-4.7.0-x64.dmg\n    sha512: YQ==\n    size: 1\npath: Vault-aiERP-4.7.0-x64.dmg\nsha512: YQ==\n' } };
+
+test('AZU.10 beta kanal: kasa (Windows i Mac) nađe novu beta verziju u beta.yml / beta-mac.yml izdanja iz posla `nacrt` — bez rezervnog puta', async () => {
+    const izdanja = [{ tag: 'v4.8.0-beta.3', prerelease: true, fajlovi: izdanjeIzNacrta('4.8.0-beta.3') }, STABILNO_470];
+    for (const [platforma, yml, fajl] of [['win32', 'beta.yml', 'Vault-aiERP-Setup-4.8.0-beta.3.exe'], ['darwin', 'beta-mac.yml', 'Vault-aiERP-4.8.0-beta.3-x64.dmg']]) {
+        const r = await provjeraKase({ kanal: 'beta', platforma, trenutna: '4.8.0-beta.2', izdanja });
+        assert.equal(r.greska, undefined, `${platforma}: ${r.trazeno.join(' | ')}`);
+        assert.equal(r.verzija, '4.8.0-beta.3');
+        assert.equal(r.nova, true);
+        assert.ok(r.fajlovi.includes(fajl), `${platforma}: ${r.fajlovi}`);
+        assert.deepEqual(r.trazeno, ['200 .atom', `200 /download/v4.8.0-beta.3/${yml}`], `${platforma}: opis verzije iz fajla beta kanala, bez 404`);
+    }
+    // stabilno izdanje poslije bete: beta kasa ga nađe preko beta.yml (posao nacrt ga stavlja i u stabilna izdanja)
+    const r = await provjeraKase({ kanal: 'beta', platforma: 'win32', trenutna: '4.8.0-beta.3',
+        izdanja: [{ tag: 'v4.8.0', prerelease: false, fajlovi: izdanjeIzNacrta('4.8.0') }, ...izdanja] });
+    assert.equal(r.verzija, '4.8.0');
+    assert.deepEqual(r.trazeno, ['200 .atom', '200 /download/v4.8.0/beta.yml']);
+});
+
+test('AZU.11 stabilni kanal ne vidi beta izdanja (pre-release): čita samo zadnje stabilno izdanje i latest*.yml', async () => {
+    const izdanja = [{ tag: 'v4.8.0-beta.3', prerelease: true, fajlovi: izdanjeIzNacrta('4.8.0-beta.3') }, STABILNO_470];
+    for (const platforma of ['win32', 'darwin']) {
+        const r = await provjeraKase({ kanal: 'stabilni', platforma, trenutna: '4.7.0', izdanja });
+        assert.equal(r.verzija, '4.7.0', platforma);
+        assert.equal(r.nova, false);
+        assert.ok(r.trazeno.every((x) => !/beta/.test(x)), `${platforma}: ${r.trazeno.join(' | ')}`);
+        assert.ok(r.trazeno.includes(`200 /download/v4.7.0/${platforma === 'darwin' ? 'latest-mac.yml' : 'latest.yml'}`));
+    }
+});
+
+test('AZU.12 dokaz za v4.8.0-beta.2: objavljeno izdanje (samo latest.yml + .exe) — Mac beta kasa ne nađe ništa, Windows tek preko rezerve', async () => {
+    const beta2 = { tag: 'v4.8.0-beta.2', prerelease: true, fajlovi: {
+        'latest.yml': 'version: 4.8.0-beta.2\nfiles:\n  - url: Vault-aiERP-Setup-4.8.0-beta.2.exe\n    sha512: YQ==\n    size: 1\npath: Vault-aiERP-Setup-4.8.0-beta.2.exe\nsha512: YQ==\n',
+        'Vault-aiERP-Setup-4.8.0-beta.2.exe': 'x' } };
+    const mac = await provjeraKase({ kanal: 'beta', platforma: 'darwin', trenutna: '4.8.0-beta.1', izdanja: [beta2, STABILNO_470] });
+    assert.equal(mac.greska, 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND');
+    assert.deepEqual(mac.trazeno, ['200 .atom', '404 /download/v4.8.0-beta.2/beta-mac.yml', '404 /download/v4.8.0-beta.2/latest-mac.yml']);
+    const win = await provjeraKase({ kanal: 'beta', platforma: 'win32', trenutna: '4.8.0-beta.1', izdanja: [beta2, STABILNO_470] });
+    assert.equal(win.verzija, '4.8.0-beta.2');
+    assert.deepEqual(win.trazeno, ['200 .atom', '404 /download/v4.8.0-beta.2/beta.yml', '200 /download/v4.8.0-beta.2/latest.yml']);
+});

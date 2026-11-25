@@ -1,6 +1,6 @@
 {
   "name": "stt-hr",
-  "version": "4.8.0-beta.2",
+  "version": "4.8.0-beta.3",
   "description": "Vault aiERP — modularni poslovni sistem (ERP)",
   "main": "main.js",
   "author": "Vault aiERP",
@@ -22,7 +22,6 @@
     "appId": "ba.stt.business",
     "productName": "aiERP",
     "copyright": "(c) 2026 STT d.o.o.",
-    "generateUpdatesFilesForAllChannels": true,
     "directories": {
       "output": "dist"
     },

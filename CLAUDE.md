@@ -4,7 +4,7 @@
 
 Desktop aplikacija **Vault aiERP** — proizvod koji se prodaje i iznajmljuje firmama; **STT d.o.o. Sarajevo je firma 0** (Eldin 10.09.2026: „exe mi je potreban jer ćemo prodavati i iznajmljivati software"). Tanak omotač: UI se učitava sa servera firme, a desktop dodaje fiskalni printer (Tring, IPC), offline kasu (`lib/pos-kes.js`, ugrađeni `node:sqlite`) i auto-update.
 
-**Verzija:** 4.8.0-beta.2 — probno izdanje: Electron 45 (umjesto 28, van podrške), baza kase na ugrađenom `node:sqlite` umjesto better-sqlite3. Prije: 4.8.0-beta.1 — probno izdanje PLT-22/PLT-39 (bez admin prava, ažuriranje uz potvrdu, izdanje kroz nacrt i odobrenje; Eldin 24.11.2026); 4.7.0 (brend Vault aiERP — znak „Dvije trake", natpis VAULT; R73, odluka Eldina 06.11.2026). 4.6.0 nije izdata kao tag — njene izmjene idu u 4.7.0
+**Verzija:** 4.8.0-beta.3 — probno izdanje: popravljen postupak izdanja (JEDAN nacrt po tagu sa svim fajlovima obje platforme, provjera spiska prije objave, beta*.yml za beta kanal; 25.11.2026). Prije: 4.8.0-beta.2 — Electron 45 (umjesto 28, van podrške), baza kase na ugrađenom `node:sqlite` umjesto better-sqlite3 (izdanje nepotpuno: Mac fajlovi ostali u drugom nacrtu); 4.8.0-beta.1 — probno izdanje PLT-22/PLT-39 (bez admin prava, ažuriranje uz potvrdu, izdanje kroz nacrt i odobrenje; Eldin 24.11.2026); 4.7.0 (brend Vault aiERP — znak „Dvije trake", natpis VAULT; R73, odluka Eldina 06.11.2026). 4.6.0 nije izdata kao tag — njene izmjene idu u 4.7.0
 
 ## Server firme (v4.2.0) — adresa NIJE zakucana
 
@@ -40,7 +40,7 @@ stt-hr-electron/
 ├── scripts/izgradi.js    # jedini ulaz za build:win/build:mac (package.json build + opcije potpisa + -c.ključ=vrijednost)
 ├── scripts/potpis-koda.js     # potpis koda i provjera potpisa ažuriranja — PRIPREMLJENO, ISKLJUČENO (POTPIS_UKLJUCEN)
 ├── scripts/dimni-test.js # pokreće aplikaciju s --smoke (iz koda ili spakovanu) i provjerava izlaz 0
-├── scripts/izdanje.js    # build.yml: tag mora biti v<verzija>, beta samo X.Y.Z-beta.N
+├── scripts/izdanje.js    # build.yml: tag = v<verzija> (beta samo X.Y.Z-beta.N), spisak obaveznih fajlova, beta*.yml, jedan nacrt, objava
 ├── scripts/licence-trecih-strana.js  # pravi/provjerava LICENCE-TRECIH-STRANA.txt iz package-lock.json + node_modules
 ├── scripts/ikone.js      # build/icon.svg → icon_*.png, icon.png, icon.ico (Playwright, ručno; PNG/ICO se commitaju)
 └── build/                # ikone za electron-builder (ne ide u app.asar)
@@ -91,16 +91,32 @@ Lokalna provjera pakovanja: `node scripts/izgradi.js --win --dir -c.npmRebuild=f
 
 ## Izdanje i ažuriranje (PLT-22, PLT-39 — 24.11.2026)
 
-- **build.yml**: tag `v*` → `provjera` (tag = `v<verzija iz package.json>`, `npm test`) → `build-windows` / `build-mac` pune
-  **nacrt** (`publish.releaseType: draft` + `EP_DRAFT`), provjere fajl licenci i puste **dimni test** spakovane aplikacije →
-  `objavi` u GitHub okruženju **`izdanje`** (ručno odobrenje) objavi nacrt; beta tag kao pre-release. Nacrt ne vidi nijedna
-  instalirana aplikacija. `test/izdanje.test.js` drži da nijedan drugi posao ne objavljuje.
+- **build.yml**: tag `v*` → `provjera` (tag = `v<verzija iz package.json>`, `npm test`) → `build-windows` / `build-mac` grade s
+  `--publish never` (NE pišu na GitHub), provjere fajl licenci, puste **dimni test** spakovane aplikacije i predaju fajlove kroz Actions
+  (`izdanje-windows`, `izdanje-mac`) → `nacrt` (`scripts/izdanje.js --pripremi` + `napraviNacrt`): doda beta.yml / beta-mac.yml, provjeri
+  spisak i napravi **JEDAN nacrt** za tag (jedini postojeći nacrt tog taga preuzme; dva nacrta ili objavljeno izdanje → pada) i otpremi sve →
+  `objavi` u GitHub okruženju **`izdanje`** (ručno odobrenje): `objaviNacrt` prvo provjeri da je za tag tačno taj nacrt i da ima SVE
+  obavezne fajlove, pa ga objavi; beta tag kao pre-release. Nacrt ne vidi nijedna instalirana aplikacija. `test/izdanje.test.js` drži
+  da nijedan drugi posao ne objavljuje ni ne piše izdanje.
+- **Obavezni fajlovi izdanja** (`obavezniFajlovi`): `Vault-aiERP-Setup-<v>.exe` + `.blockmap`, `Vault-aiERP-<v>-x64.dmg` i `-arm64.dmg`
+  + `.blockmap`, `latest.yml`, `latest-mac.yml`, `beta.yml`, `beta-mac.yml` — 10 fajlova, ni više ni manje.
+- **Zašto (v4.8.0-beta.2, 25.11.2026):** gradnje su same otpremale (`--publish always` + `EP_DRAFT`); electron-builder je za isti tag
+  napravio dva nacrta istovremeno (458504890: exe + latest.yml; 458504892: Mac fajlovi + exe.blockmap), a `objavi` je objavio prvi nacrt s
+  tim tagom bez provjere. `created_at` nacrta je datum commita, ne trenutak pravljenja (zato izgleda „prije taga"). Nacrt 458504892 se
+  briše ručno (Releases).
 - **Okruženje `izdanje` mora postojati PRIJE prvog taga** (Settings → Environments → `izdanje`: Required reviewers = Eldin,
   „Prevent self-review" isključen ako Eldin i taguje, Deployment branches and tags → samo tagovi `v*`). Bez pravila odobrenja
   posao `objavi` bi išao sam.
 - **Ažuriranje** (`lib/azuriranje.js`): `autoDownload = false`, `autoInstallOnAppQuit = false`. Nova verzija → „Nova verzija je
   dostupna — preuzmi i instaliraj?" (zadano „Ne sada"); preuzeto → „Instaliraj sada" / „Pri zatvaranju aplikacije" (zadano).
   `install-update` iz web aplikacije ide kroz ista pitanja. U main.js nema `quitAndInstall` (test AZU.7).
+- **Beta kanal — fajlovi**: electron-updater na beta kanalu (`channel = 'beta'`, `allowPrerelease`) uzme najnovije objavljeno izdanje
+  (i pre-release) i za njega PRVO traži `beta.yml` (Windows) / `beta-mac.yml` (Mac), a tek na grešku `latest*.yml`. electron-builder za
+  GitHub pravi SAMO `latest*.yml` (`generateUpdatesFilesForAllChannels` za GitHub ne važi — izbačena), pa beta*.yml pravi posao `nacrt`
+  kao kopije, u SVAKOM izdanju (i stabilnom). Stabilni kanal čita samo GitHub „latest" (nikad pre-release) i `latest*.yml`
+  (`test/azuriranje.test.js` AZU.10–12 kroz pravi GitHubProvider).
+- **Mac ažuriranje (otvoreno, nije dio 4.8.0-beta.3):** MacUpdater traži `.zip` (mac target je samo `dmg`) i potpisanu aplikaciju —
+  Mac kasa nađe novu verziju, ali je ne može sama instalirati; dmg se instalira ručno.
 - **Beta kanal**: postavka računara `kanal_azuriranja: "beta"` u `aierp-server.json` (meni Aplikacija → Probne verzije (beta),
   uz potvrdu; za probu `AIERP_KANAL_AZURIRANJA`). Beta računar vidi i stabilna izdanja; na starije se ne vraća (allowDowngrade false).
 - **Bez administratora** (`asInvoker`, ranije `requireAdministrator`). Instalacija za sve korisnike (Program Files) i dalje traži
